@@ -61,6 +61,71 @@ export function Coach({ go, trainerId }) {
   const openBuilder = (prog) => { setProgrammeId(null); setBuilderOpenRoadmap(false); setBuilderProgramme(prog); };
   const closeBuilder = () => { setBuilderProgramme(null); fetchProgrammes(); };
 
+  const duplicateProgramme = async (prog) => {
+    const { data: newProg } = await supabase
+      .from('programmes')
+      .insert({ trainer_id: trainerId, name: prog.name + ' (Copy)', tag: prog.tag })
+      .select('id').single();
+    if (!newProg) return;
+
+    for (let pi = 0; pi < prog.phaseList.length; pi++) {
+      const ph = prog.phaseList[pi];
+      const { data: newPhase } = await supabase
+        .from('programme_phases')
+        .insert({ programme_id: newProg.id, phase_index: pi, name: ph.name, focus: ph.focus, weeks: ph.weeks })
+        .select('id').single();
+      if (!newPhase) continue;
+
+      const { data: days } = await supabase
+        .from('programme_days')
+        .select('*, workout_sections(*, section_exercises(*, exercise_sets(*)))')
+        .eq('phase_id', ph.id);
+
+      for (const day of (days || [])) {
+        const { data: newDay } = await supabase
+          .from('programme_days')
+          .insert({ phase_id: newPhase.id, week_index: day.week_index, day_of_week: day.day_of_week, notes: day.notes || '' })
+          .select('id').single();
+        if (!newDay) continue;
+
+        const sections = [...(day.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
+        for (const sec of sections) {
+          const { data: newSec } = await supabase
+            .from('workout_sections')
+            .insert({ day_id: newDay.id, kind: sec.kind, title: sec.title, sort_order: sec.sort_order })
+            .select('id').single();
+          if (!newSec) continue;
+
+          const exercises = [...(sec.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
+          for (const ex of exercises) {
+            const { data: newEx } = await supabase
+              .from('section_exercises')
+              .insert({ section_id: newSec.id, name: ex.name, img_url: ex.img_url, timed: ex.timed, tempo: ex.tempo || '', sort_order: ex.sort_order })
+              .select('id').single();
+            if (!newEx) continue;
+
+            const sets = [...(ex.exercise_sets || [])].sort((a, b) => a.set_index - b.set_index);
+            if (sets.length) {
+              await supabase.from('exercise_sets').insert(
+                sets.map(st => ({
+                  exercise_id: newEx.id, set_index: st.set_index, kind: st.kind,
+                  reps: st.reps, weight_kg: st.weight_kg, rest_secs: st.rest_secs,
+                  time_secs: st.time_secs, intensity: st.intensity,
+                }))
+              );
+            }
+          }
+        }
+      }
+    }
+    await fetchProgrammes();
+  };
+
+  const deleteProgramme = async (progId) => {
+    await supabase.from('programmes').delete().eq('id', progId);
+    await fetchProgrammes();
+  };
+
   const programme    = programmes.find(p => p.id === programmeId);
   const activeClient = clients.find(c => c.id === clientId);
 
@@ -104,8 +169,11 @@ export function Coach({ go, trainerId }) {
       )}
       {programme && (
         <ProgrammeSheet p={programme}
+          trainerId={trainerId}
           onClose={() => setProgrammeId(null)}
           onEdit={() => openBuilder(programme)}
+          onDuplicate={async () => { await duplicateProgramme(programme); setProgrammeId(null); }}
+          onDelete={async () => { await deleteProgramme(programme.id); setProgrammeId(null); }}
         />
       )}
       {inviteOpen && (
@@ -1064,7 +1132,59 @@ const inviteInputSt = {
 };
 
 // ── PROGRAMME DETAIL SHEET ──────────────────────────────────────
-function ProgrammeSheet({ p, onClose, onEdit }) {
+function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }) {
+  const [assignedClients, setAssignedClients] = React.useState(null);
+  const [duplicating, setDuplicating] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadClients() {
+      const phaseIds = (p.phaseList || []).map(ph => ph.id).filter(Boolean);
+      if (!phaseIds.length) { setAssignedClients([]); return; }
+
+      const { data: days } = await supabase
+        .from('programme_days')
+        .select('id')
+        .in('phase_id', phaseIds);
+
+      if (!days?.length) { if (!cancelled) setAssignedClients([]); return; }
+
+      const dayIds = days.map(d => d.id);
+      const { data: workouts } = await supabase
+        .from('client_workouts')
+        .select('client_id')
+        .in('day_id', dayIds);
+
+      if (!workouts?.length) { if (!cancelled) setAssignedClients([]); return; }
+
+      const uniqueIds = [...new Set(workouts.map(w => w.client_id))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', uniqueIds);
+
+      if (!cancelled) setAssignedClients(profiles || []);
+    }
+    loadClients();
+    return () => { cancelled = true; };
+  }, [p.id]);
+
+  const handleDuplicate = async () => {
+    setDuplicating(true);
+    await onDuplicate();
+    setDuplicating(false);
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setDeleting(true);
+    await onDelete();
+  };
+
+  const clientCount = assignedClients === null ? p.clients : assignedClients.length;
+
   return (
     <SheetShell onClose={onClose}>
       <div style={{ padding: '20px 18px 14px', borderBottom: '1px solid var(--line)' }}>
@@ -1075,7 +1195,7 @@ function ProgrammeSheet({ p, onClose, onEdit }) {
             </div>
             <div className="h-bold" style={{ fontSize: 22, lineHeight: 1.1 }}>{p.name.toUpperCase()}</div>
             <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 6 }}>
-              {p.weeks} WEEKS · {p.phases} PHASE{p.phases !== 1 ? 'S' : ''} · {p.clients} CLIENT{p.clients !== 1 ? 'S' : ''}
+              {p.weeks} WEEKS · {p.phases} PHASE{p.phases !== 1 ? 'S' : ''} · {clientCount} CLIENT{clientCount !== 1 ? 'S' : ''}
             </div>
           </div>
           <span className="chip chip-accent" style={{ fontSize: 9 }}>{p.tag}</span>
@@ -1084,7 +1204,7 @@ function ProgrammeSheet({ p, onClose, onEdit }) {
 
       <div className="scroller" style={{ flex: 1, padding: '16px 18px 18px', minHeight: 0 }}>
         <div className="label" style={{ marginBottom: 10 }}>// PHASES</div>
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
           {p.phaseList.map((ph, i) => (
             <div key={i} style={{
               display: 'grid', gridTemplateColumns: '36px 1fr auto', gap: 12,
@@ -1108,11 +1228,67 @@ function ProgrammeSheet({ p, onClose, onEdit }) {
             </div>
           ))}
         </div>
+
+        <div className="label" style={{ marginBottom: 10 }}>// ASSIGNED CLIENTS</div>
+        {assignedClients === null ? (
+          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', padding: '8px 0' }}>Loading…</div>
+        ) : assignedClients.length === 0 ? (
+          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', padding: '8px 0' }}>No clients assigned yet.</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {assignedClients.map(c => (
+              <div key={c.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 14px', background: 'var(--bg-2)',
+                border: '1px solid var(--line)', borderRadius: 10,
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  background: 'var(--accent-soft)', border: '1px solid var(--accent)',
+                  display: 'grid', placeItems: 'center',
+                  color: 'var(--accent)', fontWeight: 800, fontSize: 11,
+                }}>{(c.name || '?')[0].toUpperCase()}</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name || 'Unnamed'}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div style={{ padding: '12px 18px 28px', borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
-        <button className="btn-ghost" style={{ flex: 1 }}>DUPLICATE</button>
-        <button className="btn-primary" style={{ flex: 1 }} onClick={onEdit}>EDIT PROGRAMME</button>
+      <div style={{ padding: '12px 18px 28px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn-ghost"
+            style={{ flex: 1, opacity: duplicating ? 0.6 : 1 }}
+            disabled={duplicating}
+            onClick={handleDuplicate}
+          >
+            {duplicating ? 'COPYING…' : 'DUPLICATE'}
+          </button>
+          <button className="btn-primary" style={{ flex: 1 }} onClick={onEdit}>EDIT</button>
+        </div>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          style={{
+            all: 'unset', cursor: 'pointer',
+            width: '100%', boxSizing: 'border-box',
+            padding: '11px 0', textAlign: 'center',
+            borderRadius: 10, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
+            fontFamily: 'JetBrains Mono',
+            background: confirmDelete ? 'color-mix(in srgb, var(--c-coral) 18%, transparent)' : 'transparent',
+            border: `1px solid ${confirmDelete ? 'var(--c-coral)' : 'color-mix(in srgb, var(--c-coral) 40%, transparent)'}`,
+            color: 'var(--c-coral)',
+            transition: 'all 0.15s',
+          }}
+        >
+          {deleting ? 'DELETING…' : confirmDelete ? 'CONFIRM DELETE' : 'DELETE PROGRAMME'}
+        </button>
+        {confirmDelete && !deleting && (
+          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', textAlign: 'center' }}>
+            This cannot be undone. Tap again to confirm.
+          </div>
+        )}
       </div>
     </SheetShell>
   );
