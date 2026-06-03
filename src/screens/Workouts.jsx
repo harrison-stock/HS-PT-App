@@ -63,6 +63,7 @@ function shapeWorkout(row) {
 
   return {
     id: row.id,
+    dayId: day.id,
     date: row.scheduled_date,
     status: row.status,
     name: `${phase?.name || 'Workout'} · ${dayLabel}`,
@@ -294,7 +295,7 @@ export function Workouts({ go, openPreview, userId }) {
         <WorkoutPreview
           w={previewWorkout}
           onClose={() => setPreviewId(null)}
-          onStart={() => { setPreviewId(null); go('log'); }}
+          onStart={() => { setPreviewId(null); go('log', { dayId: previewWorkout?.dayId }); }}
           onReschedule={() => { setReschedulingId(previewWorkout.id); setPreviewId(null); }}
         />
       )}

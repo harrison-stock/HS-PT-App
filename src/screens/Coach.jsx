@@ -152,7 +152,13 @@ export function Coach({ go, trainerId }) {
       </div>
 
       {tab === 'clients'    && <ClientsTab clients={clients} loading={loadingClients} onPick={setClientId} onInvite={() => setInviteOpen(true)}/>}
-      {tab === 'programmes' && <ProgrammesTab programmes={programmes} loading={loadingProgs} onPick={setProgrammeId} onNew={newProgramme}/>}
+      {tab === 'programmes' && <ProgrammesTab
+        programmes={programmes} loading={loadingProgs}
+        onPick={setProgrammeId} onNew={newProgramme}
+        onEdit={openBuilder}
+        onDuplicate={duplicateProgramme}
+        onDelete={async (id) => { await deleteProgramme(id); }}
+      />}
       {tab === 'schedule'   && <ScheduleTab/>}
       {tab === 'inbox'      && <InboxTab/>}
 
@@ -432,7 +438,7 @@ function ClientRow({ c, onPick }) {
 }
 
 // ── PROGRAMMES TAB ──────────────────────────────────────────────
-function ProgrammesTab({ programmes, loading, onPick, onNew }) {
+function ProgrammesTab({ programmes, loading, onPick, onNew, onEdit, onDuplicate, onDelete }) {
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -447,7 +453,14 @@ function ProgrammesTab({ programmes, loading, onPick, onNew }) {
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {programmes.map(p => <ProgrammeCard key={p.id} p={p} onPick={() => onPick(p.id)}/>)}
+          {programmes.map(p => (
+            <ProgrammeCard key={p.id} p={p}
+              onPick={() => onPick(p.id)}
+              onEdit={() => onEdit(p)}
+              onDuplicate={() => onDuplicate(p)}
+              onDelete={() => onDelete(p.id)}
+            />
+          ))}
           {programmes.length === 0 && (
             <div className="card" style={{ padding: 28, textAlign: 'center' }}>
               <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 12 }}>
@@ -464,55 +477,104 @@ function ProgrammesTab({ programmes, loading, onPick, onNew }) {
   );
 }
 
-function ProgrammeCard({ p, onPick }) {
+function ProgrammeCard({ p, onPick, onEdit, onDuplicate, onDelete }) {
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(false);
   const tagColor = p.tag === 'STRENGTH' ? 'var(--accent)'
                  : p.tag === 'ONBOARD'  ? 'var(--c-amber)'
                  : p.tag === 'REHAB'    ? 'var(--c-coral)'
                  :                        'var(--c-blue)';
   return (
-    <button onClick={onPick} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-      <div className="card" style={{ padding: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span className="chip" style={{ fontSize: 8, padding: '2px 6px', color: tagColor, borderColor: 'currentColor' }}>{p.tag}</span>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em' }}>
-                {p.weeks} WK · {p.phases} PHASE{p.phases !== 1 ? 'S' : ''}
-              </span>
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>{p.name}</div>
-          </div>
-          {p.clients > 0 && (
-            <span className="mono" style={{ fontSize: 10, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {p.clients} CLIENT{p.clients !== 1 ? 'S' : ''}
-            </span>
-          )}
-        </div>
-
-        {p.phaseList.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${p.phaseList.length}, 1fr)`, gap: 4, marginBottom: 8 }}>
-            {p.phaseList.map((ph, i) => (
-              <div key={i} style={{
-                padding: '6px 8px', borderRadius: 6,
-                background: 'var(--bg-3)', border: '1px solid var(--line)',
-              }}>
-                <div className="mono" style={{ fontSize: 8, color: tagColor, letterSpacing: '0.1em', fontWeight: 600 }}>P{i+1} · {ph.weeks}W</div>
-                <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 2, lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {ph.name}
-                </div>
+    <div style={{ position: 'relative' }}>
+      <button onClick={onPick} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', boxSizing: 'border-box' }}>
+        <div className="card" style={{ padding: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span className="chip" style={{ fontSize: 8, padding: '2px 6px', color: tagColor, borderColor: 'currentColor' }}>{p.tag}</span>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em' }}>
+                  {p.weeks} WK · {p.phases} PHASE{p.phases !== 1 ? 'S' : ''}
+                </span>
               </div>
-            ))}
+              <div style={{ fontSize: 16, fontWeight: 600, paddingRight: 30 }}>{p.name}</div>
+            </div>
+            {p.clients > 0 && (
+              <span className="mono" style={{ fontSize: 10, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {p.clients} CLIENT{p.clients !== 1 ? 'S' : ''}
+              </span>
+            )}
           </div>
-        )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em' }}>
-            UPDATED {p.lastEdited.toUpperCase()}
-          </span>
-          <IconChevronRight size={14} style={{ color: 'var(--text-3)' }}/>
+          {p.phaseList.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${p.phaseList.length}, 1fr)`, gap: 4, marginBottom: 8 }}>
+              {p.phaseList.map((ph, i) => (
+                <div key={i} style={{ padding: '6px 8px', borderRadius: 6, background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
+                  <div className="mono" style={{ fontSize: 8, color: tagColor, letterSpacing: '0.1em', fontWeight: 600 }}>P{i+1} · {ph.weeks}W</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 2, lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ph.name}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em' }}>
+              UPDATED {p.lastEdited.toUpperCase()}
+            </span>
+            <IconChevronRight size={14} style={{ color: 'var(--text-3)' }}/>
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+
+      {/* Three-dot menu */}
+      <button onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); setConfirmDel(false); }} style={{
+        position: 'absolute', top: 10, right: 10,
+        all: 'unset', cursor: 'pointer',
+        width: 28, height: 28, borderRadius: 6, zIndex: 2,
+        background: menuOpen ? 'var(--bg-3)' : 'transparent',
+        border: menuOpen ? '1px solid var(--line-strong)' : '1px solid transparent',
+        display: 'grid', placeItems: 'center',
+        color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 14, letterSpacing: '0.05em',
+      }}>···</button>
+
+      {menuOpen && (
+        <>
+          <div onClick={() => { setMenuOpen(false); setConfirmDel(false); }} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
+          <div style={{
+            position: 'absolute', top: 42, right: 8, zIndex: 21,
+            minWidth: 160, background: 'var(--bg-3)',
+            border: '1px solid var(--line-strong)', borderRadius: 10,
+            boxShadow: '0 8px 28px rgba(0,0,0,0.45)',
+            padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
+          }}>
+            {[
+              { label: 'EDIT', fn: () => { onEdit(); setMenuOpen(false); } },
+              { label: 'DUPLICATE', fn: () => { onDuplicate(); setMenuOpen(false); } },
+            ].map(item => (
+              <button key={item.label} onClick={item.fn} style={{
+                all: 'unset', cursor: 'pointer', display: 'block',
+                padding: '9px 12px', borderRadius: 7,
+                fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+                color: 'var(--text)',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-2)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >{item.label}</button>
+            ))}
+            <div style={{ height: 1, background: 'var(--line)', margin: '2px 4px' }} />
+            <button onClick={() => {
+              if (!confirmDel) { setConfirmDel(true); return; }
+              onDelete(); setMenuOpen(false); setConfirmDel(false);
+            }} style={{
+              all: 'unset', cursor: 'pointer', display: 'block',
+              padding: '9px 12px', borderRadius: 7,
+              fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+              color: 'var(--c-coral)',
+              background: confirmDel ? 'color-mix(in srgb, var(--c-coral) 14%, transparent)' : 'transparent',
+            }}>{confirmDel ? 'CONFIRM DELETE' : 'DELETE'}</button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

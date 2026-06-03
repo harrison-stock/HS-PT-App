@@ -1,4 +1,5 @@
 import React from 'react'
+import { supabase } from '../lib/supabase'
 import { ACTIVE_EXERCISES, PHASES, MUSCLE_LABELS } from '../data/index'
 import { BodyMap } from './Progress'
 import { Hex, HexBackButton } from '../components/hex'
@@ -8,7 +9,7 @@ import { IconPause, IconPlay, IconCheck, IconX2, IconChevronLeft, IconChevronRig
 // One full-page card per exercise; horizontal snap-scroll between them.
 // Phases (Pulse · Banded · Main · Cooldown) are pinned as a strip up top.
 // Tap exercise title to see/swap alternatives.
-export function ActiveLog({ go }) {
+export function ActiveLog({ go, dayId, userId }) {
   const [exercises, setExercises] = React.useState(ACTIVE_EXERCISES);
   const [activeIdx, setActiveIdx] = React.useState(0); // start on Pulse warm-up
   const [sessionTime, setSessionTime] = React.useState(34 * 60 + 12);
@@ -23,6 +24,9 @@ export function ActiveLog({ go }) {
   const scrollRef = React.useRef(null);
   const programmaticRef = React.useRef(false);
   const progClearRef = React.useRef(null);
+  const [dbLoading, setDbLoading] = React.useState(!!dayId);
+  const [dayIntro, setDayIntro] = React.useState('');
+  const sessionStartRef = React.useRef(new Date().toISOString());
 
   React.useEffect(() => {
     if (paused) return;
@@ -43,6 +47,71 @@ export function ActiveLog({ go }) {
     const t = setTimeout(() => setTimesUp(false), 3500);
     return () => clearTimeout(t);
   }, [timesUp]);
+
+  React.useEffect(() => {
+    if (!dayId) return;
+    setDbLoading(true);
+    supabase
+      .from('programme_days')
+      .select(`id, intro, workout_sections ( id, kind, title, sort_order, section_exercises ( id, name, img_url, tempo, coach_notes, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, rest_secs, kind ) ) )`)
+      .eq('id', dayId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          const SECTION_TO_PHASE = { PULSE_RAISER: 'pulse', BANDED: 'banded', MAIN: 'main', COOLDOWN: 'cooldown' };
+          const rows = [];
+          for (const sec of (data.workout_sections || []).sort((a, b) => a.sort_order - b.sort_order)) {
+            const phase = SECTION_TO_PHASE[sec.kind] || 'main';
+            for (const ex of (sec.section_exercises || []).sort((a, b) => a.sort_order - b.sort_order)) {
+              const sets = (ex.exercise_sets || [])
+                .sort((a, b) => a.set_index - b.set_index)
+                .map(st => ({
+                  reps: st.reps_text || String(st.reps ?? 8),
+                  kg: parseFloat(st.weight_kg) || null,
+                  kind: (st.kind && st.kind !== 'WORK') ? st.kind : undefined,
+                  done: false, active: false, rpe: null,
+                }));
+              rows.push({
+                id: ex.id, name: ex.name, img: ex.img_url || '',
+                phase, tempo: ex.tempo || '',
+                rest: parseInt((ex.exercise_sets || [])[0]?.rest_secs) || 60,
+                coach: ex.coach_notes || '',
+                sets, alternatives: [],
+              });
+            }
+          }
+          if (rows.length > 0) setExercises(rows);
+          setDayIntro(data.intro || '');
+        }
+        setDbLoading(false);
+      });
+  }, [dayId]);
+
+  const saveSession = async () => {
+    if (!dayId || !userId) return;
+    try {
+      const { data: ws } = await supabase
+        .from('workout_sessions')
+        .insert({ client_id: userId, day_id: dayId, started_at: sessionStartRef.current, completed_at: new Date().toISOString() })
+        .select('id').single();
+      if (ws) {
+        const logRows = [];
+        exercises.forEach(ex => {
+          ex.sets.forEach((s, i) => {
+            if (s.done) logRows.push({
+              session_id: ws.id, exercise_id: ex.id, set_index: i,
+              actual_reps: typeof s.reps === 'number' ? s.reps : (parseInt(s.reps) || null),
+              actual_weight_kg: s.kg || null,
+              actual_time_secs: s.time ? parseTimeToSeconds(s.reps) : null,
+              intensity: s.rpe ? Math.round(s.rpe * 2.5) : null,
+            });
+          });
+        });
+        if (logRows.length) await supabase.from('logged_sets').insert(logRows);
+        await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
+      }
+    } catch (e) { console.error('saveSession', e); }
+  };
 
   // Sync activeIdx -> scroll position. While we drive the scroll
   // programmatically, ignore onScroll so it can't fight the animation.
@@ -153,6 +222,12 @@ export function ActiveLog({ go }) {
   const currentPhaseId = activeItem.type === 'ex' ? activeItem.ex.phase : activeItem.phaseId;
   const lastIdx = railItems.length - 1;
 
+  if (dbLoading) return (
+    <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--bg-0)' }}>
+      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.2em' }}>LOADING WORKOUT…</div>
+    </div>
+  );
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-0)' }}>
       {/* Top bar */}
@@ -240,10 +315,11 @@ export function ActiveLog({ go }) {
       }}>
         {railItems.map((it, i) =>
         it.type === 'finish' ?
-        <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={() => { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} setComplete(true); }} /> :
+        <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setComplete(true); }} /> :
         it.type === 'divider' ?
         <SectionDivider key={`d${i}`} phaseId={it.phaseId} nextPhaseId={it.nextPhaseId} exercises={exercises} onContinue={() => setActiveIdx(i + 1)} /> :
         <ExerciseCard key={it.ex.id} ex={it.ex} idx={it.exIdx} total={exercises.length}
+        intro={it.exIdx === 0 ? dayIntro : ''}
         onComplete={(si) => completeSet(it.ex.id, si)}
         onUpdate={(si, p) => updateSet(it.ex.id, si, p)}
         onTitle={() => setAltsForId(it.ex.id)}
@@ -424,7 +500,7 @@ export function ActiveLog({ go }) {
 }
 
 // ── EXERCISE CARD (one per swipe page) ───────────────────────────
-function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onHistory }) {
+function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onHistory, intro }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   return (
@@ -436,6 +512,12 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
       display: 'flex', flexDirection: 'column'
     }}>
       <div className="scroller" style={{ height: '100%', paddingBottom: 10 }}>
+        {intro && (
+          <div className="card" style={{ marginBottom: 12, padding: 12, borderColor: 'color-mix(in srgb, var(--accent) 30%, var(--line))', background: 'var(--accent-soft)' }}>
+            <div className="label" style={{ color: 'var(--accent)', marginBottom: 5 }}>// TODAY'S WORKOUT</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{intro}</div>
+          </div>
+        )}
         {/* Exercise video — YouTube embed slot */}
         <div style={{
           position: 'relative', borderRadius: 'var(--radius-lg)', overflow: 'hidden',

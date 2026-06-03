@@ -41,6 +41,7 @@ export default function App() {
   const [glow] = React.useState(1);
   const [screen, setScreen] = React.useState('dashboard');
   const [previewWorkoutId, setPreviewWorkoutId] = React.useState(null);
+  const [logDayId, setLogDayId] = React.useState(null);
 
   // Auth state
   const [session, setSession] = React.useState(null);
@@ -89,6 +90,7 @@ export default function App() {
       setPreviewWorkoutId(opts?.id || 'w1');
       return;
     }
+    if (target === 'log') setLogDayId(opts?.dayId || null);
     setScreen(target);
     setPreviewWorkoutId(null);
   };
@@ -134,7 +136,7 @@ export default function App() {
 
   let ScreenEl;
   if (screen === 'workouts')        ScreenEl = <Workouts go={navigate} openPreview={previewWorkoutId} userId={session.user.id}/>;
-  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate}/>;
+  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={session.user.id}/>;
   else if (screen === 'progress')   ScreenEl = <Progress go={navigate}/>;
   else if (screen === 'resources')  ScreenEl = <Resources go={navigate}/>;
   else if (screen === 'coach')      ScreenEl = <Coach go={navigate} trainerId={session.user.id}/>;

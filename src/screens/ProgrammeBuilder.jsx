@@ -23,6 +23,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const [expandedExId, setExpandedExId]   = React.useState(null);
   const [expandedSetId, setExpandedSetId] = React.useState(null);
   const [saveError, setSaveError]         = React.useState(null);
+  const [switchingEx, setSwitchingEx]     = React.useState(null); // { sIdx, eIdx }
 
   const phase = prog.phaseList[phaseIdx];
   const days  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -107,7 +108,10 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         await supabase.from('exercise_sets').insert(
           ex.setsList.map((st, i) => ({
             exercise_id: exRow.id, set_index: i,
-            kind: st.kind, reps: st.reps, weight_kg: st.weight,
+            kind: st.kind,
+            reps: parseInt(st.repsText) || 0,
+            reps_text: st.repsText || '',
+            weight_kg: st.weight,
             rest_secs: st.rest, time_secs: st.time, intensity: st.intensity,
           }))
         );
@@ -142,8 +146,11 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const addSet = (sIdx, eIdx, kind = 'WORK') => {
     setDay(d => mapDay(d, sIdx, eIdx, e => {
       const last = e.setsList[e.setsList.length - 1];
-      const base = last ? { reps: last.reps, weight: last.weight, rest: last.rest, time: last.time, intensity: last.intensity } : { reps: 8, weight: 0, rest: 60, time: 60, intensity: 6 };
-      if (kind === 'WARMUP') { base.weight = Math.max(0, Math.round(base.weight*0.5/2.5)*2.5); base.intensity = 3; base.rest = 45; }
+      const base = last ? { repsText: last.repsText, weight: last.weight, rest: last.rest, time: last.time, intensity: last.intensity } : { repsText: '8', weight: 0, rest: 60, time: 60, intensity: 6 };
+      if (kind === 'WARMUP')  { base.weight = Math.max(0, Math.round(base.weight*0.5/2.5)*2.5); base.intensity = 3; base.rest = 45; }
+      if (kind === 'DROPSET') { base.weight = Math.max(0, Math.round(base.weight*0.7/2.5)*2.5); base.intensity = 8; }
+      if (kind === 'FAILURE') { base.repsText = 'AMRAP'; base.intensity = 10; }
+      if (kind === 'PARTIAL') { const n = parseInt(base.repsText); base.repsText = isNaN(n) ? base.repsText : String(Math.max(1, Math.round(n/2))); }
       return { ...e, setsList: [...e.setsList, mkSet(kind, base)] };
     }));
     setDirty(true);
@@ -153,7 +160,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const applyToAll = (sIdx, eIdx, i) => {
     setDay(d => mapDay(d, sIdx, eIdx, e => {
       const src = e.setsList[i];
-      return { ...e, setsList: e.setsList.map((st, j) => j <= i ? st : ({ ...st, weight: src.weight, reps: src.reps, time: src.time, rest: src.rest, intensity: src.intensity })) };
+      return { ...e, setsList: e.setsList.map((st, j) => j <= i ? st : ({ ...st, weight: src.weight, repsText: src.repsText, time: src.time, rest: src.rest, intensity: src.intensity })) };
     }));
     setDirty(true);
   };
@@ -301,6 +308,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
                 onDupEx={(eIdx) => dupEx(sIdx, eIdx)}
                 onDelEx={(eIdx) => delEx(sIdx, eIdx)}
                 onAddEx={() => addEx(sIdx)}
+                onSwitchEx={(eIdx) => setSwitchingEx({ sIdx, eIdx })}
                 onUpdateSet={(eIdx, setIdx, patch) => updateSet(sIdx, eIdx, setIdx, patch)}
                 onAddSet={(eIdx, kind) => addSet(sIdx, eIdx, kind)}
                 onDelSet={(eIdx, i) => delSet(sIdx, eIdx, i)}
@@ -308,6 +316,16 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
                 onApplyToAll={(eIdx, i) => applyToAll(sIdx, eIdx, i)}
               />
             ))}
+
+            {switchingEx !== null && (
+              <ExercisePicker
+                onClose={() => setSwitchingEx(null)}
+                onPick={({ name, img }) => {
+                  updateEx(switchingEx.sIdx, switchingEx.eIdx, { name, img });
+                  setSwitchingEx(null);
+                }}
+              />
+            )}
 
             {/* Session notes */}
             <div style={{ marginTop: 16 }}>
@@ -545,7 +563,7 @@ function RestDay({ onAdd }) {
 }
 
 // ── SECTION ───────────────────────────────────────────────────────
-function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const color = sectionColor(s.kind);
   return (
     <div style={{ marginBottom: 16 }}>
@@ -565,6 +583,7 @@ function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet
             onUpdateEx={(patch) => onUpdateEx(eIdx, patch)}
             onDupEx={() => onDupEx(eIdx)}
             onDelEx={() => onDelEx(eIdx)}
+            onSwitchEx={() => onSwitchEx(eIdx)}
             onUpdateSet={(setIdx, patch) => onUpdateSet(eIdx, setIdx, patch)}
             onAddSet={(kind) => onAddSet(eIdx, kind)}
             onDelSet={(i) => onDelSet(eIdx, i)}
@@ -583,7 +602,7 @@ function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet
 }
 
 // ── EXERCISE EDITOR ───────────────────────────────────────────────
-function ExerciseEditor({ e, color, expanded, expandedSetId, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function ExerciseEditor({ e, color, expanded, expandedSetId, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const workSets = e.setsList.filter(s => s.kind !== 'WARMUP');
   const summary  = workSets.length === 0 ? `${e.setsList.length} warm-up` : `${e.setsList.length} sets · ${summarize(e)}`;
 
@@ -660,15 +679,23 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, onExpand, onExpandS
                 />
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              <button onClick={() => onAddSet('WARMUP')} style={addSetBtn('var(--c-amber)')}>+ WARM-UP</button>
-              <button onClick={() => onAddSet('WORK')}   style={addSetBtn(color)}>+ WORK SET</button>
+            <div style={{ display: 'flex', gap: 4, marginTop: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
+              <button onClick={() => onAddSet('WORK')}    style={addSetBtn(color)}>+ SET</button>
+              <button onClick={() => onAddSet('WARMUP')}  style={addSetBtn('var(--c-amber)')}>+ WARM-UP</button>
+              <button onClick={() => onAddSet('DROPSET')} style={addSetBtn('var(--c-blue)')}>+ DROP</button>
+              <button onClick={() => onAddSet('FAILURE')} style={addSetBtn('var(--c-coral)')}>+ FAILURE</button>
+              <button onClick={() => onAddSet('PARTIAL')} style={addSetBtn('var(--c-pink)')}>+ PARTIAL</button>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
-            <button onClick={onDupEx} className="btn-ghost" style={{ flex: 1, padding: '8px 10px', fontSize: 10 }}>⎘ DUPLICATE EX</button>
-            <button onClick={onDelEx} className="btn-ghost" style={{ flex: 1, padding: '8px 10px', fontSize: 10, color: 'var(--c-coral)', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))' }}>✕ DELETE EX</button>
+          <div style={{ marginTop: 14, marginBottom: 8 }}>
+            <button onClick={onSwitchEx} className="btn-ghost" style={{ width: '100%', padding: '8px 10px', fontSize: 10 }}>
+              ⇄ SWITCH EXERCISE
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={onDupEx} className="btn-ghost" style={{ flex: 1, padding: '8px 10px', fontSize: 10 }}>⎘ DUPLICATE</button>
+            <button onClick={onDelEx} className="btn-ghost" style={{ flex: 1, padding: '8px 10px', fontSize: 10, color: 'var(--c-coral)', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))' }}>✕ DELETE</button>
           </div>
         </div>
       )}
@@ -677,20 +704,22 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, onExpand, onExpandS
 }
 
 // ── SET ROW ───────────────────────────────────────────────────────
+const SK_META = { WARMUP: { l:'W', c:'var(--c-amber)' }, DROPSET: { l:'D', c:'var(--c-blue)' }, FAILURE: { l:'F', c:'var(--c-coral)' }, PARTIAL: { l:'P', c:'var(--c-pink)' } };
+
 function SetRow({ st, setIdx, total, timed, color, expanded, onExpand, onUpdate, onDelete, onDuplicate, onApplyToAll }) {
-  const isWarmup = st.kind === 'WARMUP';
-  const accent   = isWarmup ? 'var(--c-amber)' : color;
+  const sk     = SK_META[st.kind];
+  const accent = sk ? sk.c : color;
   return (
     <div style={{ background: expanded ? 'var(--bg-3)' : 'var(--bg-1)', border: '1px solid '+(expanded?accent:'var(--line)'), borderRadius: 8, overflow: 'hidden' }}>
-      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', width: '100%', display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr 30px 18px', gap: 6, alignItems: 'center', padding: '8px 6px', boxSizing: 'border-box' }}>
-        <span style={{ width: 22, height: 22, borderRadius: 5, background: isWarmup?'rgba(243,158,31,0.15)':'rgba(255,255,255,0.04)', color: isWarmup?'var(--c-amber)':'var(--text-2)', border: isWarmup?'1px solid color-mix(in srgb, var(--c-amber) 50%, transparent)':'1px solid var(--line)', fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 10, display: 'grid', placeItems: 'center' }}>
-          {isWarmup ? 'W' : String(setIdx+1).padStart(2,'0')}
+      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', width: '100%', display: 'grid', gridTemplateColumns: '26px 1fr 1fr 1fr 28px 16px', gap: 4, alignItems: 'center', padding: '6px 4px', boxSizing: 'border-box' }}>
+        <span style={{ width: 20, height: 20, borderRadius: 4, background: sk?`color-mix(in srgb, ${sk.c} 15%, transparent)`:'rgba(255,255,255,0.04)', color: sk?sk.c:'var(--text-2)', border: sk?`1px solid color-mix(in srgb, ${sk.c} 50%, transparent)`:'1px solid var(--line)', fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 9, display: 'grid', placeItems: 'center' }}>
+          {sk ? sk.l : String(setIdx+1).padStart(2,'0')}
         </span>
         {timed ? <CellVal value={fmtSecs(st.time)}/> : <CellVal value={st.weight ? `${st.weight}` : 'BW'} unit={st.weight ? 'kg' : null}/>}
-        {timed ? <CellVal value={st.weight ? `${st.weight}` : '—'} unit={st.weight ? 'kg' : null}/> : <CellVal value={`× ${st.reps||0}`}/>}
+        {timed ? <CellVal value={st.weight ? `${st.weight}` : '—'} unit={st.weight ? 'kg' : null}/> : <CellVal value={`× ${st.repsText||0}`}/>}
         <CellVal value={fmtSecs(st.rest)}/>
-        <span style={{ width: 24, height: 22, borderRadius: 5, display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${intensityColor(st.intensity)} 18%, transparent)`, color: intensityColor(st.intensity), fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 11, border: `1px solid color-mix(in srgb, ${intensityColor(st.intensity)} 40%, transparent)` }}>{st.intensity}</span>
-        <div style={{ color: 'var(--text-3)', transform: expanded?'rotate(90deg)':'rotate(0)', transition: 'transform .2s', display: 'grid', placeItems: 'center' }}><IconChevronRight size={12}/></div>
+        <span style={{ width: 22, height: 20, borderRadius: 4, display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${intensityColor(st.intensity)} 18%, transparent)`, color: intensityColor(st.intensity), fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 10, border: `1px solid color-mix(in srgb, ${intensityColor(st.intensity)} 40%, transparent)` }}>{st.intensity}</span>
+        <div style={{ color: 'var(--text-3)', transform: expanded?'rotate(90deg)':'rotate(0)', transition: 'transform .2s', display: 'grid', placeItems: 'center' }}><IconChevronRight size={11}/></div>
       </button>
 
       {expanded && (
@@ -698,14 +727,14 @@ function SetRow({ st, setIdx, total, timed, color, expanded, onExpand, onUpdate,
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px', marginBottom: 6 }}>
             <div>
               <div className="mono" style={{ fontSize: 9, color: 'var(--c-amber)', letterSpacing: '0.1em', fontWeight: 700 }}>WARM-UP SET</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{isWarmup ? 'Excluded from working-set count' : 'Counts toward working sets'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{st.kind === 'WARMUP' ? 'Excluded from working-set count' : 'Counts toward working sets'}</div>
             </div>
-            <Toggle on={isWarmup} onChange={v => onUpdate({ kind: v ? 'WARMUP' : 'WORK' })}/>
+            <Toggle on={st.kind === 'WARMUP'} onChange={v => onUpdate({ kind: v ? 'WARMUP' : 'WORK' })}/>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             {timed
               ? <TimeStepper label="TIME" value={st.time||60} onChange={v => onUpdate({ time: v })} accent={accent}/>
-              : <Stepper label="REPS" value={st.reps||0} min={0} max={50} step={1} onChange={v => onUpdate({ reps: v })} accent={accent}/>
+              : <RepsTextInput value={st.repsText||''} onChange={v => onUpdate({ repsText: v })} accent={accent}/>
             }
             <Stepper label="WEIGHT" unit="kg" value={st.weight||0} min={0} max={400} step={2.5} onChange={v => onUpdate({ weight: v })} accent={accent}/>
           </div>
@@ -734,27 +763,49 @@ function SetRow({ st, setIdx, total, timed, color, expanded, onExpand, onUpdate,
 function TempoInput({ value, onChange }) {
   const parts  = (value || '').split('-');
   const vals   = [parts[0]||'', parts[1]||'', parts[2]||'', parts[3]||''];
-  const labels = ['DOWN','HOLD↓','UP','HOLD↑'];
+  const labels = ['↓','⏸','↑','⏸'];
   const update = (i, v) => {
-    const next = [...vals]; next[i] = v.slice(-1);
+    const next = [...vals]; next[i] = v.replace(/[^0-9Xx]/g, '').slice(0,1);
     onChange(next.every(x => x === '') ? '' : next.join('-'));
   };
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
       {vals.map((v, i) => (
-        <div key={i} style={{ textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 7, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 4 }}>{labels[i]}</div>
-          <input value={v} onChange={e => update(i, e.target.value)} maxLength={1} placeholder="—"
-            style={{
-              width: '100%', boxSizing: 'border-box', textAlign: 'center',
-              background: v ? 'var(--bg-1)' : 'transparent',
-              border: '1px solid ' + (v ? 'var(--accent)' : 'var(--line-strong)'),
-              borderRadius: 7, color: v ? 'var(--accent)' : 'var(--text-3)',
-              fontFamily: 'JetBrains Mono', fontSize: 20, fontWeight: 700,
-              padding: '6px 0', outline: 'none',
-            }}/>
-        </div>
+        <React.Fragment key={i}>
+          <div style={{ textAlign: 'center' }}>
+            <div className="mono" style={{ fontSize: 7, color: 'var(--text-3)', letterSpacing: '0.06em', marginBottom: 2 }}>{labels[i]}</div>
+            <input value={v} onChange={e => update(i, e.target.value)} maxLength={1} placeholder="–"
+              style={{
+                width: 28, boxSizing: 'border-box', textAlign: 'center',
+                background: v ? 'var(--bg-1)' : 'transparent',
+                border: '1px solid ' + (v ? 'var(--accent)' : 'var(--line-strong)'),
+                borderRadius: 5, color: v ? 'var(--accent)' : 'var(--text-3)',
+                fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 700,
+                padding: '3px 0', outline: 'none',
+              }}/>
+          </div>
+          {i < 3 && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', paddingTop: 12 }}>-</span>}
+        </React.Fragment>
       ))}
+    </div>
+  );
+}
+
+// ── REPS TEXT INPUT ───────────────────────────────────────────────
+function RepsTextInput({ value, onChange, accent = 'var(--accent)' }) {
+  return (
+    <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8, padding: '6px 8px' }}>
+      <div className="mono" style={{ fontSize: 8, color: accent, letterSpacing: '0.12em', fontWeight: 700, marginBottom: 3 }}>REPS</div>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="8"
+        style={{
+          width: '100%', background: 'transparent', border: 0, outline: 'none',
+          color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 15, fontWeight: 700,
+          textAlign: 'center', padding: '2px 0',
+        }}
+      />
     </div>
   );
 }
@@ -895,6 +946,104 @@ const phaseInputSt = { width:'100%', boxSizing:'border-box', background:'var(--b
 function addSetBtn(c) { return { all:'unset', cursor:'pointer', flex:1, textAlign:'center', padding:'7px 0', borderRadius:7, background:`color-mix(in srgb, ${c} 10%, transparent)`, border:`1px dashed color-mix(in srgb, ${c} 45%, transparent)`, color:c, fontFamily:'JetBrains Mono', fontSize:9, letterSpacing:'0.14em', fontWeight:700 }; }
 function miniBtn({ danger=false, disabled=false }={}) { return { all:'unset', cursor:disabled?'not-allowed':'pointer', textAlign:'center', padding:'7px 4px', borderRadius:6, background:'var(--bg-2)', border:`1px solid ${danger?'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))':'var(--line-strong)'}`, color:danger?'var(--c-coral)':'var(--text-2)', fontFamily:'JetBrains Mono', fontSize:8, letterSpacing:'0.1em', fontWeight:700, opacity:disabled?0.4:1 }; }
 
+// ── EXERCISE PICKER ───────────────────────────────────────────────
+const EXERCISE_LIBRARY = [
+  { name: 'Back Squat',              img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=70', cat: 'LOWER BODY' },
+  { name: 'Front Squat',             img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=70', cat: 'LOWER BODY' },
+  { name: 'Romanian Deadlift',       img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'LOWER BODY' },
+  { name: 'Deadlift',                img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'LOWER BODY' },
+  { name: 'Walking Lunges',          img: 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70', cat: 'LOWER BODY' },
+  { name: 'Leg Press',               img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=70', cat: 'LOWER BODY' },
+  { name: 'Leg Curl',                img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=70', cat: 'LOWER BODY' },
+  { name: 'Standing Calf Raise',     img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=70', cat: 'LOWER BODY' },
+  { name: 'Hip Thrust',              img: 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70', cat: 'LOWER BODY' },
+  { name: 'Bench Press',             img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=200&q=70', cat: 'UPPER PUSH' },
+  { name: 'Incline DB Press',        img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=200&q=70', cat: 'UPPER PUSH' },
+  { name: 'Overhead Press',          img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=200&q=70', cat: 'UPPER PUSH' },
+  { name: 'Cable Fly',               img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=200&q=70', cat: 'UPPER PUSH' },
+  { name: 'Lateral Raise',           img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=200&q=70', cat: 'UPPER PUSH' },
+  { name: 'Tricep Pushdown',         img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=200&q=70', cat: 'UPPER PUSH' },
+  { name: 'Dips',                    img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=200&q=70', cat: 'UPPER PUSH' },
+  { name: 'Pull-up',                 img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'UPPER PULL' },
+  { name: 'Barbell Row',             img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'UPPER PULL' },
+  { name: 'Lat Pulldown',            img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'UPPER PULL' },
+  { name: 'Cable Row',               img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'UPPER PULL' },
+  { name: 'Face Pull',               img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'UPPER PULL' },
+  { name: 'Bicep Curl',              img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'UPPER PULL' },
+  { name: 'Hammer Curl',             img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'UPPER PULL' },
+  { name: 'Plank',                   img: 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70', cat: 'CORE' },
+  { name: 'Dead Bug',                img: 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70', cat: 'CORE' },
+  { name: 'Cable Crunch',            img: 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70', cat: 'CORE' },
+  { name: 'Russian Twist',           img: 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70', cat: 'CORE' },
+  { name: 'Banded Hip Opener',       img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', cat: 'ACTIVATION' },
+  { name: 'Banded Glute Activation', img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', cat: 'ACTIVATION' },
+  { name: 'Banded Ankle Mobility',   img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70', cat: 'ACTIVATION' },
+  { name: 'Exercise Bike',           img: 'https://images.unsplash.com/photo-1591741535018-d042766c62eb?w=200&q=70', cat: 'CARDIO' },
+  { name: 'Rowing Machine',          img: 'https://images.unsplash.com/photo-1591741535018-d042766c62eb?w=200&q=70', cat: 'CARDIO' },
+  { name: 'Couch Stretch',           img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', cat: 'COOLDOWN' },
+  { name: 'Pigeon Pose',             img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', cat: 'COOLDOWN' },
+  { name: 'Diaphragmatic Breathing', img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', cat: 'COOLDOWN' },
+];
+
+function ExercisePicker({ onClose, onPick }) {
+  const [query, setQuery] = React.useState('');
+  const filtered = query.trim()
+    ? EXERCISE_LIBRARY.filter(e => e.name.toLowerCase().includes(query.toLowerCase()))
+    : EXERCISE_LIBRARY;
+  const cats = [...new Set(filtered.map(e => e.cat))];
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'absolute', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
+      display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        border: '1px solid var(--line-strong)', borderBottom: 0,
+        maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ padding: '12px 16px 10px', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
+          <div className="label" style={{ marginBottom: 10 }}>// SWITCH EXERCISE</div>
+          <input
+            autoFocus
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search exercises…"
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 10,
+              padding: '10px 12px', color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 13,
+              outline: 'none',
+            }}
+          />
+        </div>
+        <div className="scroller" style={{ flex: 1, overflowY: 'auto', padding: '0 16px 28px', minHeight: 0 }}>
+          {cats.map(cat => (
+            <div key={cat} style={{ marginBottom: 14 }}>
+              <div className="label" style={{ marginBottom: 8 }}>// {cat}</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {filtered.filter(e => e.cat === cat).map(ex => (
+                  <button key={ex.name} onClick={() => onPick({ name: ex.name, img: ex.img })} style={{
+                    all: 'unset', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 12px', background: 'var(--bg-2)',
+                    border: '1px solid var(--line)', borderRadius: 10,
+                  }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 7, background: `url('${ex.img}') center/cover, var(--bg-3)`, border: '1px solid var(--line)', flexShrink: 0 }}/>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{ex.name}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── HELPERS ───────────────────────────────────────────────────────
 function mapDay(day, sIdx, eIdx, mapEx) {
   return { ...day, sections: day.sections.map((s, si) => si!==sIdx ? s : ({ ...s, items: s.items.map((e, ei) => ei!==eIdx ? e : mapEx(e)) })) };
@@ -906,7 +1055,8 @@ function dbToSections(sections) {
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
       id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'',
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
-        id: 's'+st.id.slice(-8), kind: st.kind, reps: st.reps??8,
+        id: 's'+st.id.slice(-8), kind: st.kind,
+        repsText: st.reps_text || String(st.reps ?? 8),
         weight: Number(st.weight_kg)||0, rest: st.rest_secs??60,
         time: st.time_secs??60, intensity: st.intensity??6,
       })),
@@ -914,16 +1064,16 @@ function dbToSections(sections) {
   }));
 }
 
-function mkSet(kind, p) { return { id: randId(), kind, reps:p.reps??8, weight:p.weight??0, rest:p.rest??60, time:p.time??60, intensity:p.intensity??6 }; }
+function mkSet(kind, p) { return { id: randId(), kind, repsText: p.repsText ?? String(p.reps ?? 8), weight:p.weight??0, rest:p.rest??60, time:p.time??60, intensity:p.intensity??6 }; }
 function randId() { return 's'+Math.random().toString(36).slice(2); }
 
 function summarize(e) {
-  const work = e.setsList.filter(s => s.kind!=='WARMUP');
+  const work = e.setsList.filter(s => !s.kind || s.kind === 'WORK' || s.kind === 'DROPSET' || s.kind === 'FAILURE' || s.kind === 'PARTIAL');
   if (work.length===0) return '—';
-  const reps = uniqueRange(work.map(s => s.reps));
-  const w    = uniqueRange(work.map(s => s.weight));
+  const w = uniqueRange(work.map(s => s.weight));
   if (e.timed) { const t = uniqueRange(work.map(s => s.time), fmtSecs); return `${t}${w!=='0'?' · '+w+'kg':''}`; }
-  return `${w==='0'?'BW':w+'kg'} × ${reps}`;
+  const repsVal = work[0]?.repsText || '—';
+  return `${w==='0'?'BW':w+'kg'} × ${repsVal}`;
 }
 
 function uniqueRange(arr, fmt=String) {
