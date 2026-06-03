@@ -84,7 +84,7 @@ export function Coach({ go, trainerId }) {
       for (const day of (days || [])) {
         const { data: newDay } = await supabase
           .from('programme_days')
-          .insert({ phase_id: newPhase.id, week_index: day.week_index, day_of_week: day.day_of_week, notes: day.notes || '' })
+          .insert({ phase_id: newPhase.id, week_index: day.week_index, day_of_week: day.day_of_week, intro: day.intro || '', notes: day.notes || '' })
           .select('id').single();
         if (!newDay) continue;
 
@@ -100,7 +100,7 @@ export function Coach({ go, trainerId }) {
           for (const ex of exercises) {
             const { data: newEx } = await supabase
               .from('section_exercises')
-              .insert({ section_id: newSec.id, name: ex.name, img_url: ex.img_url, timed: ex.timed, tempo: ex.tempo || '', sort_order: ex.sort_order })
+              .insert({ section_id: newSec.id, name: ex.name, img_url: ex.img_url, timed: ex.timed, tempo: ex.tempo || '', coach_notes: ex.coach_notes || '', sort_order: ex.sort_order })
               .select('id').single();
             if (!newEx) continue;
 

@@ -56,7 +56,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         .order('sort_order');
 
       if (cancelled) return;
-      setDay(sections ? { notes: dayRow.notes || '', sections: dbToSections(sections) } : null);
+      setDay(sections ? { intro: dayRow.intro || '', notes: dayRow.notes || '', sections: dbToSections(sections) } : null);
       setDirty(false);
       setDayLoading(false);
     }
@@ -75,7 +75,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     const { data: dayRow, error: dayErr } = await supabase
       .from('programme_days')
       .upsert(
-        { phase_id: phase.id, week_index: weekIdx, day_of_week: dayIdx, notes: day.notes || '' },
+        { phase_id: phase.id, week_index: weekIdx, day_of_week: dayIdx, intro: day.intro || '', notes: day.notes || '' },
         { onConflict: 'phase_id,week_index,day_of_week' }
       )
       .select('id').single();
@@ -100,7 +100,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         const ex = s.items[eOrd];
         const { data: exRow } = await supabase
           .from('section_exercises')
-          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, tempo: ex.tempo || '', sort_order: eOrd })
+          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', sort_order: eOrd })
           .select('id').single();
         if (!exRow) continue;
 
@@ -131,7 +131,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const addEx = (sIdx) => {
     const id = 'x' + Date.now();
     setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({
-      ...s, items: [...s.items, { id, name: 'New Exercise', img: IMG_FALLBACK, timed: false, tempo: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6 })] }],
+      ...s, items: [...s.items, { id, name: 'New Exercise', img: IMG_FALLBACK, timed: false, tempo: '', coachNotes: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6 })] }],
     })) }));
     setDirty(true);
     setExpandedExId(id);
@@ -275,6 +275,23 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           <RestDay onAdd={() => { setDay(seedDay()); setDirty(true); }}/>
         ) : (
           <>
+            {/* Workout intro */}
+            <div style={{ marginBottom: 16 }}>
+              <div className="label" style={{ marginBottom: 8 }}>// WORKOUT INTRO</div>
+              <textarea
+                value={day.intro || ''}
+                onChange={e => { setDay(d => ({ ...d, intro: e.target.value })); setDirty(true); }}
+                placeholder="Overview, goals, or context for this session — shown to the client at the top of the workout."
+                rows={3}
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 10,
+                  color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 12, lineHeight: 1.6,
+                  padding: '12px 14px', outline: 'none', resize: 'vertical',
+                }}
+              />
+            </div>
+
             {day.sections.map((s, sIdx) => (
               <Section key={s.kind + sIdx} s={s} sIdx={sIdx}
                 expandedExId={expandedExId} expandedSetId={expandedSetId}
@@ -292,13 +309,13 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               />
             ))}
 
-            {/* Coach notes */}
+            {/* Session notes */}
             <div style={{ marginTop: 16 }}>
-              <div className="label" style={{ marginBottom: 8 }}>// COACH NOTES</div>
+              <div className="label" style={{ marginBottom: 8 }}>// SESSION NOTES</div>
               <textarea
                 value={day.notes || ''}
                 onChange={e => { setDay(d => ({ ...d, notes: e.target.value })); setDirty(true); }}
-                placeholder="Coaching cues, progressions, load context, client notes for this session…"
+                placeholder="Post-session notes, load context, progressions to consider next time…"
                 rows={4}
                 style={{
                   width: '100%', boxSizing: 'border-box',
@@ -604,6 +621,23 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, onExpand, onExpandS
             <TempoInput value={e.tempo || ''} onChange={v => onUpdateEx({ tempo: v })}/>
           </div>
 
+          {/* Coach notes */}
+          <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+            <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600, marginBottom: 8 }}>COACH NOTES</div>
+            <textarea
+              value={e.coachNotes || ''}
+              onChange={ev => onUpdateEx({ coachNotes: ev.target.value })}
+              placeholder="Technique cues, regressions/progressions, client-specific reminders…"
+              rows={3}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'var(--bg-1)', border: '1px solid var(--line-strong)', borderRadius: 8,
+                color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 11, lineHeight: 1.6,
+                padding: '10px 12px', outline: 'none', resize: 'vertical',
+              }}
+            />
+          </div>
+
           {/* Per-set table */}
           <div style={{ marginTop: 8 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr 30px 18px', gap: 6, padding: '0 2px 6px' }} className="mono">
@@ -870,7 +904,7 @@ function dbToSections(sections) {
   return sections.map(s => ({
     kind: s.kind, title: s.title,
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
-      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, tempo: ex.tempo||'',
+      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'',
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
         id: 's'+st.id.slice(-8), kind: st.kind, reps: st.reps??8,
         weight: Number(st.weight_kg)||0, rest: st.rest_secs??60,
@@ -915,21 +949,21 @@ function seedDay() {
     notes: '',
     sections: [
       { kind:'PULSE_RAISER', title:'Pulse Raiser', items:[
-        { id:'p1', name:'Exercise Bike', timed:true, tempo:'', img:'https://images.unsplash.com/photo-1591741535018-d042766c62eb?w=200&q=70', setsList:[mkSet('WORK',{time:300,weight:0,rest:0,intensity:4})] },
+        { id:'p1', name:'Exercise Bike', timed:true, tempo:'', coachNotes:'', img:'https://images.unsplash.com/photo-1591741535018-d042766c62eb?w=200&q=70', setsList:[mkSet('WORK',{time:300,weight:0,rest:0,intensity:4})] },
       ]},
       { kind:'BANDED', title:'Banded Activation', items:[
-        { id:'b1', name:'Banded Hip Opener', timed:false, tempo:'', img:'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', setsList:[mkSet('WORK',{reps:8,rest:30,intensity:3}),mkSet('WORK',{reps:8,rest:30,intensity:3})] },
+        { id:'b1', name:'Banded Hip Opener', timed:false, tempo:'', coachNotes:'', img:'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', setsList:[mkSet('WORK',{reps:8,rest:30,intensity:3}),mkSet('WORK',{reps:8,rest:30,intensity:3})] },
       ]},
       { kind:'MAIN', title:'Workout', items:[
-        { id:'m1', name:'Back Squat', timed:false, tempo:'3-1-1-0', img:'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=70',
+        { id:'m1', name:'Back Squat', timed:false, tempo:'3-1-1-0', coachNotes:'', img:'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=70',
           setsList:[mkSet('WARMUP',{reps:10,weight:40,rest:60,intensity:3}),mkSet('WARMUP',{reps:8,weight:70,rest:60,intensity:5}),mkSet('WORK',{reps:8,weight:100,rest:120,intensity:8}),mkSet('WORK',{reps:8,weight:100,rest:120,intensity:8}),mkSet('WORK',{reps:8,weight:100,rest:120,intensity:9}),mkSet('WORK',{reps:6,weight:105,rest:150,intensity:9})] },
-        { id:'m2', name:'Romanian Deadlift', timed:false, tempo:'3-0-1-0', img:'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70',
+        { id:'m2', name:'Romanian Deadlift', timed:false, tempo:'3-0-1-0', coachNotes:'', img:'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70',
           setsList:[mkSet('WORK',{reps:10,weight:80,rest:90,intensity:7}),mkSet('WORK',{reps:10,weight:80,rest:90,intensity:7}),mkSet('WORK',{reps:10,weight:80,rest:90,intensity:7})] },
-        { id:'m3', name:'Walking Lunges', timed:false, tempo:'', img:'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70',
+        { id:'m3', name:'Walking Lunges', timed:false, tempo:'', coachNotes:'', img:'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70',
           setsList:[mkSet('WORK',{reps:12,weight:20,rest:60,intensity:6}),mkSet('WORK',{reps:12,weight:20,rest:60,intensity:6}),mkSet('WORK',{reps:12,weight:20,rest:60,intensity:6})] },
       ]},
       { kind:'COOLDOWN', title:'Cooldown', items:[
-        { id:'c1', name:'Couch Stretch', timed:true, tempo:'', img:'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', setsList:[mkSet('WORK',{time:60,rest:0,intensity:2}),mkSet('WORK',{time:60,rest:0,intensity:2})] },
+        { id:'c1', name:'Couch Stretch', timed:true, tempo:'', coachNotes:'', img:'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', setsList:[mkSet('WORK',{time:60,rest:0,intensity:2}),mkSet('WORK',{time:60,rest:0,intensity:2})] },
       ]},
     ],
   };
