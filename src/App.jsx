@@ -42,6 +42,8 @@ export default function App() {
   const [screen, setScreen] = React.useState('dashboard');
   const [previewWorkoutId, setPreviewWorkoutId] = React.useState(null);
   const [logDayId, setLogDayId] = React.useState(null);
+  const [clientViewId, setClientViewId] = React.useState(null);
+  const [clientViewName, setClientViewName] = React.useState(null);
 
   // Auth state
   const [session, setSession] = React.useState(null);
@@ -90,7 +92,18 @@ export default function App() {
       setPreviewWorkoutId(opts?.id || 'w1');
       return;
     }
+    if (target === 'clientview') {
+      setClientViewId(opts?.clientId || null);
+      setClientViewName(opts?.clientName || null);
+      setScreen('workouts');
+      setPreviewWorkoutId(null);
+      return;
+    }
     if (target === 'log') setLogDayId(opts?.dayId || null);
+    if (!['workouts', 'log'].includes(target)) {
+      setClientViewId(null);
+      setClientViewName(null);
+    }
     setScreen(target);
     setPreviewWorkoutId(null);
   };
@@ -133,10 +146,11 @@ export default function App() {
   };
 
   const showNav = !['log', 'notifications', 'sessionresults'].includes(screen);
+  const activeUserId = clientViewId || session.user.id;
 
   let ScreenEl;
-  if (screen === 'workouts')        ScreenEl = <Workouts go={navigate} openPreview={previewWorkoutId} userId={session.user.id}/>;
-  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={session.user.id}/>;
+  if (screen === 'workouts')        ScreenEl = <Workouts go={navigate} openPreview={previewWorkoutId} userId={activeUserId}/>;
+  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={activeUserId}/>;
   else if (screen === 'progress')   ScreenEl = <Progress go={navigate} userId={session.user.id}/>;
   else if (screen === 'resources')  ScreenEl = <Resources go={navigate}/>;
   else if (screen === 'coach')      ScreenEl = <Coach go={navigate} trainerId={session.user.id}/>;
@@ -161,6 +175,8 @@ export default function App() {
   );
   else ScreenEl = <Dashboard go={navigate} user={user} userId={session.user.id}/>;
 
+  const exitClientView = () => { setClientViewId(null); setClientViewName(null); navigate('coach'); };
+
   return (
     <div data-role={isTrainer ? 'trainer' : 'client'} style={{
       width: '100%', minHeight: '100dvh',
@@ -170,7 +186,27 @@ export default function App() {
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {ScreenEl}
+      {clientViewId && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, height: 36,
+          background: `color-mix(in srgb, var(--c-amber) 14%, var(--bg-0))`,
+          borderBottom: '1px solid color-mix(in srgb, var(--c-amber) 45%, transparent)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 16px',
+        }}>
+          <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--c-amber)', fontWeight: 700 }}>
+            ◉ TRAINING AS {clientViewName?.toUpperCase() || 'CLIENT'}
+          </div>
+          <button onClick={exitClientView} className="mono" style={{
+            all: 'unset', cursor: 'pointer', fontSize: 9, letterSpacing: '0.12em',
+            color: 'var(--c-amber)', fontWeight: 700, padding: '3px 8px',
+            border: '1px solid color-mix(in srgb, var(--c-amber) 60%, transparent)', borderRadius: 6,
+          }}>EXIT</button>
+        </div>
+      )}
+      <div style={{ marginTop: clientViewId ? 36 : 0 }}>
+        {ScreenEl}
+      </div>
       {showNav && <BottomNav screen={screen} go={navigate} isTrainer={isTrainer}/>}
     </div>
   );

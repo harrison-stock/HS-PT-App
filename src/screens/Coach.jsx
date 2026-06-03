@@ -168,6 +168,7 @@ export function Coach({ go, trainerId }) {
           trainerId={trainerId}
           programmes={programmes}
           onClose={() => setClientId(null)}
+          go={go}
         />
       )}
       {activeClient && activeClient.pending && (
@@ -710,7 +711,7 @@ function InboxRow({ m }) {
 }
 
 // ── CLIENT DETAIL SHEET ─────────────────────────────────────────
-function ClientSheet({ c, trainerId, programmes, onClose }) {
+function ClientSheet({ c, trainerId, programmes, onClose, go }) {
   const [assignOpen, setAssignOpen] = React.useState(false);
   if (!c) return null;
 
@@ -753,7 +754,7 @@ function ClientSheet({ c, trainerId, programmes, onClose }) {
         <div className="label" style={{ marginBottom: 8 }}>// QUICK ACTIONS</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <SheetAction icon="✉" label="MESSAGE"/>
-          <SheetAction icon="◯" label="LOG SESSION"/>
+          <SheetAction icon="◯" label="LOG SESSION" onClick={() => { onClose(); go('clientview', { clientId: c.id, clientName: c.name }); }}/>
           <SheetAction icon="◢" label="ASSIGN WORKOUT" onClick={() => setAssignOpen(true)}/>
           <SheetAction icon="▣" label="CHECK-IN"/>
         </div>
