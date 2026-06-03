@@ -1,8 +1,30 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
-import { TASKS } from '../data/index'
 import { HEX_RATIO, HexShape, Hex } from '../components/hex'
 import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconDoc, IconScale, IconCamera2, IconX2, IconPlus } from '../components/icons'
+
+function useLiveClock() {
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function greeting(hour) {
+  if (hour < 12) return 'GOOD MORNING';
+  if (hour < 18) return 'GOOD AFTERNOON';
+  return 'GOOD EVENING';
+}
+
+function fmtClock(d) {
+  const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const hh = d.getHours().toString().padStart(2, '0');
+  const mm = d.getMinutes().toString().padStart(2, '0');
+  return `${days[d.getDay()]} · ${d.getDate()} ${months[d.getMonth()]} · ${hh}:${mm}`;
+}
 
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
@@ -29,10 +51,11 @@ export function Dashboard({ go, user, userId }) {
   const name = (user && user.name) || 'Athlete';
   const firstName = name.trim().split(/\s+/)[0];
   const initials = name.trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase();
-  const [tasks, setTasks] = React.useState(TASKS);
+  const [tasks] = React.useState([]);
   const [formTask, setFormTask] = React.useState(null);
   const [todayWorkout, setTodayWorkout] = React.useState(null);
   const [workoutLoading, setWorkoutLoading] = React.useState(true);
+  const now = useLiveClock();
 
   const today = new Date().toISOString().slice(0, 10);
   const done = todayWorkout?.status === 'completed';
@@ -75,7 +98,7 @@ export function Dashboard({ go, user, userId }) {
         <div>
           <div className="label" style={{ marginBottom: 4 }}>// SYSTEM_STATUS
 </div>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'JetBrains Mono, monospace' }}>TUE · 28 APR · 06:42</div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'JetBrains Mono, monospace' }}>{fmtClock(now)}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => go('notifications')} aria-label="Notifications" style={{ all: 'unset', cursor: 'pointer', position: 'relative', display: 'grid', placeItems: 'center', width: 38 * HEX_RATIO, height: 38 }} data-comment-anchor="3f330b377c-button-17-11">
@@ -91,7 +114,7 @@ export function Dashboard({ go, user, userId }) {
       {/* Greeting */}
       <div style={{ marginBottom: 18 }}>
         <div className="h-bold" style={{ fontSize: 28, lineHeight: 1.1, color: "var(--heading-deep)" }}>
-          GOOD MORNING,<br /><span style={{ color: 'var(--accent)' }} className="text-glow">{firstName.toUpperCase()}.</span>
+          {greeting(now.getHours())},<br /><span style={{ color: 'var(--accent)' }} className="text-glow">{firstName.toUpperCase()}.</span>
         </div>
         <div style={{ fontSize: 13, marginTop: 6, fontFamily: "\"JetBrains Mono\"", color: "var(--heading-deep)" }}>
            <strong style={{ fontFamily: "\"JetBrains Mono\"", color: "rgb(70, 187, 192)" }}></strong>
@@ -165,7 +188,7 @@ export function Dashboard({ go, user, userId }) {
         onAction={(t) => completeTask(t.id)} />
 
       {/* Programme roadmap */}
-      <ProgrammeRoadmap />
+      <ProgrammeRoadmap userId={userId} />
 
       {formTask &&
       <TaskForm task={formTask}
@@ -193,6 +216,14 @@ function TasksSection({ tasks, onOpenForm, onAction }) {
         </div>
       </div>
       <div style={{ display: 'grid', gap: 8 }}>
+        {tasks.length === 0 && (
+          <div className="mono" style={{
+            fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em',
+            padding: '14px 12px', textAlign: 'center',
+            background: 'var(--bg-2)', borderRadius: 10,
+            border: '1px solid var(--line)',
+          }}>NO TASKS ASSIGNED</div>
+        )}
         {tasks.map((t) => {
           const Icon = TASK_ICON[t.icon] || IconClipboard;
           const tint = t.done ? 'var(--text-3)' : t.kind === 'form' ? 'var(--accent)' : 'var(--c-amber)';
@@ -367,16 +398,68 @@ function taskInputStyle() {
   };
 }
 
-function ProgrammeRoadmap() {
-  // 4-phase roadmap, week 5 of 16 currently
-  const phases = [
-  { id: 1, name: 'Foundation', weeks: 4, status: 'done', weeksDone: 4 },
-  { id: 2, name: 'Build', weeks: 4, status: 'current', weeksDone: 1 },
-  { id: 3, name: 'Peak', weeks: 4, status: 'upcoming', weeksDone: 0 }];
+async function loadRoadmap(userId) {
+  const { data } = await supabase
+    .from('client_workouts')
+    .select(`
+      status, scheduled_date,
+      programme_days (
+        programme_phases (
+          id, phase_index, name, weeks, programme_id,
+          programmes ( id, name )
+        )
+      )
+    `)
+    .eq('client_id', userId)
+    .order('scheduled_date');
+  if (!data?.length) return null;
 
-  const totalWeeks = phases.reduce((n, p) => n + p.weeks, 0);
-  const doneWeeks = phases.reduce((n, p) => n + p.weeksDone, 0);
-  const overallPct = doneWeeks / totalWeeks;
+  const progMap = {};
+  data.forEach(w => {
+    const ph = w.programme_days?.programme_phases;
+    const prog = ph?.programmes;
+    if (!prog || !ph) return;
+    if (!progMap[prog.id]) progMap[prog.id] = { prog, phases: {}, lastDate: null };
+    const pm = progMap[prog.id];
+    if (!pm.phases[ph.id]) pm.phases[ph.id] = { id: ph.id, idx: ph.phase_index, name: ph.name, weeks: ph.weeks, total: 0, done: 0 };
+    pm.phases[ph.id].total++;
+    if (w.status === 'completed') pm.phases[ph.id].done++;
+    if (!pm.lastDate || w.scheduled_date > pm.lastDate) pm.lastDate = w.scheduled_date;
+  });
+
+  const main = Object.values(progMap).sort((a, b) => (b.lastDate || '').localeCompare(a.lastDate || ''))[0];
+  if (!main) return null;
+
+  const phases = Object.values(main.phases).sort((a, b) => a.idx - b.idx);
+  let seenCurrent = false;
+  phases.forEach(p => {
+    if (p.done === p.total && p.total > 0) { p.status = 'done'; return; }
+    if (!seenCurrent) { p.status = 'current'; seenCurrent = true; }
+    else p.status = 'upcoming';
+  });
+
+  const totalSessions = phases.reduce((n, p) => n + p.total, 0);
+  const doneSessions  = phases.reduce((n, p) => n + p.done,  0);
+  return {
+    name: main.prog.name,
+    phases,
+    pct: totalSessions > 0 ? doneSessions / totalSessions : 0,
+    doneSessions, totalSessions,
+  };
+}
+
+function ProgrammeRoadmap({ userId }) {
+  const [roadmap, setRoadmap] = React.useState(undefined);
+  React.useEffect(() => {
+    if (!userId) { setRoadmap(null); return; }
+    loadRoadmap(userId).then(setRoadmap);
+  }, [userId]);
+
+  if (roadmap === undefined) return null;
+  if (!roadmap) return null;
+
+  const { name, phases, pct, doneSessions, totalSessions } = roadmap;
+  const overallPct = pct;
 
   return (
     <div className="card" style={{
@@ -388,12 +471,11 @@ function ProgrammeRoadmap() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
         <div>
           <div className="label">// PROGRAMME ROADMAP</div>
-          <div className="h-bold" style={{ fontSize: 18, marginTop: 4, color: "var(--heading-deep)" }}>HYPERTROPHY
-16 WEEK</div>
+          <div className="h-bold" style={{ fontSize: 18, marginTop: 4, color: "var(--heading-deep)" }}>{name.toUpperCase()}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div className="mono" style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 600 }}>
-            WK {doneWeeks} / {totalWeeks}
+            {doneSessions} / {totalSessions} SESSIONS
           </div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em', marginTop: 2 }}>
             {Math.round(overallPct * 100)}% COMPLETE
@@ -415,7 +497,7 @@ function ProgrammeRoadmap() {
           borderRadius: 1, boxShadow: '0 0 calc(6px * var(--glow)) var(--accent-glow)'
         }} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, position: 'relative' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(phases.length, 2)}, 1fr)`, gap: 4, position: 'relative' }}>
           {phases.map((p, i) => {
             const isCurrent = p.status === 'current';
             const isDone = p.status === 'done';
@@ -457,7 +539,7 @@ function ProgrammeRoadmap() {
                     fontSize: 8, letterSpacing: '0.14em',
                     color: isCurrent || isDone ? 'var(--accent)' : 'var(--text-3)',
                     fontWeight: 600
-                  }}>P{p.id}</div>
+                  }}>P{p.idx + 1}</div>
                   <div style={{
                     fontSize: 10.5, marginTop: 2, lineHeight: 1.1,
                     color: isCurrent ? 'var(--text)' : isDone ? 'var(--text-2)' : 'var(--text-3)',

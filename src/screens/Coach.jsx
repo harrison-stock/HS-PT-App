@@ -8,6 +8,20 @@ import { ProgrammeBuilder } from './ProgrammeBuilder'
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
+function computeStreak(daysSet, lastDate) {
+  if (!lastDate) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  if (lastDate < yesterday) return 0;
+  let streak = 0;
+  let check = today;
+  while (daysSet.has(check)) {
+    streak++;
+    check = new Date(new Date(check).getTime() - 86_400_000).toISOString().slice(0, 10);
+  }
+  return streak;
+}
+
 export function Coach({ go, trainerId }) {
   const [tab, setTab]                       = React.useState('clients');
   const [clientId, setClientId]             = React.useState(null);
@@ -43,6 +57,42 @@ export function Coach({ go, trainerId }) {
     ]);
     const real    = (profiles || []).map(shapeClient);
     const pending = (managed  || []).map(shapeManagedClient);
+
+    // Batch-load session stats for real clients
+    if (real.length > 0) {
+      const ids   = real.map(c => c.id);
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: sessions } = await supabase
+        .from('workout_sessions')
+        .select('client_id, started_at')
+        .in('client_id', ids)
+        .gte('started_at', since)
+        .order('started_at', { ascending: false });
+
+      const week7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const statsByClient = {};
+      ids.forEach(id => { statsByClient[id] = { sessionsThisWeek: 0, days: new Set(), lastDate: null }; });
+      (sessions || []).forEach(s => {
+        const st = statsByClient[s.client_id];
+        if (!st) return;
+        const day = s.started_at.slice(0, 10);
+        st.days.add(day);
+        if (!st.lastDate) st.lastDate = day;
+        if (s.started_at >= week7) st.sessionsThisWeek++;
+      });
+
+      real.forEach(c => {
+        const st = statsByClient[c.id];
+        if (!st) return;
+        c.sessionsThisWeek = st.sessionsThisWeek;
+        c.streak = computeStreak(st.days, st.lastDate);
+        if (st.lastDate) {
+          const d = Math.floor((Date.now() - new Date(st.lastDate).getTime()) / 86_400_000);
+          c.lastSeen = d === 0 ? 'Today' : d === 1 ? 'Yesterday' : `${d}d ago`;
+        }
+      });
+    }
+
     setClients([...real, ...pending]);
     setLoadingClients(false);
   };
