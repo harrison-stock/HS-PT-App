@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
+import { loadMuscleVolume } from '../lib/muscleVolume'
 import { Hex, HexBackButton } from '../components/hex'
 import { BodyMap } from './Progress'
 import { MUSCLE_BODY } from '../data/musclePaths'
@@ -17,7 +18,7 @@ const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV
 const TASK_ICON = { check: '✓', log: '◎', photo: '▣' };
 
 // ── Main component ───────────────────────────────────────────────
-export function ClientDetail({ c, trainerId, programmes, onClose, go }) {
+export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go }) {
   const [tab, setTab] = React.useState('overview');
   const TABS = [
     { id: 'overview',  label: 'OVERVIEW'  },
@@ -78,12 +79,12 @@ export function ClientDetail({ c, trainerId, programmes, onClose, go }) {
       {/* ── Content ── */}
       <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '14px 14px 40px' }}>
         {tab === 'overview' && <OverviewTab  c={c} />}
-        {tab === 'training' && <TrainingTab  c={c} trainerId={trainerId} programmes={programmes} />}
+        {tab === 'training' && <TrainingTab  c={c} trainerId={trainerId} programmes={programmes} onChanged={onChanged} />}
         {tab === 'body'     && <BodyTab      c={c} trainerId={trainerId} />}
         {tab === 'data'     && <DataTab      c={c} trainerId={trainerId} />}
         {tab === 'tasks'    && <TasksTab     c={c} trainerId={trainerId} />}
         {tab === 'goals'    && <GoalsTab     c={c} trainerId={trainerId} />}
-        {tab === 'settings' && <SettingsTab  c={c} trainerId={trainerId} />}
+        {tab === 'settings' && <SettingsTab  c={c} trainerId={trainerId} onSaved={onChanged} onArchived={() => { onChanged?.(); onClose(); }} />}
       </div>
     </div>
   );
@@ -130,15 +131,16 @@ function OverviewTab({ c }) {
 }
 
 // ── TRAINING ─────────────────────────────────────────────────────
-function TrainingTab({ c, trainerId, programmes }) {
+function TrainingTab({ c, trainerId, programmes, onChanged }) {
   const [month, setMonth] = React.useState(() => new Date());
   const [workouts, setWorkouts] = React.useState([]);
   const [showAssign, setShowAssign] = React.useState(false);
 
   const loadWorkouts = React.useCallback(() => {
     const y = month.getFullYear(), m = month.getMonth();
-    const start = `${y}-${String(m).padStart(2,'0')}-01`;
-    const end   = `${y}-${String(m + 2).padStart(2,'0')}-01`;
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+    const start = fmt(new Date(y, m, 1));
+    const end   = fmt(new Date(y, m + 1, 1));
     supabase.from('client_workouts')
       .select('id, scheduled_date, status, programme_days(programme_phases(name, programmes(name)))')
       .eq('client_id', c.id).gte('scheduled_date', start).lt('scheduled_date', end)
@@ -151,7 +153,7 @@ function TrainingTab({ c, trainerId, programmes }) {
     <AssignWorkout
       clientId={c.id} clientName={c.name} trainerId={trainerId} programmes={programmes}
       onClose={() => setShowAssign(false)}
-      onAssigned={() => { setShowAssign(false); loadWorkouts(); }}
+      onAssigned={() => { setShowAssign(false); loadWorkouts(); onChanged?.(); }}
     />
   );
 
@@ -220,6 +222,7 @@ function BodyTab({ c, trainerId }) {
   const [mode, setMode]           = React.useState('injuries');
   const [side, setSide]           = React.useState('front');
   const [injuries, setInjuries]   = React.useState([]);
+  const [volume, setVolume]       = React.useState(null);   // last-30d muscle volume
   const [picked, setPicked]       = React.useState(null);
   const [editPanel, setEditPanel] = React.useState(null); // { group, existing? }
 
@@ -229,7 +232,13 @@ function BodyTab({ c, trainerId }) {
 
   React.useEffect(() => { reload(); }, [c.id]);
 
-  // Build data object: ALL muscle groups are interactive (so trainer can click any)
+  React.useEffect(() => {
+    if (mode === 'worked' && volume === null) {
+      loadMuscleVolume(c.id, 30).then(setVolume);
+    }
+  }, [mode, volume, c.id]);
+
+  // Injury mode: ALL muscle groups are interactive (so trainer can click any)
   const allGroupsData = React.useMemo(() => {
     const gs = MUSCLE_BODY.groupSlugs?.[side] || {};
     const d = {};
@@ -244,7 +253,16 @@ function BodyTab({ c, trainerId }) {
     return Math.max(...inGroup.map(inj => sevVal[inj.severity] || 0.5));
   }, [injuries]);
 
+  const workedData = volume || {};
+  const maxSets = Math.max(1, ...Object.values(workedData).map(d => d.sets));
+  const workedIntensity = React.useCallback(
+    (group) => Math.min(1, (workedData[group]?.sets || 0) / maxSets),
+    [workedData, maxSets]
+  );
+
+  const isInjuryMode = mode === 'injuries';
   const pickedInjuries = picked ? injuries.filter(inj => inj.muscle_group === picked) : [];
+  const pickedVolume = picked ? workedData[picked] : null;
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -256,33 +274,62 @@ function BodyTab({ c, trainerId }) {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <ToggleBtn active={mode === 'injuries'} onClick={() => setMode('injuries')}>INJURIES</ToggleBtn>
-          <ToggleBtn active={mode === 'worked'}   onClick={() => setMode('worked'  )}>TRAINED</ToggleBtn>
+          <ToggleBtn active={isInjuryMode}  onClick={() => { setMode('injuries'); setPicked(null); }}>INJURIES</ToggleBtn>
+          <ToggleBtn active={!isInjuryMode} onClick={() => { setMode('worked');   setPicked(null); setEditPanel(null); }}>TRAINED</ToggleBtn>
         </div>
       </div>
 
       {/* Body map */}
       <BodyMap
         side={side}
-        data={allGroupsData}
-        intensity={injuryIntensity}
+        data={isInjuryMode ? allGroupsData : workedData}
+        intensity={isInjuryMode ? injuryIntensity : workedIntensity}
         picked={picked}
         onPick={group => { setPicked(group === picked ? null : group); setEditPanel(null); }}
-        heatColor="var(--c-coral)"
+        heatColor={isInjuryMode ? 'var(--c-coral)' : 'var(--accent)'}
       />
 
-      {/* Injury legend */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {Object.entries(SEV_COLOR).map(([sev, col]) => (
-          <div key={sev} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <Dot color={col}/>
-            <Mono>{SEV_LABEL[sev]}</Mono>
+      {/* Legend */}
+      {isInjuryMode ? (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {Object.entries(SEV_COLOR).map(([sev, col]) => (
+            <div key={sev} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Dot color={col}/>
+              <Mono>{SEV_LABEL[sev]}</Mono>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Mono>LOW</Mono>
+          <div style={{
+            flex: 1, height: 6, borderRadius: 999,
+            background: 'linear-gradient(90deg, rgba(255,255,255,0.05), color-mix(in srgb, var(--accent) 30%, transparent), var(--accent))',
+          }}/>
+          <Mono style={{ color: 'var(--accent)' }}>HIGH · LAST 30D</Mono>
+        </div>
+      )}
+
+      {!isInjuryMode && volume === null && <Mono>LOADING TRAINING VOLUME…</Mono>}
+      {!isInjuryMode && volume !== null && Object.keys(workedData).length === 0 && (
+        <EmptyState>No completed sessions in the last 30 days</EmptyState>
+      )}
+
+      {/* Selected muscle — trained volume panel */}
+      {!isInjuryMode && picked && pickedVolume && (
+        <div className="card" style={{ padding: 14, borderColor: 'color-mix(in srgb, var(--accent) 40%, var(--line))' }}>
+          <div className="h-bold" style={{ fontSize: 14, marginBottom: 10 }}>{picked.replace(/([A-Z])/g, ' $1').trim().toUpperCase()}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            <KpiCard label="SETS"   value={pickedVolume.sets}   color="var(--accent)" />
+            <KpiCard label="REPS"   value={pickedVolume.reps}   color="var(--accent)" />
+            <KpiCard label="VOLUME" value={`${pickedVolume.kg.toLocaleString()}`} unit="kg" color="var(--accent)" />
           </div>
-        ))}
-      </div>
+          <Mono style={{ marginTop: 8 }}>LAST WORKED · {pickedVolume.lastWorked.toUpperCase()}</Mono>
+        </div>
+      )}
 
       {/* Selected muscle panel */}
-      {picked && (
+      {isInjuryMode && picked && (
         <div className="card" style={{
           padding: 14,
           borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line))',
@@ -637,7 +684,7 @@ function GoalsTab({ c, trainerId }) {
 }
 
 // ── SETTINGS ──────────────────────────────────────────────────────
-function SettingsTab({ c, trainerId }) {
+function SettingsTab({ c, trainerId, onSaved, onArchived }) {
   const isManaged = !!c.managed;
   const [credits, setCredits]       = React.useState(c.credits ?? 0);
   const [cStatus, setCStatus]       = React.useState(c.client_status ?? 'online');
@@ -659,6 +706,7 @@ function SettingsTab({ c, trainerId }) {
       await supabase.from('profiles').update(updates).eq('id', c.id);
     }
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
+    onSaved?.();
   };
 
   const sendReset = async () => {
@@ -676,6 +724,7 @@ function SettingsTab({ c, trainerId }) {
     } else {
       await supabase.from('profiles').update({ archived: true }).eq('id', c.id);
     }
+    onArchived?.();
   };
 
   return (

@@ -50,7 +50,7 @@ async function loadWeightData(userId) {
     const history = sessArr.map(sg => {
       const maxW = sg.sets.reduce((m, s) => Math.max(m, s.w), 0);
       const atMax = sg.sets.find(s => s.w === maxW) || sg.sets[0];
-      return { d: sg.d, w: maxW, r: atMax?.r || 0 };
+      return { d: sg.d, w: maxW, r: atMax?.r || 0, sets: sg.sets };
     });
     const best = history.reduce((b, h) => h.w > b.w ? h : b, history[0] || { w: 0, r: 0 });
     const prevBest = history.length > 1 ? history.slice(0, -1).reduce((b, h) => h.w > b.w ? h : b, history[0]) : null;
@@ -1154,7 +1154,8 @@ function ExerciseDrill({ ex, onBack }) {
       <div className="label" style={{ margin: '4px 4px 8px' }}>// SESSION HISTORY · ALL SETS</div>
       <div style={{ display: 'grid', gap: 8 }}>
         {[...ex.history].reverse().map((h, i) => {
-          const sets = expandSets(h);
+          let workingN = 0;
+          const sets = expandSets(h).map(s => ({ ...s, label: s.warmup ? 'W' : String(++workingN) }));
           const isLatest = i === 0;
           return (
             <div key={i} className="card" style={{
@@ -1180,7 +1181,7 @@ function ExerciseDrill({ ex, onBack }) {
                     <span className="mono" style={{
                     fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textAlign: 'center',
                     color: s.warmup ? 'var(--text-3)' : zc
-                  }}>{s.warmup ? 'W' : si}</span>
+                  }}>{s.label}</span>
                     <span className="mono" style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>
                       {s.w > 0 ? `${s.w}kg` : 'BW'}
                     </span>
@@ -1195,8 +1196,10 @@ function ExerciseDrill({ ex, onBack }) {
 
 }
 
-// Expand a session top-set {d,w,r} into a believable full set list (warmup + working sets).
+// Returns the real logged sets for a session when present; otherwise expands
+// a top-set {d,w,r} into a representative set list (demo data only).
 function expandSets(h) {
+  if (h.sets?.length) return h.sets.map(s => ({ w: s.w, r: s.r }));
   const r = h.r;
   const round = (x) => Math.round(x / 2.5) * 2.5;
   if (!h.w || h.w <= 0) {
@@ -1304,7 +1307,6 @@ function BigChart({ data, view, zoneColor }) {
         WEEKS →
       </text>
     </svg>
-    {/* Tooltip */}
     {sel &&
     <div style={{
       position: 'absolute', top: 4,
@@ -1326,6 +1328,3 @@ function BigChart({ data, view, zoneColor }) {
     </div>);
 
 }
-
-Progress = Progress;
-BodyMap = BodyMap;
