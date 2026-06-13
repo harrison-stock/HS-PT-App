@@ -1,17 +1,25 @@
 import React from 'react'
-import { RECIPES_SEED, GUIDES_SEED } from '../data/index'
+import { GUIDES_SEED } from '../data/index'
+import { loadRecipes, scaleQty, fmtQty } from '../lib/recipes'
+import { RecipeBuilder } from './RecipeBuilder'
 import { HEX_RATIO, HEX_PATH, HexShape, Hex, HexBackButton } from '../components/hex'
 import { IconHeart, IconFlame, IconBolt, IconClock, IconChevronRight, IconPlus, IconCamera2, IconPlay, IconCheck } from '../components/icons'
 
-// Resources — recipes & guides; client can add their own
-export function Resources({ go }) {
+// Resources — recipes & guides. Coaches build/edit recipes here.
+export function Resources({ go, userId, isTrainer }) {
   const [tab, setTab] = React.useState('recipes');
-  const [recipes, setRecipes] = React.useState(RECIPES_SEED);
+  const [recipes, setRecipes] = React.useState(null);   // null = loading
   const [guides, setGuides] = React.useState(GUIDES_SEED);
   const [adding, setAdding] = React.useState(false);
+  const [builderRecipe, setBuilderRecipe] = React.useState(undefined); // undefined=closed, null=new, obj=edit
   const [query, setQuery] = React.useState('');
   const [openRecipe, setOpenRecipe] = React.useState(null);
-  const [favs, setFavs] = React.useState(() => new Set([RECIPES_SEED[1]?.id, RECIPES_SEED[3]?.id].filter(Boolean)));
+  const [favs, setFavs] = React.useState(() => new Set());
+
+  const refreshRecipes = React.useCallback(() => {
+    loadRecipes().then(setRecipes);
+  }, []);
+  React.useEffect(() => { refreshRecipes(); }, [refreshRecipes]);
 
   const toggleFav = (id) => setFavs((prev) => {
     const next = new Set(prev);
@@ -20,15 +28,28 @@ export function Resources({ go }) {
   });
 
   const addItem = (item) => {
-    if (tab === 'recipes') setRecipes((prev) => [{ ...item, id: 'r' + Date.now() }, ...prev]);else
     setGuides((prev) => [{ ...item, id: 'g' + Date.now() }, ...prev]);
     setAdding(false);
   };
 
+  const recipeList = recipes || [];
+
   const sourceList = tab === 'guides' ? guides :
-  tab === 'favourites' ? recipes.filter((r) => favs.has(r.id)) :
-  recipes;
+  tab === 'favourites' ? recipeList.filter((r) => favs.has(r.id)) :
+  recipeList;
   const filtered = sourceList.filter((x) => x.title.toLowerCase().includes(query.toLowerCase()));
+  const recipesLoading = recipes === null;
+
+  if (builderRecipe !== undefined) {
+    return (
+      <RecipeBuilder
+        trainerId={userId}
+        recipe={builderRecipe}
+        onClose={() => setBuilderRecipe(undefined)}
+        onSaved={() => { setBuilderRecipe(undefined); refreshRecipes(); }}
+      />
+    );
+  }
 
   return (
     <div className="scroller" style={{ padding: '0 16px 110px', paddingTop: 64 }}>
@@ -75,18 +96,38 @@ export function Resources({ go }) {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <ResTab active={tab === 'recipes' || tab === 'favourites'} onClick={() => setTab('recipes')} icon={<IconFlame size={14} />} label={`RECIPES · ${recipes.length}`} />
+        <ResTab active={tab === 'recipes' || tab === 'favourites'} onClick={() => setTab('recipes')} icon={<IconFlame size={14} />} label={`RECIPES · ${recipesLoading ? '…' : recipeList.length}`} />
         <ResTab active={tab === 'guides'} onClick={() => setTab('guides')} icon={<IconBolt size={14} />} label={`GUIDES · ${guides.length}`} />
       </div>
+
+      {/* Coach: new recipe */}
+      {isTrainer && (tab === 'recipes' || tab === 'favourites') &&
+      <button onClick={() => setBuilderRecipe(null)} className="btn-primary"
+        style={{ width: '100%', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--heading-deep)' }}>
+        <IconPlus size={14} /> NEW RECIPE
+      </button>
+      }
 
       {tab === 'favourites' &&
       <div className="label" style={{ margin: '0 2px 10px', color: 'var(--accent)' }}>// FAVOURITES · {favs.size}</div>
       }
 
       {/* List */}
-      {tab === 'recipes' &&
+      {tab === 'recipes' && recipesLoading &&
+      <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>
+        LOADING…
+      </div>
+      }
+      {tab === 'recipes' && !recipesLoading &&
       <div style={{ display: 'grid', gap: 10 }}>
-          {filtered.map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={favs.has(r.id)} onToggleFav={() => toggleFav(r.id)} />)}
+          {filtered.map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={favs.has(r.id)} onToggleFav={() => toggleFav(r.id)} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
+          {recipeList.length === 0 &&
+          <div className="card" style={{ padding: 28, textAlign: 'center' }}>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
+              NO RECIPES YET<br/>
+              <span style={{ fontSize: 9 }}>{isTrainer ? 'Tap NEW RECIPE to build your first one' : 'Your coach hasn’t added any recipes yet'}</span>
+            </div>
+          </div>}
         </div>
       }
       {tab === 'guides' &&
@@ -96,8 +137,8 @@ export function Resources({ go }) {
       }
       {tab === 'favourites' &&
       <div style={{ display: 'grid', gap: 10 }}>
-          {recipes.filter((r) => favs.has(r.id) && r.title.toLowerCase().includes(query.toLowerCase()))
-            .map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={true} onToggleFav={() => toggleFav(r.id)} />)}
+          {recipeList.filter((r) => favs.has(r.id) && r.title.toLowerCase().includes(query.toLowerCase()))
+            .map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={true} onToggleFav={() => toggleFav(r.id)} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {guides.filter((g) => favs.has(g.id) && g.title.toLowerCase().includes(query.toLowerCase()))
             .map((g) => <GuideCard key={g.id} g={g} isFav={true} onToggleFav={() => toggleFav(g.id)} />)}
         </div>
@@ -113,7 +154,7 @@ export function Resources({ go }) {
         </div>
       }
 
-      {filtered.length === 0 && tab !== 'favourites' &&
+      {filtered.length === 0 && query && tab !== 'favourites' && !(tab === 'recipes' && recipesLoading) && sourceList.length > 0 &&
       <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}>
           <div style={{ fontSize: 13 }}>No {tab} match "{query}"</div>
         </div>
@@ -121,7 +162,8 @@ export function Resources({ go }) {
 
       {adding && <AddSheet kind={tab} onClose={() => setAdding(false)} onAdd={addItem} />}
       {openRecipe && <RecipeDetail r={openRecipe} onClose={() => setOpenRecipe(null)}
-      isFav={favs.has(openRecipe.id)} onToggleFav={() => toggleFav(openRecipe.id)} />}
+      isFav={favs.has(openRecipe.id)} onToggleFav={() => toggleFav(openRecipe.id)}
+      onEdit={isTrainer ? () => { setOpenRecipe(null); setBuilderRecipe(openRecipe); } : null} />}
     </div>);
 
 }
@@ -142,13 +184,22 @@ function ResTab({ active, onClick, icon, label }) {
 
 }
 
-function RecipeCard({ r, onOpen, isFav, onToggleFav }) {
+function RecipeCard({ r, onOpen, isFav, onToggleFav, onEdit }) {
   return (
     <div className="card" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: onOpen ? 'pointer' : 'default', position: 'relative' }}>
       <div style={{
         width: 88, flexShrink: 0,
         background: `url('${r.img}') center/cover, var(--bg-3)`
       }} />
+      {onEdit &&
+      <button onClick={(e) => { e.stopPropagation(); onEdit(); }} aria-label="Edit recipe"
+      style={{
+        all: 'unset', cursor: 'pointer', position: 'absolute', bottom: 8, right: 8, zIndex: 2,
+        padding: '4px 9px', borderRadius: 999,
+        background: 'rgba(10,15,20,0.78)', border: '1px solid rgba(255,255,255,0.22)',
+        color: '#fff', fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em',
+      }}>EDIT</button>
+      }
       {onToggleFav &&
       <button onClick={(e) => {e.stopPropagation();onToggleFav();}} aria-label="Favourite"
       style={{
@@ -349,29 +400,18 @@ Resources = Resources;
 // Full-screen recipe template with: hero, serving-size dial,
 // macros that scale with servings, hex-shaped macro display,
 // ingredients, method, and "Add to Tracker" export action.
-function RecipeDetail({ r, onClose, isFav, onToggleFav }) {
-  const [servings, setServings] = React.useState(1);
+function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
+  const base = Math.max(1, r.baseServings || 1);
+  const [servings, setServings] = React.useState(base);
   const [exporting, setExporting] = React.useState(false);
 
-  // Base (per-serving) data — fall back to plausible defaults
-  const baseIngredients = r.ingredients || [
-  { qty: 180, unit: 'g', name: r.tag === 'BREAKFAST' ? 'Greek yogurt' : 'Lean protein' },
-  { qty: 60, unit: 'g', name: 'Whole grain base' },
-  { qty: 1, unit: 'tbsp', name: 'Olive oil' },
-  { qty: 0.5, unit: '', name: 'Avocado, sliced' },
-  { qty: 120, unit: 'g', name: 'Mixed greens' },
-  { qty: 30, unit: 'g', name: 'Toasted nuts or seeds' },
-  { qty: null, unit: '', name: 'Sea salt + pepper, to taste' }];
+  const baseIngredients = r.ingredients || [];
+  const steps = r.steps || [];
 
-  const steps = r.steps || [
-  'Prep: heat pan over medium-high. Pat protein dry, season generously.',
-  'Cook protein 3–4 min per side until just done; rest off heat.',
-  'While resting, toast grain base in same pan with a touch of oil.',
-  'Plate greens, top with grain, sliced protein, avocado and nuts.',
-  'Drizzle with oil, finish with salt and pepper. Serve immediately.'];
+  // Ingredient scaling factor (ingredients are stored for `base` servings)
+  const factor = servings / base;
 
-
-  // Scaled totals
+  // Scaled totals — macros are per serving, so total = perServing × servings
   const scaled = (n) => n != null ? n * servings : null;
   const totalKcal = scaled(r.kcal) || 0;
   const macros = [
@@ -380,23 +420,13 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav }) {
   { l: 'FATS', v: scaled(r.fats), kcalPer: 9, c: '#EE6A6A' }].
   map((m) => ({ ...m, g: totalKcal ? m.v * m.kcalPer / totalKcal * 100 : 0 }));
 
-  // Per-portion macros — shown on screen regardless of how many servings you cook.
+  // Per-portion macros — fixed regardless of how many servings you cook.
   const portionKcal = r.kcal || 0;
   const portionMacros = [
   { l: 'PROTEIN', v: r.protein, kcalPer: 4, c: '#F39E1F' },
   { l: 'CARBS', v: r.carbs, kcalPer: 4, c: '#46BBC0' },
   { l: 'FATS', v: r.fats, kcalPer: 9, c: '#EE6A6A' }].
   map((m) => ({ ...m, g: portionKcal ? m.v * m.kcalPer / portionKcal * 100 : 0 }));
-
-  const fmtQty = (q) => {
-    if (q == null) return '';
-    if (q === Math.floor(q)) return String(q);
-    // Show simple fractions for halves/quarters
-    if (q === 0.5) return '½';
-    if (q === 0.25) return '¼';
-    if (q === 0.75) return '¾';
-    return q.toFixed(1).replace(/\.0$/, '');
-  };
 
   return (
     <div onClick={onClose} style={{
@@ -417,6 +447,15 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav }) {
         }}>
           {/* Hex back/like buttons */}
           <HexBackButton onClick={onClose} variant="overlay" size={38} style={hexBtnStyle('left')} />
+          {onEdit &&
+          <button onClick={onEdit} aria-label="Edit recipe" style={{
+            position: 'absolute', top: 22, right: 64, zIndex: 2,
+            all: 'unset', cursor: 'pointer', padding: '7px 12px', borderRadius: 999,
+            background: 'rgba(10,15,20,0.82)', border: '1px solid rgba(255,255,255,0.3)',
+            color: '#fff', fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+            backdropFilter: 'blur(8px)',
+          }}>EDIT</button>
+          }
           <button onClick={onToggleFav} aria-label="Favourite" style={hexBtnStyle('right')}>
             <Hex size={38} square style={{
               background: isFav ? 'var(--c-coral)' : 'rgba(10,15,20,0.82)',
@@ -488,10 +527,15 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '4px 4px 8px' }}>
             <div className="label">// INGREDIENTS</div>
             <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em' }}>
-              FOR {servings} SERVING{servings > 1 ? 'S' : ''}
+              FOR {servings} SERVING{servings > 1 ? 'S' : ''}{servings !== base ? ` · BASE ${base}` : ''}
             </span>
           </div>
-          <ServingDial value={servings} onChange={setServings} />
+          {baseIngredients.length > 0 && <ServingDial value={servings} base={base} onChange={setServings} />}
+          {baseIngredients.length === 0 ? (
+            <div className="card" style={{ padding: 18, textAlign: 'center', marginBottom: 14 }}>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em' }}>NO INGREDIENTS LISTED</span>
+            </div>
+          ) : (
           <div className="card" style={{ padding: 4, marginBottom: 14 }}>
             {baseIngredients.map((ing, i) =>
             <div key={i} style={{
@@ -503,14 +547,16 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav }) {
                 width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer'
               }} />
                 <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: '0.04em', fontWeight: 600 }}>
-                  {fmtQty(scaled(ing.qty))}{ing.unit}
+                  {ing.qty == null ? '—' : `${fmtQty(scaleQty(ing.qty, factor))}${ing.unit}`}
                 </span>
                 <span style={{ fontSize: 13, color: 'var(--text)' }}>{ing.name}</span>
               </div>
             )}
           </div>
+          )}
 
           {/* Method */}
+          {steps.length > 0 && <>
           <div className="label" style={{ margin: '4px 4px 8px' }}>// METHOD</div>
           <div style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
             {steps.map((s, i) =>
@@ -531,6 +577,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav }) {
               </div>
             )}
           </div>
+          </>}
         </div>
 
         {/* Sticky bottom action */}
@@ -561,8 +608,10 @@ function hexBtnStyle(side) {
 }
 
 // ── SERVING SIZE DIAL ────────────────────────────────────────────
-function ServingDial({ value, onChange }) {
-  const options = [1, 2, 3, 4, 6, 8];
+function ServingDial({ value, base, onChange }) {
+  // Always include the recipe's base servings as a quick-pick option.
+  const options = [...new Set([1, 2, base || 4, (base || 4) + 2, 6, 8])]
+    .filter(n => n >= 1 && n <= 12).sort((a, b) => a - b);
   const trackRef = React.useRef(null);
 
   return (

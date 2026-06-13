@@ -164,7 +164,7 @@ export default function App() {
   if (screen === 'workouts')        ScreenEl = <Workouts go={navigate} openPreview={previewWorkoutId} userId={activeUserId}/>;
   else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={activeUserId}/>;
   else if (screen === 'progress')   ScreenEl = <Progress go={navigate} userId={session.user.id}/>;
-  else if (screen === 'resources')  ScreenEl = <Resources go={navigate}/>;
+  else if (screen === 'resources')  ScreenEl = <Resources go={navigate} userId={session.user.id} isTrainer={isTrainer}/>;
   else if (screen === 'coach')      ScreenEl = <Coach go={navigate} trainerId={session.user.id}/>;
   else if (screen === 'notifications') ScreenEl = <Notifications go={navigate} userId={session.user.id} isTrainer={isTrainer}/>;
   else if (screen === 'sessionresults') ScreenEl = (
