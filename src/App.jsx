@@ -280,7 +280,6 @@ export default function App() {
 function BottomNav({ screen, go, isTrainer }) {
   const items = isTrainer ? [
     { id: 'coach',     label: 'COACH',    Icon: IconBolt },
-    { id: 'progress',  label: 'PROGRESS', Icon: IconChart },
     { id: 'resources', label: 'RECIPES',  Icon: IconBook },
     { id: 'exercises', label: 'EXERCISES', Icon: IconDumbbell },
     { id: 'forms',     label: 'FORMS',    Icon: IconDoc },

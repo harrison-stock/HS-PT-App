@@ -4,7 +4,7 @@ import { loadMuscleVolume } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { loadPhotoHistory, uploadProgressPhoto, deleteProgressPhoto } from '../lib/progressPhotos'
 import { ZoomPan } from '../components/ZoomPan'
-import { MUSCLE_LABELS, EXERCISE_HISTORY, EXERCISE_CATEGORIES } from '../data/index'
+import { MUSCLE_LABELS } from '../data/index'
 import { MUSCLE_BODY } from '../data/musclePaths'
 import { HexBackButton, Hex, HexShape } from '../components/hex'
 import { IconHeart, IconDumbbell, IconCamera2, IconChevronRight, IconPlus, IconTrophy, IconCheck, IconBand, IconFlame, IconLeaf } from '../components/icons'
@@ -700,8 +700,8 @@ function WeightTab({ range, userId }) {
     });
   }, [userId]);
 
-  const cats = liveCats !== null ? liveCats : EXERCISE_CATEGORIES;
-  const exs = liveExs !== null ? liveExs : EXERCISE_HISTORY;
+  const cats = liveCats || [];
+  const exs = liveExs || [];
 
   const drilledEx = exs.find(e => e.id === exId);
   if (drilledEx) return <ExerciseDrill ex={drilledEx} onBack={() => setExId(null)} />;
@@ -1253,7 +1253,7 @@ function BackSilhouette() {return <FrontSilhouette />;}
 // ── EXERCISE DRILL ────────────────────────────────────────────────
 function ExerciseDrill({ ex, onBack }) {
   const [view, setView] = React.useState('weight');
-  const cat = EXERCISE_CATEGORIES.find(c => c.id === ex.category);
+  const cat = null;
   const zc = ZONE_COLOR_ALL[ex.category] || 'var(--accent)';
 
   return (

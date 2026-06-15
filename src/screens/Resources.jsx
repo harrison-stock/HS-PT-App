@@ -1,6 +1,7 @@
 import React from 'react'
 import { loadRecipes, scaleQty, fmtQty } from '../lib/recipes'
 import { loadGuides } from '../lib/guides'
+import { loadFavourites, setFavourite } from '../lib/favourites'
 import { RecipeBuilder } from './RecipeBuilder'
 import { GuideBuilder } from './GuideBuilder'
 import { HEX_RATIO, HEX_PATH, HexShape, Hex, HexBackButton } from '../components/hex'
@@ -20,12 +21,13 @@ export function Resources({ go, userId, isTrainer }) {
   const refreshRecipes = React.useCallback(() => { loadRecipes().then(setRecipes); }, []);
   const refreshGuides  = React.useCallback(() => { loadGuides().then(setGuides); }, []);
   React.useEffect(() => { refreshRecipes(); refreshGuides(); }, [refreshRecipes, refreshGuides]);
+  React.useEffect(() => { loadFavourites(userId).then(setFavs); }, [userId]);
 
-  const toggleFav = (id) => setFavs((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  const toggleFav = (id, type) => {
+    const makeFav = !favs.has(id);
+    setFavs((prev) => { const next = new Set(prev); makeFav ? next.add(id) : next.delete(id); return next; });
+    setFavourite(userId, type, id, makeFav);
+  };
 
   const openGuide = (g) => {
     const url = g.video || g.link;
@@ -138,7 +140,7 @@ export function Resources({ go, userId, isTrainer }) {
       }
       {tab === 'recipes' && !recipesLoading &&
       <div style={{ display: 'grid', gap: 10 }}>
-          {filtered.map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={favs.has(r.id)} onToggleFav={() => toggleFav(r.id)} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
+          {filtered.map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={favs.has(r.id)} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {recipeList.length === 0 &&
           <div className="card" style={{ padding: 28, textAlign: 'center' }}>
             <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
@@ -153,7 +155,7 @@ export function Resources({ go, userId, isTrainer }) {
       }
       {tab === 'guides' && !guidesLoading &&
       <div style={{ display: 'grid', gap: 10 }}>
-          {filtered.map((g) => <GuideCard key={g.id} g={g} isFav={favs.has(g.id)} onToggleFav={() => toggleFav(g.id)} onEdit={isTrainer ? () => setBuilderGuide(g) : null} onOpen={() => openGuide(g)} />)}
+          {filtered.map((g) => <GuideCard key={g.id} g={g} isFav={favs.has(g.id)} onToggleFav={() => toggleFav(g.id, 'guide')} onEdit={isTrainer ? () => setBuilderGuide(g) : null} onOpen={() => openGuide(g)} />)}
           {guideList.length === 0 &&
           <div className="card" style={{ padding: 28, textAlign: 'center' }}>
             <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
@@ -166,9 +168,9 @@ export function Resources({ go, userId, isTrainer }) {
       {tab === 'favourites' &&
       <div style={{ display: 'grid', gap: 10 }}>
           {recipeList.filter((r) => favs.has(r.id) && r.title.toLowerCase().includes(query.toLowerCase()))
-            .map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={true} onToggleFav={() => toggleFav(r.id)} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
+            .map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={true} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {guideList.filter((g) => favs.has(g.id) && g.title.toLowerCase().includes(query.toLowerCase()))
-            .map((g) => <GuideCard key={g.id} g={g} isFav={true} onToggleFav={() => toggleFav(g.id)} onEdit={isTrainer ? () => setBuilderGuide(g) : null} onOpen={() => openGuide(g)} />)}
+            .map((g) => <GuideCard key={g.id} g={g} isFav={true} onToggleFav={() => toggleFav(g.id, 'guide')} onEdit={isTrainer ? () => setBuilderGuide(g) : null} onOpen={() => openGuide(g)} />)}
         </div>
       }
 
@@ -189,7 +191,7 @@ export function Resources({ go, userId, isTrainer }) {
       }
 
       {openRecipe && <RecipeDetail r={openRecipe} onClose={() => setOpenRecipe(null)}
-      isFav={favs.has(openRecipe.id)} onToggleFav={() => toggleFav(openRecipe.id)}
+      isFav={favs.has(openRecipe.id)} onToggleFav={() => toggleFav(openRecipe.id, 'recipe')}
       onEdit={isTrainer ? () => { setOpenRecipe(null); setBuilderRecipe(openRecipe); } : null} />}
     </div>);
 
