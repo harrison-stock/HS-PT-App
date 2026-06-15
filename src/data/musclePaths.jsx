@@ -291,3 +291,13 @@ export const REGION_LABELS = {
   hands: 'Wrists / Hands', upperBack: 'Upper Back', lats: 'Lats',
   lowerBack: 'Lower Back', glutes: 'Glutes', hamstrings: 'Hamstrings',
 };
+
+// Singular forms, used when an injury is one-sided ("Right Knee").
+export const REGION_SINGULAR = {
+  chest: 'Chest', shoulders: 'Shoulder', biceps: 'Bicep', triceps: 'Tricep',
+  abs: 'Abs', obliques: 'Oblique', quads: 'Quad', calves: 'Calf',
+  forearms: 'Forearm', adductors: 'Adductor / Groin', traps: 'Trapezius',
+  neck: 'Neck', knees: 'Knee', shins: 'Shin', ankles: 'Ankle', feet: 'Foot',
+  hands: 'Wrist / Hand', upperBack: 'Upper Back', lats: 'Lat',
+  lowerBack: 'Lower Back', glutes: 'Glute', hamstrings: 'Hamstring',
+};

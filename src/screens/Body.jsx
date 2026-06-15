@@ -25,21 +25,23 @@ export function Body({ userId, trainerId, go }) {
         <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>BODY MAP</div>
       </div>
 
-      {/* View switch */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        <ViewTab active={view === 'worked'}   onClick={() => setView('worked')}>MUSCLES WORKED</ViewTab>
-        <ViewTab active={view === 'injuries'} onClick={() => setView('injuries')}>INJURIES</ViewTab>
+      {/* View switch — large, primary */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <ViewTab active={view === 'worked'}   onClick={() => setView('worked')}>💪 MUSCLES WORKED</ViewTab>
+        <ViewTab active={view === 'injuries'} onClick={() => setView('injuries')}>🩹 INJURIES</ViewTab>
       </div>
 
-      {/* Front / back */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-        <div className="seg" style={{ padding: 3 }}>
-          {['front', 'back'].map(s => (
-            <button key={s} className={side === s ? 'active' : ''} onClick={() => setSide(s)} style={{ padding: '5px 12px', fontSize: 9 }}>
-              {s.toUpperCase()}
-            </button>
-          ))}
-        </div>
+      {/* Front / back — large segmented control */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {['front', 'back'].map(s => (
+          <button key={s} onClick={() => setSide(s)} style={{
+            flex: 1, padding: '12px', borderRadius: 10, cursor: 'pointer',
+            background: side === s ? 'var(--bg-3)' : 'var(--bg-2)',
+            border: '1px solid ' + (side === s ? 'var(--accent)' : 'var(--line)'),
+            color: side === s ? 'var(--accent)' : 'var(--text-3)',
+            fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+          }}>{s === 'front' ? 'FRONT' : 'BACK'}</button>
+        ))}
       </div>
 
       {view === 'worked'
@@ -206,7 +208,7 @@ function InjuriesView({ userId, trainerId, side }) {
           <div className="card" style={{ padding: 14, marginBottom: 12, borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line))' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div className="h-bold" style={{ fontSize: 15 }}>
-                {(pickedSide === 'both' ? '' : `${LAT_LABEL[pickedSide]} `).toUpperCase()}{labelFor(pickedGroup).toUpperCase()}
+                {injuryTitle({ muscle_group: pickedGroup, laterality: pickedSide }).toUpperCase()}
               </div>
               {!reporting && (
                 <button onClick={() => setReporting(true)} style={{

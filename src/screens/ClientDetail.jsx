@@ -2,9 +2,8 @@ import React from 'react'
 import { supabase } from '../lib/supabase'
 import { loadMuscleVolume } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
-import { loadPhotoHistory } from '../lib/progressPhotos'
 import { Hex, HexBackButton } from '../components/hex'
-import { BodyMap } from './Progress'
+import { BodyMap, Progress } from './Progress'
 import { InjuryThread } from './InjuryThread'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
 import { injuryTitle } from '../lib/injuries'
@@ -228,22 +227,31 @@ function OverviewTab({ c, go, onClose, onTab }) {
   );
 }
 
-// ── TRAINING ─────────────────────────────────────────────────────
+// ── TRAINING — Everfit-style week calendar ───────────────────────
+const SECTION_LABEL = { MAIN: 'WORKOUT', PULSE_RAISER: 'PULSE RAISER', BANDED: 'ACTIVATION', COOLDOWN: 'COOLDOWN' };
+
+function mondayOf(d) {
+  const x = new Date(d);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 function TrainingTab({ c, trainerId, programmes, onChanged }) {
-  const [month, setMonth] = React.useState(() => new Date());
+  const [weeks, setWeeks]   = React.useState(2);
+  const [anchor, setAnchor] = React.useState(() => mondayOf(new Date()));
   const [workouts, setWorkouts] = React.useState([]);
   const [showAssign, setShowAssign] = React.useState(false);
 
   const loadWorkouts = React.useCallback(() => {
-    const y = month.getFullYear(), m = month.getMonth();
-    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-    const start = fmt(new Date(y, m, 1));
-    const end   = fmt(new Date(y, m + 1, 1));
+    const start = new Date(anchor);
+    const end = new Date(anchor); end.setDate(end.getDate() + weeks * 7);
     supabase.from('client_workouts')
-      .select('id, scheduled_date, status, programme_days(programme_phases(name, programmes(name)))')
-      .eq('client_id', c.id).gte('scheduled_date', start).lt('scheduled_date', end)
+      .select('id, scheduled_date, status, programme_days(day_of_week, programme_phases(name, phase_index, programmes(name)), workout_sections(title, kind, sort_order, section_exercises(id)))')
+      .eq('client_id', c.id).gte('scheduled_date', ymd(start)).lt('scheduled_date', ymd(end))
       .then(({ data }) => setWorkouts(data || []));
-  }, [c.id, month]);
+  }, [c.id, anchor, weeks]);
 
   React.useEffect(() => { loadWorkouts(); }, [loadWorkouts]);
 
@@ -255,62 +263,114 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
     />
   );
 
+  const wMap = {};
+  workouts.forEach(w => { (wMap[w.scheduled_date] = wMap[w.scheduled_date] || []).push(w); });
+
+  const shift = (n) => setAnchor(a => { const x = new Date(a); x.setDate(x.getDate() + n * 7); return x; });
+  const rangeEnd = new Date(anchor); rangeEnd.setDate(rangeEnd.getDate() + weeks * 7 - 1);
+  const fmtShort = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <button onClick={() => setShowAssign(true)} className="btn-primary"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--heading-deep)' }}>
-        <IconPlus size={14}/> ASSIGN WORKOUT
-      </button>
-      <CalendarView month={month} workouts={workouts} onPrev={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} onNext={() => setMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} />
+      {/* Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={() => setShowAssign(true)} className="btn-primary"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '9px 12px', color: 'var(--heading-deep)' }}>
+          <IconPlus size={13}/> ASSIGN
+        </button>
+        <button onClick={() => setAnchor(mondayOf(new Date()))} style={navBtnSt}>TODAY</button>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button onClick={() => shift(-1)} style={navBtnSt}>‹</button>
+          <button onClick={() => shift(1)} style={navBtnSt}>›</button>
+        </div>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', flex: 1, minWidth: 80 }}>
+          {fmtShort(anchor)} – {fmtShort(rangeEnd)}
+        </span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {[1, 2, 4].map(n => (
+            <button key={n} onClick={() => setWeeks(n)} className="mono" style={{
+              all: 'unset', cursor: 'pointer', padding: '6px 10px', borderRadius: 7, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+              background: weeks === n ? 'var(--accent)' : 'var(--bg-3)', color: weeks === n ? 'var(--on-accent)' : 'var(--text-3)',
+              border: `1px solid ${weeks === n ? 'var(--accent)' : 'var(--line)'}`,
+            }}>{n} WK</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Week grids (horizontally scrollable) */}
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ minWidth: 760, display: 'grid', gap: 10 }}>
+          {Array.from({ length: weeks }, (_, wk) => (
+            <CalendarWeek key={wk} start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()} wMap={wMap} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-function CalendarView({ month, workouts, onPrev, onNext }) {
-  const y = month.getFullYear(), m = month.getMonth();
-  const firstDow = (new Date(y, m, 1).getDay() + 6) % 7; // Mon=0
-  const days     = new Date(y, m + 1, 0).getDate();
-  const today    = new Date().toISOString().slice(0, 10);
-  const wMap     = {};
-  workouts.forEach(w => { wMap[w.scheduled_date] = wMap[w.scheduled_date] || []; wMap[w.scheduled_date].push(w); });
+function CalendarWeek({ start, wMap }) {
+  const today = ymd(new Date());
+  const DOW = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+      {Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(start); d.setDate(d.getDate() + i);
+        const ds = ymd(d);
+        const isToday = ds === today;
+        const ws = wMap[ds] || [];
+        return (
+          <div key={i} style={{
+            minHeight: 150, borderRadius: 10, padding: 8,
+            background: isToday ? 'var(--accent-soft)' : 'var(--bg-2)',
+            border: `1px solid ${isToday ? 'var(--accent)' : 'var(--line)'}`,
+          }}>
+            <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: isToday ? 'var(--accent)' : 'var(--text-3)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+              <span>{DOW[i]}</span><span style={{ fontWeight: 700, color: isToday ? 'var(--accent)' : 'var(--text-2)' }}>{d.getDate()}</span>
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {ws.map(w => <WorkoutCell key={w.id} w={w} />)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WorkoutCell({ w }) {
+  const day = w.programme_days;
+  const phase = day?.programme_phases;
+  const done = w.status === 'completed';
+  const sections = [...(day?.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
+  const totalEx = sections.reduce((n, s) => n + (s.section_exercises?.length || 0), 0);
+  const shown = sections.slice(0, 2);
+  const shownEx = shown.reduce((n, s) => n + (s.section_exercises?.length || 0), 0);
+  const more = totalEx - shownEx;
 
   return (
-    <div className="card" style={{ padding: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <button onClick={onPrev} style={navBtnSt}>‹</button>
-        <span className="h-bold" style={{ fontSize: 13 }}>{MONTHS[m]} {y}</span>
-        <button onClick={onNext} style={navBtnSt}>›</button>
+    <div style={{
+      borderRadius: 8, padding: 8, background: 'var(--bg-1)',
+      border: `1px solid ${done ? 'color-mix(in srgb, var(--accent) 45%, var(--line))' : 'var(--line-strong)'}`,
+      borderLeft: `2px solid ${done ? 'var(--accent)' : 'var(--c-amber)'}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: done ? 'var(--accent)' : 'var(--c-amber)', flexShrink: 0 }}/>
+        <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {(phase?.name || 'WORKOUT').toUpperCase()}
+        </span>
+        {done && <span style={{ marginLeft: 'auto', color: 'var(--accent)', fontSize: 9 }}>✓</span>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 3 }}>
-        {['M','T','W','T','F','S','S'].map((d, i) => <div key={i} className="mono" style={{ textAlign: 'center', fontSize: 8, color: 'var(--text-3)' }}>{d}</div>)}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-        {Array.from({ length: firstDow }, (_, i) => <div key={`e${i}`}/>)}
-        {Array.from({ length: days }, (_, i) => {
-          const d = i + 1;
-          const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-          const ws = wMap[ds] || [];
-          const done = ws.some(w => w.status === 'completed');
-          const sched = ws.some(w => w.status === 'scheduled');
-          const isToday = ds === today;
-          return (
-            <div key={d} style={{
-              textAlign: 'center', padding: '5px 0', borderRadius: 6, fontSize: 11,
-              fontFamily: 'JetBrains Mono', fontWeight: ws.length ? 700 : 400,
-              color: ws.length ? 'var(--text)' : 'var(--text-3)',
-              background: isToday ? 'var(--accent-soft)' : 'transparent',
-              border: `1px solid ${isToday ? 'var(--accent)' : 'transparent'}`,
-            }}>
-              {d}
-              {(done || sched) && <div style={{ width: 4, height: 4, borderRadius: '50%', margin: '2px auto 0', background: done ? 'var(--accent)' : 'var(--c-amber)' }}/>}
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-        <Dot color="var(--accent)"/>  <Mono>Completed</Mono>
-        <Dot color="var(--c-amber)"/> <Mono>Scheduled</Mono>
-      </div>
+      {shown.map((s, i) => (
+        <div key={i} style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6, padding: '5px 6px', marginBottom: 4 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || SECTION_LABEL[s.kind] || 'Block'}</div>
+          <div className="mono" style={{ fontSize: 7.5, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 2 }}>
+            {(SECTION_LABEL[s.kind] || s.kind || '').toString()} · {(s.section_exercises?.length || 0)} EX
+          </div>
+        </div>
+      ))}
+      {more > 0 && <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.04em' }}>+{more} more exercise{more === 1 ? '' : 's'}</div>}
+      {totalEx === 0 && <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)' }}>No exercises</div>}
     </div>
   );
 }
@@ -373,18 +433,23 @@ function BodyTab({ c, trainerId }) {
   const pickedVolume = picked ? workedData[picked] : null;
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      {/* Mode / side toggles */}
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {['front','back'].map(s => (
-            <ToggleBtn key={s} active={side === s} onClick={() => { setSide(s); setPicked(null); }}>{s.toUpperCase()}</ToggleBtn>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <ToggleBtn active={isInjuryMode}  onClick={() => { setMode('injuries'); setPicked(null); }}>INJURIES</ToggleBtn>
-          <ToggleBtn active={!isInjuryMode} onClick={() => { setMode('worked');   setPicked(null); setEditPanel(null); }}>TRAINED</ToggleBtn>
-        </div>
+    <div style={{ display: 'grid', gap: 10 }}>
+      {/* Mode toggle — large */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <BigToggle active={isInjuryMode}  onClick={() => { setMode('injuries'); setPicked(null); }}>🩹 INJURIES</BigToggle>
+        <BigToggle active={!isInjuryMode} onClick={() => { setMode('worked');   setPicked(null); setEditPanel(null); }}>💪 TRAINED</BigToggle>
+      </div>
+      {/* Front / back — large */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {['front','back'].map(s => (
+          <button key={s} onClick={() => { setSide(s); setPicked(null); }} style={{
+            flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer',
+            background: side === s ? 'var(--bg-3)' : 'var(--bg-2)',
+            border: '1px solid ' + (side === s ? 'var(--accent)' : 'var(--line)'),
+            color: side === s ? 'var(--accent)' : 'var(--text-3)',
+            fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+          }}>{s.toUpperCase()}</button>
+        ))}
       </div>
 
       {/* Body map */}
@@ -457,7 +522,7 @@ function BodyTab({ c, trainerId }) {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div className="h-bold" style={{ fontSize: 14 }}>
-              {(pickedSide === 'both' ? '' : `${pickedSide} `).toUpperCase()}{regionLabel(pickedGroup).toUpperCase()}
+              {injuryTitle({ muscle_group: pickedGroup, laterality: pickedSide }).toUpperCase()}
             </div>
             {!editPanel && (
               <button onClick={() => setEditPanel({ group: pickedGroup, side: pickedSide })} style={{
@@ -586,127 +651,9 @@ function InjuryForm({ group, side, onSave, onClose, defaultSide }) {
 }
 
 // ── DATA ─────────────────────────────────────────────────────────
-function DataTab({ c, trainerId }) {
-  const [metrics, setMetrics] = React.useState(null);
-  const [adding, setAdding]   = React.useState(false);
-  const [weightKg, setWeightKg]     = React.useState('');
-  const [bodyFat, setBodyFat]       = React.useState('');
-  const [metNotes, setMetNotes]     = React.useState('');
-  const [metDate, setMetDate]       = React.useState(() => new Date().toISOString().slice(0, 10));
-  const [saving, setSaving]         = React.useState(false);
-
-  const reload = () =>
-    supabase.from('body_metrics').select('*').eq('client_id', c.id)
-      .order('recorded_at', { ascending: false }).limit(20)
-      .then(({ data }) => setMetrics(data || []));
-
-  React.useEffect(() => { reload(); }, [c.id]);
-
-  const save = async () => {
-    if (saving) return;
-    setSaving(true);
-    await supabase.from('body_metrics').insert({
-      client_id: c.id, trainer_id: trainerId,
-      recorded_at: metDate,
-      weight_kg:    weightKg ? parseFloat(weightKg) : null,
-      body_fat_pct: bodyFat  ? parseFloat(bodyFat)  : null,
-      notes: metNotes.trim() || null,
-    });
-    setSaving(false); setAdding(false);
-    setWeightKg(''); setBodyFat(''); setMetNotes('');
-    reload();
-  };
-
-  return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="label">// BODY METRICS</div>
-        <button onClick={() => setAdding(a => !a)} style={{
-          all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-          fontSize: 9, color: 'var(--accent)', fontFamily: 'JetBrains Mono', fontWeight: 700,
-          border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)', borderRadius: 6, padding: '4px 8px',
-        }}><IconPlus size={10}/> ADD</button>
-      </div>
-
-      {adding && (
-        <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <FieldLabel label="WEIGHT (KG)"><input value={weightKg} onChange={e => setWeightKg(e.target.value)} inputMode="decimal" placeholder="75.5" style={fieldSt}/></FieldLabel>
-            <FieldLabel label="BODY FAT %"><input value={bodyFat}  onChange={e => setBodyFat(e.target.value)}  inputMode="decimal" placeholder="18.5" style={fieldSt}/></FieldLabel>
-          </div>
-          <FieldLabel label="DATE"><input type="date" value={metDate} onChange={e => setMetDate(e.target.value)} style={fieldSt}/></FieldLabel>
-          <FieldLabel label="NOTES (OPTIONAL)"><textarea value={metNotes} onChange={e => setMetNotes(e.target.value)} rows={2} placeholder="Any notes…" style={{ ...fieldSt, resize: 'vertical' }}/></FieldLabel>
-          <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'SAVING…' : 'SAVE METRICS'}</button>
-        </div>
-      )}
-
-      {metrics === null && <Mono>LOADING…</Mono>}
-      {metrics?.length === 0 && !adding && <EmptyState>No body metrics recorded yet</EmptyState>}
-      {metrics?.map(m => (
-        <div key={m.id} className="card" style={{ padding: '10px 12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: m.notes ? 6 : 0 }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{new Date(m.recorded_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-            <div style={{ display: 'flex', gap: 12 }}>
-              {m.weight_kg    && <span style={{ fontSize: 13, fontWeight: 700 }}>{m.weight_kg} <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>KG</span></span>}
-              {m.body_fat_pct && <span style={{ fontSize: 13, fontWeight: 700 }}>{m.body_fat_pct}<span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>% BF</span></span>}
-            </div>
-          </div>
-          {m.notes && <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{m.notes}</div>}
-        </div>
-      ))}
-
-      {/* Progress photos (uploaded by the client from their Progress tab) */}
-      <div className="label" style={{ marginTop: 8 }}>// PROGRESS PHOTOS</div>
-      <ClientPhotos c={c} />
-    </div>
-  );
-}
-
-function ClientPhotos({ c }) {
-  const [groups, setGroups] = React.useState(null);
-
-  React.useEffect(() => {
-    if (c.managed) { setGroups([]); return; }
-    loadPhotoHistory(c.id).then(setGroups);
-  }, [c.id, c.managed]);
-
-  if (groups === null) return <Mono>LOADING PHOTOS…</Mono>;
-  if (groups.length === 0) return (
-    <EmptyState>
-      {c.managed
-        ? 'Photos become available once the client signs up'
-        : 'No photos submitted yet — the client uploads these from their Progress tab'}
-    </EmptyState>
-  );
-
-  return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      {groups.map(g => (
-        <div key={g.date} className="card" style={{ padding: 12 }}>
-          <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)', marginBottom: 8 }}>
-            {new Date(g.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase()}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-            {['front', 'side', 'back'].map(pose => {
-              const row = g.shots[pose];
-              return (
-                <div key={pose} style={{
-                  aspectRatio: '3/4', borderRadius: 8, overflow: 'hidden', position: 'relative',
-                  background: row?.url ? `url('${row.url}') center/cover` : 'var(--bg-3)',
-                  border: '1px solid var(--line)',
-                }}>
-                  <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 60%, rgba(0,0,0,0.55))' }}/>
-                  <span className="mono" style={{ position: 'absolute', bottom: 4, left: 5, fontSize: 8, color: '#fff', letterSpacing: '0.1em', fontWeight: 700 }}>
-                    {pose.toUpperCase()}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+function DataTab({ c }) {
+  // The coach sees exactly what the client sees in their Metrics tab.
+  return <Progress userId={c.id} go={() => {}} embedded />;
 }
 
 // ── TASKS ─────────────────────────────────────────────────────────
@@ -1157,6 +1104,19 @@ function ToggleBtn({ active, onClick, children }) {
       border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
       color: active ? 'var(--accent)' : 'var(--text-3)',
       letterSpacing: '0.08em',
+    }}>{children}</button>
+  );
+}
+
+function BigToggle({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} style={{
+      all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '12px', borderRadius: 10,
+      background: active ? 'var(--accent-soft)' : 'var(--bg-2)',
+      border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+      color: active ? 'var(--accent)' : 'var(--text-2)',
+      fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
+      boxShadow: active ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none',
     }}>{children}</button>
   );
 }

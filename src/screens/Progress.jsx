@@ -78,18 +78,21 @@ async function loadWeightData(userId) {
   return { cats, exs };
 }
 
-// Progress — Body metrics + Weight metrics (categorized + muscle map) tabs
-export function Progress({ go, userId }) {
-  const [tab, setTab] = React.useState('weight');
+// Progress — Body metrics + Weight metrics tabs. `embedded` lets the coach
+// render a client's exact Metrics view inside the client file.
+export function Progress({ go, userId, embedded }) {
+  const [tab, setTab] = React.useState('body');
   const [range, setRange] = React.useState('7d');
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 110px', paddingTop: 64 }} data-comment-anchor="2e58f3c1e8-div-7-5">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
-        <div>
-          <div className="label">// ANALYTICS</div>
-          <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>PROGRESS</div>
-        </div>
+    <div className={embedded ? '' : 'scroller'} style={{ padding: embedded ? '0 0 24px' : '0 16px 110px', paddingTop: embedded ? 0 : 64 }} data-comment-anchor="2e58f3c1e8-div-7-5">
+      <div style={{ display: 'flex', justifyContent: tab === 'photos' ? 'flex-end' : 'flex-end', alignItems: 'flex-end', marginBottom: 14 }}>
+        {!embedded && (
+          <div style={{ marginRight: 'auto' }}>
+            <div className="label">// ANALYTICS</div>
+            <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>PROGRESS</div>
+          </div>
+        )}
         <div className="seg" style={{ visibility: tab === 'photos' ? 'hidden' : 'visible' }}>
           {['7d', '30d', '90d'].map((r) =>
           <button key={r} className={range === r ? 'active' : ''} onClick={() => setRange(r)}>{r.toUpperCase()}</button>
@@ -714,13 +717,10 @@ function WeightTab({ range, userId }) {
     </div>
   );
 
+  // Muscle map lives in its own BODY tab now — Metrics shows categories only.
   return (
     <>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-        <SubTab active={view === 'cats'} onClick={() => setView('cats')} label="CATEGORIES" icon="▦" />
-        <SubTab active={view === 'map'} onClick={() => setView('map')} label="MUSCLE MAP" icon="◉" />
-      </div>
-      {view === 'cats' ? <CategoriesView onPick={setCatId} cats={cats} exs={exs} /> : <MuscleMapView range={range} userId={userId} />}
+      <CategoriesView onPick={setCatId} cats={cats} exs={exs} />
     </>);
 
 }

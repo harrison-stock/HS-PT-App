@@ -163,14 +163,14 @@ export function Dashboard({ go, user, userId, impersonating }) {
       </div>
 
       {/* Greeting */}
-      <div style={{ marginBottom: 18 }}>
+      <div style={{ marginBottom: 14 }}>
         <div className="h-bold" style={{ fontSize: 28, lineHeight: 1.1, color: "var(--heading-deep)" }}>
           {greeting(now.getHours())},<br /><span style={{ color: 'var(--accent)' }} className="text-glow">{firstName.toUpperCase()}.</span>
         </div>
-        <div style={{ fontSize: 13, marginTop: 6, fontFamily: "\"JetBrains Mono\"", color: "var(--heading-deep)" }}>
-           <strong style={{ fontFamily: "\"JetBrains Mono\"", color: "rgb(70, 187, 192)" }}></strong>
-        </div>
       </div>
+
+      {/* At-a-glance training strip */}
+      <TrainingStrip userId={userId} />
 
       {/* Today's workout hero */}
       <div className="card" style={{
@@ -239,8 +239,98 @@ export function Dashboard({ go, user, userId, impersonating }) {
 
       {/* Programme roadmap */}
       <ProgrammeRoadmap userId={userId} />
+
+      {/* Goal set by the coach */}
+      <GoalCard userId={userId} />
     </div>);
 
+}
+
+// ── TRAINING STRIP (at-a-glance) ─────────────────────────────────
+function TrainingStrip({ userId }) {
+  const [s, setS] = React.useState(null);
+  React.useEffect(() => {
+    if (!userId) { setS({ w7: 0, w30: 0 }); return; }
+    const d7  = new Date(Date.now() - 7 * 86400000).toISOString();
+    const d30 = new Date(Date.now() - 30 * 86400000).toISOString();
+    supabase.from('workout_sessions')
+      .select('completed_at')
+      .eq('client_id', userId)
+      .not('completed_at', 'is', null)
+      .gte('completed_at', d30)
+      .then(({ data }) => {
+        const rows = data || [];
+        setS({ w30: rows.length, w7: rows.filter(r => r.completed_at >= d7).length });
+      });
+  }, [userId]);
+
+  const Cell = ({ label, value }) => (
+    <div style={{ flex: 1, textAlign: 'center', padding: '12px 6px' }}>
+      <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--text-3)', marginBottom: 6 }}>{label}</div>
+      <div className="h-bold" style={{ fontSize: 22, color: 'var(--accent)', lineHeight: 1 }}>{s ? value : '—'}</div>
+      <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.1em', marginTop: 4 }}>SESSIONS</div>
+    </div>
+  );
+  return (
+    <div className="card" style={{ padding: 0, display: 'flex', marginBottom: 14 }}>
+      <Cell label="LAST 7 DAYS"  value={s?.w7} />
+      <div style={{ width: 1, background: 'var(--line)' }}/>
+      <Cell label="LAST 30 DAYS" value={s?.w30} />
+    </div>
+  );
+}
+
+// ── GOAL ─────────────────────────────────────────────────────────
+function GoalCard({ userId }) {
+  const [goal, setGoal] = React.useState(undefined);
+  React.useEffect(() => {
+    if (!userId) { setGoal(null); return; }
+    supabase.from('client_goals')
+      .select('title, description, target_date, status')
+      .eq('client_id', userId).eq('status', 'active')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => setGoal(data || null));
+  }, [userId]);
+
+  if (goal === undefined || !goal) return null;
+
+  let countdown = null;
+  if (goal.target_date) {
+    const days = Math.ceil((new Date(goal.target_date) - new Date()) / 86400000);
+    countdown = days < 0 ? 'Target date passed' : days === 0 ? 'Target is today' : `${days} day${days === 1 ? '' : 's'} to go`;
+  }
+
+  return (
+    <div className="card" style={{
+      padding: 16, marginTop: 14,
+      background: 'linear-gradient(135deg, rgba(243,158,31,0.08), rgba(243,158,31,0.02)), var(--bg-2)',
+      borderColor: 'color-mix(in srgb, var(--c-amber) 28%, var(--line))',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="label" style={{ color: 'var(--c-amber)' }}>// YOUR GOAL</div>
+          <div className="h-bold" style={{ fontSize: 18, marginTop: 4, color: 'var(--heading-deep)' }}>{goal.title}</div>
+          {goal.description && (
+            <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, marginTop: 6 }}>{goal.description}</div>
+          )}
+        </div>
+        {countdown && (
+          <div style={{ textAlign: 'center', flexShrink: 0 }}>
+            <Hex size={54} style={{ background: 'color-mix(in srgb, var(--c-amber) 16%, var(--bg-3))', border: '1px solid color-mix(in srgb, var(--c-amber) 40%, transparent)', color: 'var(--c-amber)', fontFamily: 'Orbitron', fontWeight: 800, fontSize: 15 }}>
+              {goal.target_date ? Math.max(0, Math.ceil((new Date(goal.target_date) - new Date()) / 86400000)) : '—'}
+            </Hex>
+            <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.1em', marginTop: 5 }}>DAYS LEFT</div>
+          </div>
+        )}
+      </div>
+      {countdown && (
+        <div className="mono" style={{ fontSize: 9, color: 'var(--c-amber)', letterSpacing: '0.08em', marginTop: 10 }}>
+          ◷ {countdown.toUpperCase()}
+          {goal.target_date && ` · ${new Date(goal.target_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── TASKS ────────────────────────────────────────────────────────
@@ -348,10 +438,25 @@ async function loadRoadmap(userId) {
   const main = Object.values(progMap).sort((a, b) => (b.lastDate || '').localeCompare(a.lastDate || ''))[0];
   if (!main) return null;
 
-  const phases = Object.values(main.phases).sort((a, b) => a.idx - b.idx);
+  // Pull the full phase list for the programme so upcoming phases show too —
+  // the roadmap reflects the assigned programme's structure, not just the
+  // days that happen to have workouts.
+  const { data: allPhases } = await supabase
+    .from('programme_phases')
+    .select('id, phase_index, name, weeks')
+    .eq('programme_id', main.prog.id)
+    .order('phase_index');
+
+  const phases = (allPhases && allPhases.length
+    ? allPhases.map(p => ({
+        id: p.id, idx: p.phase_index, name: p.name, weeks: p.weeks,
+        total: main.phases[p.id]?.total || 0, done: main.phases[p.id]?.done || 0,
+      }))
+    : Object.values(main.phases).sort((a, b) => a.idx - b.idx));
+
   let seenCurrent = false;
   phases.forEach(p => {
-    if (p.done === p.total && p.total > 0) { p.status = 'done'; return; }
+    if (p.total > 0 && p.done === p.total) { p.status = 'done'; return; }
     if (!seenCurrent) { p.status = 'current'; seenCurrent = true; }
     else p.status = 'upcoming';
   });
