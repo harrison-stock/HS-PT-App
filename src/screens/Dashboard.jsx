@@ -1,7 +1,9 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
 import { HEX_RATIO, HexShape, Hex } from '../components/hex'
-import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2 } from '../components/icons'
+import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc } from '../components/icons'
+import { notify, trainerOf } from '../lib/notifications'
+import { FormFill } from './FormFill'
 
 function useLiveClock() {
   const [now, setNow] = React.useState(() => new Date());
@@ -59,7 +61,8 @@ function shapeTask(t) {
     id: t.id,
     title: t.title,
     kind: t.kind,
-    icon: t.kind, // check | log | photo
+    icon: t.kind, // check | log | photo | form
+    formId: t.form_id,
     sub,
     done: !!t.completed_at,
     overdue: !t.completed_at && t.due_date && t.due_date < today,
@@ -67,17 +70,21 @@ function shapeTask(t) {
 }
 
 // Dashboard / Home screen
-export function Dashboard({ go, user, userId, impersonating }) {
+export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
   const name = (user && user.name) || 'Athlete';
   const firstName = name.trim().split(/\s+/)[0];
   const initials = name.trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase();
   const [tasks, setTasks] = React.useState([]);
   const [todayWorkout, setTodayWorkout] = React.useState(null);
   const [workoutLoading, setWorkoutLoading] = React.useState(true);
+  const [formTask, setFormTask] = React.useState(null);
+  const [trainerId, setTrainerId] = React.useState(null);
   const now = useLiveClock();
 
   const today = new Date().toISOString().slice(0, 10);
   const done = todayWorkout?.status === 'completed';
+
+  React.useEffect(() => { if (userId) trainerOf(userId).then(setTrainerId); }, [userId]);
 
   const loadTasks = React.useCallback(() => {
     if (!userId) return;
@@ -97,9 +104,17 @@ export function Dashboard({ go, user, userId, impersonating }) {
   React.useEffect(() => { loadTasks(); }, [loadTasks]);
 
   const toggleTask = async (t) => {
+    if (t.kind === 'form' && !t.done) { setFormTask(t); return; }
     await supabase.from('client_tasks')
       .update({ completed_at: t.done ? null : new Date().toISOString() })
       .eq('id', t.id);
+    if (!t.done && trainerId) notify({ recipientId: trainerId, actorId: userId, kind: 'task', title: `${firstName} completed a task`, body: t.title, link: { screen: 'coach' } });
+    loadTasks();
+  };
+
+  const onFormSubmitted = async (t) => {
+    await supabase.from('client_tasks').update({ completed_at: new Date().toISOString() }).eq('id', t.id);
+    if (trainerId) notify({ recipientId: trainerId, actorId: userId, kind: 'form', title: `${firstName} submitted a form`, body: t.title, link: { screen: 'coach' } });
     loadTasks();
   };
 
@@ -147,8 +162,12 @@ export function Dashboard({ go, user, userId, impersonating }) {
             <HexShape size={38} fill="var(--bg-2)" stroke="var(--line-strong)" strokeWidth={9}
             style={{ position: 'absolute', inset: 0 }} />
             <IconBell size={15} style={{ position: 'relative', color: 'var(--text-2)' }} />
-            {tasks.some(t => !t.done) && (
-              <span style={{ position: 'absolute', top: 1, right: 3, zIndex: 2, width: 8, height: 8, borderRadius: '50%', background: 'var(--c-coral)', border: '1.5px solid var(--bg-1)' }} />
+            {unread > 0 && (
+              <span className="mono" style={{
+                position: 'absolute', top: -2, right: 0, zIndex: 2, minWidth: 14, height: 14, padding: '0 3px',
+                borderRadius: 999, background: 'var(--c-coral)', color: '#fff', fontSize: 8, fontWeight: 800,
+                display: 'grid', placeItems: 'center', border: '1.5px solid var(--bg-1)',
+              }}>{unread > 9 ? '9+' : unread}</span>
             )}
           </button>
           <button onClick={() => { if (!impersonating) go('profile'); }} aria-label="Profile & settings"
@@ -242,6 +261,14 @@ export function Dashboard({ go, user, userId, impersonating }) {
 
       {/* Goal set by the coach */}
       <GoalCard userId={userId} />
+
+      {formTask && (
+        <FormFill
+          formId={formTask.formId} taskId={formTask.id} clientId={userId}
+          onClose={() => setFormTask(null)}
+          onSubmitted={() => onFormSubmitted(formTask)}
+        />
+      )}
     </div>);
 
 }
@@ -340,6 +367,7 @@ function TasksSection({ tasks, onToggle }) {
     check: IconClipboard,
     log:   IconScale,
     photo: IconCamera2,
+    form:  IconDoc,
   };
   const open = tasks.filter((t) => !t.done);
   const doneCount = tasks.length - open.length;
@@ -397,7 +425,7 @@ function TasksSection({ tasks, onToggle }) {
                   color: tint, padding: '4px 9px', borderRadius: 999,
                   background: `color-mix(in srgb, ${tint} 12%, transparent)`,
                   border: `1px solid color-mix(in srgb, ${tint} 35%, transparent)`
-                }}>MARK DONE</span>}
+                }}>{t.kind === 'form' ? 'OPEN' : 'MARK DONE'}</span>}
               </div>
             </button>);
         })}

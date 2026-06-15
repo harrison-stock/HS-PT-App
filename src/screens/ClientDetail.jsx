@@ -7,6 +7,8 @@ import { BodyMap, Progress } from './Progress'
 import { InjuryThread } from './InjuryThread'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
 import { injuryTitle } from '../lib/injuries'
+import { notify } from '../lib/notifications'
+import { loadForms } from '../lib/forms'
 import { IconPlus, IconCheck, IconX2, IconChevronRight } from '../components/icons'
 
 // ── Constants ────────────────────────────────────────────────────
@@ -660,6 +662,8 @@ function DataTab({ c }) {
 function TasksTab({ c, trainerId }) {
   const [tasks, setTasks]   = React.useState(null);
   const [adding, setAdding] = React.useState(false);
+  const [forms, setForms]   = React.useState([]);
+  const [formId, setFormId] = React.useState('');
   const [title, setTitle]   = React.useState('');
   const [kind, setKind]     = React.useState('check');
   const [due, setDue]       = React.useState('');
@@ -670,16 +674,23 @@ function TasksTab({ c, trainerId }) {
       .order('due_date', { ascending: true })
       .then(({ data }) => setTasks(data || []));
 
-  React.useEffect(() => { reload(); }, [c.id]);
+  React.useEffect(() => { reload(); loadForms().then(setForms); }, [c.id]);
+
+  const selForm = forms.find(f => f.id === formId);
+  const effTitle = (title.trim() || (kind === 'form' && selForm ? selForm.title : '')).trim();
+  const canSave = !!effTitle && !saving && (kind !== 'form' || !!formId);
 
   const save = async () => {
-    if (!title.trim() || saving) return;
+    if (!canSave) return;
     setSaving(true);
     await supabase.from('client_tasks').insert({
       client_id: c.id, trainer_id: trainerId,
-      title: title.trim(), kind, due_date: due || null,
+      title: effTitle, kind, due_date: due || null,
+      form_id: kind === 'form' ? formId : null,
     });
-    setSaving(false); setAdding(false); setTitle(''); setDue(''); reload();
+    notify({ recipientId: c.id, actorId: trainerId, kind: kind === 'form' ? 'form' : 'task',
+      title: kind === 'form' ? 'New form to complete' : 'New task assigned', body: effTitle, link: { screen: 'dashboard' } });
+    setSaving(false); setAdding(false); setTitle(''); setDue(''); setFormId(''); setKind('check'); reload();
   };
 
   const toggle = async (task) => {
@@ -715,10 +726,10 @@ function TasksTab({ c, trainerId }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <FieldLabel label="TYPE">
               <div style={{ display: 'flex', gap: 4 }}>
-                {['check','log','photo'].map(k => (
+                {['check','log','photo','form'].map(k => (
                   <button key={k} onClick={() => setKind(k)} style={{
                     all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
-                    padding: '7px 0', borderRadius: 7, fontSize: 9, fontFamily: 'JetBrains Mono', fontWeight: 700,
+                    padding: '7px 0', borderRadius: 7, fontSize: 8.5, fontFamily: 'JetBrains Mono', fontWeight: 700,
                     background: kind === k ? 'var(--accent-soft)' : 'var(--bg-3)',
                     border: `1px solid ${kind === k ? 'var(--accent)' : 'var(--line)'}`,
                     color: kind === k ? 'var(--accent)' : 'var(--text-3)',
@@ -730,8 +741,16 @@ function TasksTab({ c, trainerId }) {
               <input type="date" value={due} onChange={e => setDue(e.target.value)} style={fieldSt}/>
             </FieldLabel>
           </div>
-          <button onClick={save} disabled={!title.trim() || saving} className="btn-primary" style={{ opacity: title.trim() ? 1 : 0.4 }}>
-            {saving ? 'SAVING…' : 'ADD TASK'}
+          {kind === 'form' && (
+            <FieldLabel label="FORM">
+              <select value={formId} onChange={e => setFormId(e.target.value)} style={{ ...fieldSt, appearance: 'auto' }}>
+                <option value="">— Select a form —</option>
+                {forms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
+              </select>
+            </FieldLabel>
+          )}
+          <button onClick={save} disabled={!canSave} className="btn-primary" style={{ opacity: canSave ? 1 : 0.4 }}>
+            {saving ? 'SAVING…' : kind === 'form' ? 'ASSIGN FORM' : 'ADD TASK'}
           </button>
         </div>
       )}

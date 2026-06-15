@@ -4,7 +4,9 @@ import { ACTIVE_EXERCISES, PHASES, MUSCLE_LABELS } from '../data/index'
 import { muscleGroupsFor } from '../lib/muscleVolume'
 import { BodyMap } from './Progress'
 import { Hex, HexBackButton } from '../components/hex'
-import { IconPause, IconPlay, IconCheck, IconX2, IconChevronLeft, IconChevronRight, IconPlus, IconTrophy, IconTimer, IconFlame, IconBand, IconDumbbell, IconLeaf, IconActivity, IconSwap, IconTrend, IconMetronome } from '../components/icons'
+import { IconPause, IconPlay, IconCheck, IconX2, IconChevronLeft, IconChevronRight, IconPlus, IconTrophy, IconTimer, IconFlame, IconBand, IconDumbbell, IconLeaf, IconActivity, IconSwap, IconTrend, IconMetronome, IconClipboard } from '../components/icons'
+import { ExerciseComments } from './ExerciseComments'
+import { notify, trainerOf } from '../lib/notifications'
 
 // Active Workout — Everfit-style swipeable cards.
 // One full-page card per exercise; horizontal snap-scroll between them.
@@ -19,6 +21,7 @@ export function ActiveLog({ go, dayId, userId }) {
   const [timesUp, setTimesUp] = React.useState(false);
   const [altsForId, setAltsForId] = React.useState(null);
   const [historyForId, setHistoryForId] = React.useState(null);
+  const [commentForId, setCommentForId] = React.useState(null);
   const [paused, setPaused] = React.useState(false);
   const [confirmQuit, setConfirmQuit] = React.useState(false);
   const [complete, setComplete] = React.useState(false);
@@ -110,6 +113,9 @@ export function ActiveLog({ go, dayId, userId }) {
         });
         if (logRows.length) await supabase.from('logged_sets').insert(logRows);
         await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
+        // Notify the coach that the client finished a workout.
+        const tId = await trainerOf(userId);
+        if (tId) notify({ recipientId: tId, actorId: userId, kind: 'done', title: 'Workout completed', body: 'A client finished a session — review their logged sets.', link: { screen: 'coach' } });
       }
     } catch (e) { console.error('saveSession', e); }
   };
@@ -325,6 +331,7 @@ export function ActiveLog({ go, dayId, userId }) {
         onUpdate={(si, p) => updateSet(it.ex.id, si, p)}
         onTitle={() => setAltsForId(it.ex.id)}
         onAddSet={(kind) => addSet(it.ex.id, kind)}
+        onComment={dayId ? () => setCommentForId(it.ex.id) : null}
         onHistory={() => setHistoryForId(it.ex.id)} />
 
         )}
@@ -422,6 +429,15 @@ export function ActiveLog({ go, dayId, userId }) {
       {/* Prior progress sheet */}
       {historyFor && <PriorProgressSheet ex={historyFor} onClose={() => setHistoryForId(null)} />}
 
+      {/* Exercise comments */}
+      {commentForId && (
+        <ExerciseComments
+          exerciseId={commentForId} clientId={userId}
+          exerciseName={exercises.find(e => e.id === commentForId)?.name}
+          onClose={() => setCommentForId(null)}
+        />
+      )}
+
       {/* Session complete — results screen */}
       {complete && <SessionComplete exercises={exercises} sessionTime={sessionTime} go={go} />}
 
@@ -501,7 +517,7 @@ export function ActiveLog({ go, dayId, userId }) {
 }
 
 // ── EXERCISE CARD (one per swipe page) ───────────────────────────
-function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onHistory, intro }) {
+function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onHistory, onComment, intro }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   return (
@@ -554,6 +570,12 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
                 <IconTrend size={15} />
               </Hex>
             </button>
+            {onComment &&
+            <button onClick={onComment} aria-label="Comments" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+              <Hex size={32} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
+                <IconClipboard size={15} />
+              </Hex>
+            </button>}
             {ex.tempo &&
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,

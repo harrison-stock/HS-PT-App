@@ -7,6 +7,7 @@ import { BodyMap } from './Progress'
 import { InjuryThread } from './InjuryThread'
 import { IconPlus, IconX2, IconChevronRight } from '../components/icons'
 import { SEV_COLOR, SEV_LABEL, SEV_VAL, LAT_LABEL, injuryTitle, loadInjuries, reportInjury } from '../lib/injuries'
+import { notify } from '../lib/notifications'
 
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 };
 
@@ -168,6 +169,7 @@ function InjuriesView({ userId, trainerId, side }) {
 
   const report = async (severity, note, laterality) => {
     await reportInjury({ clientId: userId, trainerId, group: pickedGroup, side, severity, note, laterality });
+    if (trainerId) notify({ recipientId: trainerId, actorId: userId, kind: 'injury', title: 'Injury reported', body: injuryTitle({ muscle_group: pickedGroup, laterality }) + ` · ${severity}`, link: { screen: 'coach' } });
     setReporting(false); reload();
   };
 

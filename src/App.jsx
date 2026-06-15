@@ -14,6 +14,7 @@ import { Coach } from './screens/Coach'
 import { Body } from './screens/Body'
 import { Exercises } from './screens/Exercises'
 import { SessionResults } from './screens/ActiveLog'
+import { unreadCount, subscribeNotifications, maybeBrowserNotify, requestNotifyPermission } from './lib/notifications'
 
 const ACCENTS = {
   sea:      { c: '#46BBC0', soft: 'rgba(70,187,192,0.16)',  glow: 'rgba(70,187,192,0.45)',  on: '#06262A' },
@@ -52,6 +53,7 @@ export default function App() {
   const [profile, setProfile] = React.useState(null);
   const [authLoading, setAuthLoading] = React.useState(true);
   const [bootError, setBootError] = React.useState(false);
+  const [unread, setUnread] = React.useState(0);
 
   React.useEffect(() => {
     let done = false;
@@ -111,6 +113,24 @@ export default function App() {
       }
     }
   };
+
+  // Live notifications: unread badge + browser notification while open.
+  React.useEffect(() => {
+    if (!session) { setUnread(0); return; }
+    const uid = session.user.id;
+    requestNotifyPermission();
+    unreadCount(uid).then(setUnread);
+    const unsub = subscribeNotifications(uid, (row) => {
+      setUnread(c => c + 1);
+      maybeBrowserNotify(row.title, row.body);
+    });
+    return unsub;
+  }, [session]);
+
+  // Recount when leaving the notifications screen (it marks all read).
+  React.useEffect(() => {
+    if (session && screen !== 'notifications') unreadCount(session.user.id).then(setUnread);
+  }, [screen, session]);
 
   const navigate = (target, opts) => {
     if (target === 'preview') {
@@ -192,7 +212,7 @@ export default function App() {
   else if (screen === 'resources')  ScreenEl = <Resources go={navigate} userId={session.user.id} isTrainer={navIsTrainer}/>;
   else if (screen === 'coach')      ScreenEl = <Coach go={navigate} trainerId={session.user.id}/>;
   else if (screen === 'exercises')  ScreenEl = <Exercises trainerId={session.user.id}/>;
-  else if (screen === 'notifications') ScreenEl = <Notifications go={navigate} userId={activeUserId} isTrainer={navIsTrainer}/>;
+  else if (screen === 'notifications') ScreenEl = <Notifications go={navigate} userId={session.user.id}/>;
   else if (screen === 'sessionresults') ScreenEl = (
     <SessionResults dayId={resultsDayId} userId={activeUserId} go={navigate} onClose={() => navigate('dashboard')}/>
   );
@@ -212,7 +232,7 @@ export default function App() {
       onLogout={() => supabase.auth.signOut()}
     />
   );
-  else ScreenEl = <Dashboard go={navigate} user={dashUser} userId={activeUserId} impersonating={impersonating}/>;
+  else ScreenEl = <Dashboard go={navigate} user={dashUser} userId={activeUserId} impersonating={impersonating} unread={unread}/>;
 
   const exitClientView = () => { setClientViewId(null); setClientViewName(null); navigate('coach'); };
 
