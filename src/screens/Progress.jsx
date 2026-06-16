@@ -769,12 +769,16 @@ const ZONE_COLOR = {
 // leaderboard graphs match the category card colours.
 const MUSCLE_COLOR = {
   chest: '#3F84D9',
-  upperBack: '#F39E1F', lats: '#F39E1F', lowerBack: '#F39E1F',
+  upperBack: '#F39E1F', lats: '#F39E1F', lowerBack: '#F39E1F', traps: '#F39E1F', neck: '#F39E1F',
   shoulders: '#EE6A6A',
-  biceps: '#9D7CE0', triceps: '#9D7CE0', forearms: '#9D7CE0',
+  biceps: '#9D7CE0', triceps: '#9D7CE0', forearms: '#9D7CE0', hands: '#9D7CE0',
   abs: '#8086A3', obliques: '#8086A3',
-  quads: '#E0A5B8', hamstrings: '#E0A5B8', glutes: '#E0A5B8', calves: '#E0A5B8'
+  quads: '#E0A5B8', hamstrings: '#E0A5B8', glutes: '#E0A5B8', calves: '#E0A5B8',
+  adductors: '#E0A5B8', shins: '#E0A5B8', knees: '#E0A5B8', ankles: '#E0A5B8', feet: '#E0A5B8',
 };
+
+// Regions that read as one central section (never split left/right).
+const CENTRAL_GROUPS = new Set(['neck', 'abs', 'upperBack', 'lowerBack']);
 
 // Mini anatomical illustration zoomed onto one muscle region.
 // Focus muscles render in the zone colour; everything else fades back.
@@ -1147,11 +1151,13 @@ export function BodyMap({ side, intensity, picked, onPick, data, labels, heatCol
     return x < centerX ? 'left' : 'right';
   };
 
-  const baseColor = heatColor || 'var(--accent)';
-  const colorFor = (group, isPicked) => isPicked ? (MUSCLE_COLOR[group] || 'var(--accent-2)') : (heatColor ? baseColor : (MUSCLE_COLOR[group] || 'var(--accent)'));
+  // Muscles render in their anatomical region colour (legs pink, back amber,
+  // …); heatColor is a fallback for regions without a mapped colour.
+  const colorFor = (group) => MUSCLE_COLOR[group] || heatColor || 'var(--accent)';
+  const isPickedKey = (key) => picked instanceof Set ? picked.has(key) : picked === key;
   const fillFor = (group, v, isPicked) => {
     const alpha = 0.12 + v * 0.82;
-    return `color-mix(in srgb, ${colorFor(group, isPicked)} ${Math.round(alpha * 100)}%, var(--bg-3))`;
+    return `color-mix(in srgb, ${colorFor(group)} ${Math.round(alpha * 100)}%, var(--bg-3))`;
   };
   const neutralStroke = 'color-mix(in srgb, var(--text-3) 24%, transparent)';
   const neutralFill = 'color-mix(in srgb, var(--text-3) 14%, var(--bg-3))';
@@ -1184,32 +1190,36 @@ export function BodyMap({ side, intensity, picked, onPick, data, labels, heatCol
           );
         }
 
-        // Per-side: each path is independently shaded + selectable by limb side.
-        if (perSide) {
+        // Per-side: each path is independently shaded + selectable by limb side,
+        // except central regions (neck, abs…) which act as one section.
+        if (perSide && !CENTRAL_GROUPS.has(group)) {
           return paths.map((d, i) => {
             const anat = anatOf(d);
             const v = intensity(group, anat);
-            const isP = picked === `${group}|${anat}`;
+            const isP = isPickedKey(`${group}|${anat}`);
             return (
               <path key={slug + i} d={d}
                 onClick={() => onPick(group, anat)}
                 fill={fillFor(group, v, isP)}
-                stroke={isP ? colorFor(group, true) : `color-mix(in srgb, ${colorFor(group, false)} 45%, transparent)`}
+                stroke={isP ? colorFor(group) : `color-mix(in srgb, ${colorFor(group)} 45%, transparent)`}
                 strokeWidth={isP ? 2.4 : 1} strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-                style={{ cursor: 'pointer', filter: isP ? `drop-shadow(0 0 7px ${colorFor(group, true)})` : 'none', transition: 'all .15s ease' }} />
+                style={{ cursor: 'pointer', filter: isP ? `drop-shadow(0 0 7px ${colorFor(group)})` : 'none', transition: 'all .15s ease' }} />
             );
           });
         }
 
-        // Grouped (whole-muscle) behaviour.
-        const isPicked = picked === group;
-        const v = intensity(group);
+        // Grouped (whole-muscle) behaviour — also used for central regions in
+        // per-side mode (selected as a single "both" section).
+        const central = perSide && CENTRAL_GROUPS.has(group);
+        const anat = central ? 'both' : null;
+        const isPicked = central ? isPickedKey(`${group}|both`) : isPickedKey(group);
+        const v = central ? intensity(group, 'both') : intensity(group);
         const fill = fillFor(group, v, isPicked);
-        const stroke = isPicked ? colorFor(group, true) : `color-mix(in srgb, ${colorFor(group, false)} 45%, transparent)`;
+        const stroke = isPicked ? colorFor(group) : `color-mix(in srgb, ${colorFor(group)} 45%, transparent)`;
         return (
           <g key={slug}
-          onClick={() => onPick(picked === group ? null : group)}
-          style={{ cursor: 'pointer', filter: isPicked ? `drop-shadow(0 0 7px ${colorFor(group, true)})` : 'none', transition: 'all .2s ease' }}>
+          onClick={() => central ? onPick(group, 'both') : onPick(picked === group ? null : group)}
+          style={{ cursor: 'pointer', filter: isPicked ? `drop-shadow(0 0 7px ${colorFor(group)})` : 'none', transition: 'all .2s ease' }}>
             {paths.map((d, i) => <path key={i} d={d} fill={fill} stroke={stroke} strokeWidth={isPicked ? 2.4 : 1} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />)}
           </g>);
       })}

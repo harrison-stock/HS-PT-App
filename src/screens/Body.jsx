@@ -132,7 +132,7 @@ function WorkedView({ userId, side, go }) {
 // ── INJURIES ─────────────────────────────────────────────────────
 function InjuriesView({ userId, trainerId, side }) {
   const [injuries, setInjuries] = React.useState(null);
-  const [picked, setPicked]     = React.useState(null);
+  const [picked, setPicked]     = React.useState(() => new Set()); // set of "group|side" keys
   const [reporting, setReporting] = React.useState(false);
   const [openId, setOpenId]     = React.useState(null);
 
@@ -153,24 +153,32 @@ function InjuriesView({ userId, trainerId, side }) {
   const active = list.filter(i => !i.resolved_at);
   const past   = list.filter(i => i.resolved_at);
 
-  // picked is a "group|side" key; a muscle's side lights only if an injury
-  // matches that exact side (or is bilateral).
-  const [pickedGroup, pickedSide] = picked ? picked.split('|') : [null, null];
+  // A muscle's side lights only if an injury matches that side (or is bilateral).
   const intensity = React.useCallback((g, anat) => {
-    const hits = active.filter(i => i.muscle_group === g && (i.laterality === anat || i.laterality === 'both'));
+    const hits = active.filter(i => i.muscle_group === g && (i.laterality === anat || i.laterality === 'both' || anat === 'both'));
     if (!hits.length) return 0;
     return Math.max(...hits.map(i => SEV_VAL[i.severity] || 0.5));
   }, [active]);
 
-  const pickedActive = pickedGroup
-    ? active.filter(i => i.muscle_group === pickedGroup && (i.laterality === pickedSide || i.laterality === 'both'))
-    : [];
+  const sel = [...picked].map(k => { const [g, a] = k.split('|'); return { key: k, g, a }; });
+  const single = sel.length === 1 ? sel[0] : null;
+  const pickedActive = active.filter(i => sel.some(s => i.muscle_group === s.g && (i.laterality === s.a || i.laterality === 'both' || s.a === 'both')));
   const openInjury = openId ? list.find(i => i.id === openId) : null;
 
+  const togglePick = (g, anat) => {
+    const key = `${g}|${anat}`;
+    setPicked(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+    setReporting(false); setOpenId(null);
+  };
+
+  // Report the injury to every selected region (each keeps its own side).
   const report = async (severity, note, laterality) => {
-    await reportInjury({ clientId: userId, trainerId, group: pickedGroup, side, severity, note, laterality });
-    if (trainerId) notify({ recipientId: trainerId, actorId: userId, kind: 'injury', title: 'Injury reported', body: injuryTitle({ muscle_group: pickedGroup, laterality }) + ` · ${severity}`, link: { screen: 'coach' } });
-    setReporting(false); reload();
+    for (const s of sel) {
+      const lat = single ? laterality : s.a;
+      await reportInjury({ clientId: userId, trainerId, group: s.g, side, severity, note, laterality: lat });
+      if (trainerId) notify({ recipientId: trainerId, actorId: userId, kind: 'injury', title: 'Injury reported', body: injuryTitle({ muscle_group: s.g, laterality: lat }) + ` · ${severity}`, link: { screen: 'coach' } });
+    }
+    setReporting(false); setPicked(new Set()); reload();
   };
 
   if (injuries === null) return <Loading/>;
@@ -179,7 +187,7 @@ function InjuriesView({ userId, trainerId, side }) {
     <>
       <div className="card" style={{ padding: 16, marginBottom: 12, background: 'radial-gradient(60% 80% at 50% 30%, rgba(238,106,106,0.06), transparent 70%), var(--bg-2)' }}>
         <BodyMap side={side} intensity={intensity} picked={picked} slugMap={slugMap} perSide zoomable
-          onPick={(g, anat) => { const key = `${g}|${anat}`; setPicked(picked === key ? null : key); setReporting(false); setOpenId(null); }}
+          onPick={togglePick}
           data={allGroups} labels={REGION_LABELS} heatColor="var(--c-coral)" />
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
           {Object.entries(SEV_COLOR).map(([sev, col]) => (
@@ -199,32 +207,41 @@ function InjuriesView({ userId, trainerId, side }) {
       )}
 
       {!openInjury && <>
-        {!picked && (
+        {picked.size === 0 && (
           <Mono style={{ textAlign: 'center', padding: '4px 0 12px' }}>
-            TAP ANY MUSCLE OR JOINT TO REPORT OR REVIEW AN INJURY
+            TAP ONE OR MORE MUSCLES / JOINTS TO REPORT OR REVIEW AN INJURY
           </Mono>
         )}
 
-        {/* Selected region */}
-        {pickedGroup && (
+        {/* Selected region(s) */}
+        {picked.size > 0 && (
           <div className="card" style={{ padding: 14, marginBottom: 12, borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line))' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <div className="h-bold" style={{ fontSize: 15 }}>
-                {injuryTitle({ muscle_group: pickedGroup, laterality: pickedSide }).toUpperCase()}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+              <div className="h-bold" style={{ fontSize: 15, minWidth: 0 }}>
+                {single ? injuryTitle({ muscle_group: single.g, laterality: single.a }).toUpperCase() : `${picked.size} REGIONS SELECTED`}
               </div>
-              {!reporting && (
-                <button onClick={() => setReporting(true)} style={{
-                  all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-                  fontSize: 9, color: 'var(--c-coral)', fontFamily: 'JetBrains Mono', fontWeight: 700,
-                  border: '1px solid color-mix(in srgb, var(--c-coral) 50%, transparent)', borderRadius: 6, padding: '5px 9px',
-                }}><IconPlus size={10}/> REPORT INJURY</button>
-              )}
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button onClick={() => setPicked(new Set())} style={{ all: 'unset', cursor: 'pointer', fontSize: 9, color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontWeight: 700, border: '1px solid var(--line)', borderRadius: 6, padding: '5px 9px' }}>CLEAR</button>
+                {!reporting && (
+                  <button onClick={() => setReporting(true)} style={{
+                    all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                    fontSize: 9, color: 'var(--c-coral)', fontFamily: 'JetBrains Mono', fontWeight: 700,
+                    border: '1px solid color-mix(in srgb, var(--c-coral) 50%, transparent)', borderRadius: 6, padding: '5px 9px',
+                  }}><IconPlus size={10}/> REPORT INJURY</button>
+                )}
+              </div>
             </div>
 
-            {reporting && <ReportForm defaultSide={pickedSide} onCancel={() => setReporting(false)} onSave={report} />}
+            {!single && !reporting && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {sel.map(s => <span key={s.key} className="mono" style={{ fontSize: 9, padding: '4px 8px', borderRadius: 999, background: 'var(--bg-3)', border: '1px solid var(--line)', color: 'var(--text-2)' }}>{injuryTitle({ muscle_group: s.g, laterality: s.a })}</span>)}
+              </div>
+            )}
+
+            {reporting && <ReportForm defaultSide={single ? single.a : 'both'} hideSide={!single} onCancel={() => setReporting(false)} onSave={report} />}
 
             {!reporting && pickedActive.length === 0 && (
-              <Mono>No active injuries here. Tap REPORT INJURY to log one.</Mono>
+              <Mono>No active injuries in the selection. Tap REPORT INJURY to log one.</Mono>
             )}
             {!reporting && pickedActive.map(inj => <InjuryRow key={inj.id} inj={inj} onOpen={() => setOpenId(inj.id)} />)}
           </div>
@@ -281,13 +298,16 @@ function InjuryRow({ inj, onOpen, resolved }) {
   );
 }
 
-function ReportForm({ onCancel, onSave, defaultSide }) {
+function ReportForm({ onCancel, onSave, defaultSide, hideSide }) {
   const [severity, setSeverity] = React.useState('moderate');
   const [laterality, setLaterality] = React.useState(defaultSide || 'both');
   const [note, setNote] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   return (
     <div style={{ display: 'grid', gap: 10, marginBottom: 6 }}>
+      {hideSide ? (
+        <Mono>Reporting to each selected region (its own side is kept).</Mono>
+      ) : (
       <div>
         <div className="label" style={{ marginBottom: 6 }}>SIDE</div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -302,6 +322,7 @@ function ReportForm({ onCancel, onSave, defaultSide }) {
           ))}
         </div>
       </div>
+      )}
       <div>
         <div className="label" style={{ marginBottom: 6 }}>SEVERITY</div>
         <div style={{ display: 'flex', gap: 6 }}>
