@@ -774,6 +774,13 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const emailInvite = () => {
+    const subject = encodeURIComponent('Your training app invite');
+    const body = encodeURIComponent(`Hi ${clientName.trim()},\n\nHere's your link to join and set up your account:\n${inviteUrl}\n\nSee you in there!`);
+    const to = clientEmail.trim();
+    window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+  };
+
   return (
     <SheetShell onClose={onClose}>
       <div style={{ padding: '0 18px 14px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
@@ -809,7 +816,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6,
               padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8,
             }}>
-              Generates a one-time sign-up link. The client clicks it to create their account and connect to you automatically.
+              Generates a one-time sign-up link — no email is sent automatically. You'll copy or email it to your client; they click it to create their account and connect to you.
             </div>
           </>
         ) : (
@@ -827,11 +834,16 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
                 fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--text-2)', lineHeight: 1.7,
               }}>{inviteUrl}</div>
             </div>
-            <button onClick={copy} className={copied ? 'btn-primary' : 'btn-ghost'} style={{ width: '100%' }}>
-              {copied ? '✓ COPIED' : '⎘ COPY INVITE LINK'}
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={copy} className={copied ? 'btn-primary' : 'btn-ghost'} style={{ flex: 1 }}>
+                {copied ? '✓ COPIED' : '⎘ COPY LINK'}
+              </button>
+              {clientEmail.trim() && (
+                <button onClick={emailInvite} className="btn-ghost" style={{ flex: 1 }}>✉ EMAIL INVITE</button>
+              )}
+            </div>
             <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5, textAlign: 'center' }}>
-              Send this to your client. They sign up via the link and are connected to your account automatically.
+              No email is sent automatically — copy the link or use Email Invite to open your mail app with it pre-filled.
             </div>
           </>
         )}
