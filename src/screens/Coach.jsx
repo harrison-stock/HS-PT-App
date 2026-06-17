@@ -738,6 +738,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
   const [clientEmail, setClientEmail] = React.useState('');
   const [saving,      setSaving]      = React.useState(false);
   const [inviteUrl,   setInviteUrl]   = React.useState(null);
+  const [emailed,     setEmailed]     = React.useState(false);
   const [copied,      setCopied]      = React.useState(false);
   const [error,       setError]       = React.useState(null);
 
@@ -760,11 +761,21 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
       .insert({ trainer_id: trainerId, client_name: clientName.trim(), client_email: clientEmail.trim(), managed_client_id: mc.id })
       .select('code')
       .single();
-    setSaving(false);
-    if (invErr || !invite) { setError(invErr?.message || 'Could not create invite link'); return; }
+    if (invErr || !invite) { setSaving(false); setError(invErr?.message || 'Could not create invite link'); return; }
 
     const url = `${window.location.origin}?invite=${invite.code}&tid=${trainerId}&name=${encodeURIComponent(clientName.trim())}`;
     setInviteUrl(url);
+
+    // If an email was given, send a Supabase Auth invite email via the edge function.
+    if (clientEmail.trim()) {
+      const { data, error: fnErr } = await supabase.functions.invoke('invite-client', {
+        body: { email: clientEmail.trim(), name: clientName.trim(), managedClientId: mc.id, redirectTo: window.location.origin },
+      });
+      if (!fnErr && !data?.error) setEmailed(true);
+      else setError('Client added, but the invite email couldn’t be sent — share the link below instead.');
+    }
+
+    setSaving(false);
     onCreated?.();
   };
 
@@ -816,7 +827,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6,
               padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8,
             }}>
-              Generates a one-time sign-up link — no email is sent automatically. You'll copy or email it to your client; they click it to create their account and connect to you.
+              Add an email and we'll send them an invite to join — they set a password and connect to you automatically. You'll also get a one-time link to share manually if you prefer.
             </div>
           </>
         ) : (
@@ -826,6 +837,16 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               <div className="h-bold" style={{ fontSize: 16, color: 'var(--accent)', marginBottom: 4 }}>INVITE CREATED</div>
               <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em' }}>FOR {clientName.toUpperCase()}</div>
             </div>
+            {emailed && (
+              <div className="mono" style={{ fontSize: 10, color: 'var(--accent)', padding: '10px 12px', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)', borderRadius: 8, letterSpacing: '0.04em', lineHeight: 1.6, textAlign: 'center' }}>
+                ✉ INVITE EMAILED TO {clientEmail.trim().toUpperCase()}
+              </div>
+            )}
+            {error && (
+              <div className="mono" style={{ fontSize: 10, color: 'var(--c-amber)', padding: '10px 12px', background: 'color-mix(in srgb, var(--c-amber) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--c-amber) 35%, transparent)', borderRadius: 8, letterSpacing: '0.04em', lineHeight: 1.6 }}>
+                {error}
+              </div>
+            )}
             <div>
               <div className="label" style={{ marginBottom: 7 }}>// INVITE LINK</div>
               <div style={{
