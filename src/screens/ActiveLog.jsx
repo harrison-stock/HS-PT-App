@@ -205,28 +205,45 @@ export function ActiveLog({ go, dayId, userId }) {
     firstRailIdx: 0
   }));
 
-  // Build the rail: exercises with a section-end divider slide inserted at
-  // each phase boundary (Pulse→Banded→Main→Cooldown).
+  // Build the rail: exercises (consecutive supersets merged into one card),
+  // with a section-end divider slide at each phase boundary.
   const railItems = [];
-  exercises.forEach((e, i) => {
-    railItems.push({ type: 'ex', ex: e, exIdx: i });
-    const next = exercises[i + 1];
-    if (next && next.phase !== e.phase) {
-      railItems.push({ type: 'divider', phaseId: e.phase, nextPhaseId: next.phase });
+  for (let i = 0; i < exercises.length;) {
+    const e = exercises[i];
+    let last = e;
+    if (e.ss != null) {
+      const group = [e];
+      let j = i + 1;
+      while (j < exercises.length && exercises[j].ss === e.ss) { group.push(exercises[j]); j++; }
+      railItems.push({ type: 'superset', group, exIdx: i });
+      last = group[group.length - 1];
+      i = j;
+    } else {
+      railItems.push({ type: 'ex', ex: e, exIdx: i });
+      i += 1;
     }
-  });
+    const next = exercises[i];
+    if (next && next.phase !== last.phase) {
+      railItems.push({ type: 'divider', phaseId: last.phase, nextPhaseId: next.phase });
+    }
+  }
   // Final "cooldown complete · ready to finish?" slide
   if (exercises.length) {
     railItems.push({ type: 'finish', phaseId: exercises[exercises.length - 1].phase });
   }
   // Resolve each phase's first rail index for the strip nav
+  const railPhase = (it) => it.type === 'ex' ? it.ex.phase : it.type === 'superset' ? it.group[0].phase : null;
   phaseCounts.forEach((p) => {
-    p.firstRailIdx = railItems.findIndex((it) => it.type === 'ex' && it.ex.phase === p.id);
+    p.firstRailIdx = railItems.findIndex((it) => railPhase(it) === p.id);
   });
 
   const activeItem = railItems[activeIdx] || railItems[0];
-  const ex = activeItem.type === 'ex' ? activeItem.ex : exercises[Math.max(0, activeItem ? exercises.findIndex((e) => e.phase === activeItem.phaseId) : 0)];
-  const currentPhaseId = activeItem.type === 'ex' ? activeItem.ex.phase : activeItem.phaseId;
+  const ex = activeItem.type === 'ex' ? activeItem.ex
+    : activeItem.type === 'superset' ? activeItem.group[0]
+    : exercises[Math.max(0, activeItem ? exercises.findIndex((e) => e.phase === activeItem.phaseId) : 0)];
+  const currentPhaseId = activeItem.type === 'ex' ? activeItem.ex.phase
+    : activeItem.type === 'superset' ? activeItem.group[0].phase
+    : activeItem.phaseId;
   const lastIdx = railItems.length - 1;
 
   if (dbLoading) return (
@@ -325,6 +342,15 @@ export function ActiveLog({ go, dayId, userId }) {
         <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setComplete(true); }} /> :
         it.type === 'divider' ?
         <SectionDivider key={`d${i}`} phaseId={it.phaseId} nextPhaseId={it.nextPhaseId} exercises={exercises} onContinue={() => setActiveIdx(i + 1)} /> :
+        it.type === 'superset' ?
+        <SupersetCard key={`ss${it.group[0].id}`} group={it.group}
+          intro={it.exIdx === 0 ? dayIntro : ''}
+          onComplete={(exId, si) => completeSet(exId, si)}
+          onUpdate={(exId, si, p) => updateSet(exId, si, p)}
+          onAddRound={() => it.group.forEach(e => addSet(e.id, 'WORK'))}
+          onTitle={(exId) => setAltsForId(exId)}
+          onComment={dayId ? (exId) => setCommentForId(exId) : null}
+          onHistory={(exId) => setHistoryForId(exId)} /> :
         <ExerciseCard key={it.ex.id} ex={it.ex} idx={it.exIdx} total={exercises.length}
         intro={it.exIdx === 0 ? dayIntro : ''}
         onComplete={(si) => completeSet(it.ex.id, si)}
@@ -758,6 +784,89 @@ function FinishSlide({ phaseId, onFinish }) {
       </div>
     </div>);
 
+}
+
+// ── SUPERSET CARD (interleaved, round-based) ─────────────────────
+// Renders a superset group as rounds: round 1 = one set of each exercise,
+// round 2 = the next set of each, etc., so the client alternates A1→A2→A1…
+function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onComment, onHistory, intro }) {
+  const phase = PHASES.find((p) => p.id === group[0].phase);
+  const phaseColor = phase?.accent || 'var(--accent)';
+  const maxRounds = Math.max(...group.map((e) => e.sets.length));
+  const letter = (gi) => `${String.fromCharCode(65)}${gi + 1}`; // A1, A2, …
+
+  return (
+    <div style={{ flex: '0 0 100%', width: '100%', height: '100%', scrollSnapAlign: 'center', padding: '0 14px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="scroller" style={{ height: '100%', paddingBottom: 10 }}>
+        {intro && (
+          <div className="card" style={{ marginBottom: 12, padding: 12, borderColor: 'color-mix(in srgb, var(--accent) 30%, var(--line))', background: 'var(--accent-soft)' }}>
+            <div className="label" style={{ color: 'var(--accent)', marginBottom: 5 }}>// TODAY'S WORKOUT</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{intro}</div>
+          </div>
+        )}
+
+        {/* Superset header */}
+        <div style={{ marginTop: 4, marginBottom: 14 }}>
+          <div className="mono" style={{ display: 'inline-block', fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--accent-2)', background: 'color-mix(in srgb, var(--accent-2) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-2) 40%, transparent)', borderRadius: 6, padding: '3px 8px', marginBottom: 10 }}>
+            ⛓ SUPERSET · {group.length} EXERCISES
+          </div>
+          {group.map((e, gi) => (
+            <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: gi < group.length - 1 ? '1px dashed var(--line)' : 'none' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: `url('${e.img}') center/cover, var(--bg-3)`, border: '1px solid var(--line)', flexShrink: 0 }}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="mono" style={{ fontSize: 9, fontWeight: 800, color: 'var(--accent-2)', letterSpacing: '0.06em' }}>{letter(gi)}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
+              </div>
+              <button onClick={() => onTitle(e.id)} aria-label="Swap" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconSwap size={13}/></Hex></button>
+              <button onClick={() => onHistory(e.id)} aria-label="History" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconTrend size={13}/></Hex></button>
+              {onComment && <button onClick={() => onComment(e.id)} aria-label="Comments" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconClipboard size={13}/></Hex></button>}
+            </div>
+          ))}
+        </div>
+
+        {/* Rounds */}
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)' }}>
+            <span className="label">// SUPERSET ROUNDS</span>
+          </div>
+          {Array.from({ length: maxRounds }).map((_, r) => (
+            <div key={r} style={{ borderBottom: '1px solid var(--line)' }}>
+              <div className="mono" style={{ fontSize: 9, color: phaseColor, letterSpacing: '0.12em', fontWeight: 700, padding: '8px 14px 2px' }}>ROUND {r + 1}</div>
+              {group.map((e, gi) => {
+                const s = e.sets[r];
+                if (!s) return null;
+                return (
+                  <div key={e.id} style={{ padding: '0 0 2px' }}>
+                    <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '2px 14px 0' }}>
+                      {letter(gi)} · {e.name.toUpperCase()}
+                    </div>
+                    <LogSetRow idx={r} setNum={r + 1} set={s} color={phaseColor}
+                      onComplete={() => onComplete(e.id, r)}
+                      onRpe={(rpe) => onUpdate(e.id, r, { rpe })}
+                      onReps={(reps) => onUpdate(e.id, r, { reps })}
+                      onKg={(kg) => onUpdate(e.id, r, { kg })}
+                      onKind={(kind) => onUpdate(e.id, r, kindPatch(s, kind))} />
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <button onClick={onAddRound} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center', padding: '12px 0', color: phaseColor, fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.12em', fontWeight: 700 }}>+ ADD ROUND</button>
+        </div>
+
+        {group.some((e) => e.coach) && (
+          <div className="card" style={{ marginTop: 12, padding: 12, display: 'grid', gap: 8 }}>
+            {group.map((e) => e.coach ? (
+              <div key={e.id}>
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent-2)', letterSpacing: '0.06em', marginBottom: 3 }}>{e.name.toUpperCase()}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>{e.coach}</div>
+              </div>
+            ) : null)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ── SECTION-END DIVIDER (between phases) ─────────────────────────
