@@ -215,6 +215,7 @@ export default function App() {
   else if (screen === 'body')       ScreenEl = <Body go={navigate} userId={activeUserId} trainerId={impersonating ? session.user.id : profile?.trainer_id}/>;
   else if (screen === 'resources')  ScreenEl = <Resources go={navigate} userId={session.user.id} isTrainer={navIsTrainer}/>;
   else if (screen === 'coach')      ScreenEl = <Coach go={navigate} trainerId={session.user.id} unread={unread}/>;
+  else if (screen === 'programmes') ScreenEl = <Coach go={navigate} trainerId={session.user.id} only="programmes"/>;
   else if (screen === 'exercises')  ScreenEl = <Exercises trainerId={session.user.id}/>;
   else if (screen === 'forms')      ScreenEl = <Forms trainerId={session.user.id}/>;
   else if (screen === 'notifications') ScreenEl = <Notifications go={navigate} userId={session.user.id} home={homeScreen}/>;
@@ -280,10 +281,11 @@ export default function App() {
 
 function BottomNav({ screen, go, isTrainer }) {
   const items = isTrainer ? [
-    { id: 'coach',     label: 'COACH',    Icon: IconBolt },
-    { id: 'resources', label: 'RECIPES',  Icon: IconBook },
-    { id: 'exercises', label: 'EXERCISES', Icon: IconDumbbell },
-    { id: 'forms',     label: 'FORMS',    Icon: IconDoc },
+    { id: 'coach',      label: 'COACH',     Icon: IconBolt },
+    { id: 'programmes', label: 'PROGRAMS',  Icon: IconCalendar },
+    { id: 'exercises',  label: 'EXERCISES', Icon: IconDumbbell },
+    { id: 'forms',      label: 'FORMS',     Icon: IconDoc },
+    { id: 'resources',  label: 'RECIPES',   Icon: IconBook },
   ] : [
     { id: 'dashboard', label: 'HOME',     Icon: IconHome },
     { id: 'workouts',  label: 'TRAIN',    Icon: IconCalendar },

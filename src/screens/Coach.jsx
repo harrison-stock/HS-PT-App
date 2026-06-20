@@ -22,7 +22,7 @@ function computeStreak(daysSet, lastDate) {
   return streak;
 }
 
-export function Coach({ go, trainerId, unread = 0 }) {
+export function Coach({ go, trainerId, unread = 0, only }) {
   const [tab, setTab]                       = React.useState('clients');
   const [clientId, setClientId]             = React.useState(null);
   const [programmeId, setProgrammeId]       = React.useState(null);
@@ -200,6 +200,36 @@ export function Coach({ go, trainerId, unread = 0 }) {
     return <ProgrammeBuilder programme={builderProgramme} onClose={closeBuilder} openRoadmap={builderOpenRoadmap} trainerId={trainerId}/>;
   }
 
+  // Dedicated Programmes hub (its own bottom-nav tab).
+  if (only === 'programmes') {
+    return (
+      <div className="scroller coach-wrap">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '8px 0 14px' }}>
+          <div>
+            <div className="label">// COACH</div>
+            <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>PROGRAMMES</div>
+          </div>
+        </div>
+        <ProgrammesTab
+          programmes={programmes} loading={loadingProgs}
+          onPick={setProgrammeId} onNew={newProgramme}
+          onEdit={openBuilder}
+          onDuplicate={duplicateProgramme}
+          onDelete={async (id) => { await deleteProgramme(id); }}
+        />
+        {programme && (
+          <ProgrammeSheet p={programme}
+            trainerId={trainerId}
+            onClose={() => setProgrammeId(null)}
+            onEdit={() => openBuilder(programme)}
+            onDuplicate={async () => { await duplicateProgramme(programme); setProgrammeId(null); }}
+            onDelete={async () => { await deleteProgramme(programme.id); setProgrammeId(null); }}
+          />
+        )}
+      </div>
+    );
+  }
+
   const pendingCount = clients.filter(c => c.managed).length;
   const kpis = {
     active:     clients.filter(c => !c.managed).length,
@@ -210,7 +240,6 @@ export function Coach({ go, trainerId, unread = 0 }) {
 
   const tabs = [
     { id: 'clients',    label: 'Clients',    count: loadingClients ? null : clients.length },
-    { id: 'programmes', label: 'Programmes', count: loadingProgs ? null : programmes.length },
     { id: 'schedule',   label: 'Today',      count: todaySchedule?.length || null },
   ];
 
@@ -226,13 +255,6 @@ export function Coach({ go, trainerId, unread = 0 }) {
       </div>
 
       {tab === 'clients'    && <ClientsTab clients={clients} loading={loadingClients} onPick={setClientId} onInvite={() => setInviteOpen(true)}/>}
-      {tab === 'programmes' && <ProgrammesTab
-        programmes={programmes} loading={loadingProgs}
-        onPick={setProgrammeId} onNew={newProgramme}
-        onEdit={openBuilder}
-        onDuplicate={duplicateProgramme}
-        onDelete={async (id) => { await deleteProgramme(id); }}
-      />}
       {tab === 'schedule'   && <ScheduleTab schedule={todaySchedule} clients={clients} onPick={setClientId}/>}
 
       {activeClient && (
