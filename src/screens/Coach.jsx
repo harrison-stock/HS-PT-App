@@ -763,7 +763,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
       .single();
     if (invErr || !invite) { setSaving(false); setError(invErr?.message || 'Could not create invite link'); return; }
 
-    const url = `${window.location.origin}?invite=${invite.code}&tid=${trainerId}&name=${encodeURIComponent(clientName.trim())}`;
+    const url = `${window.location.origin}?invite=${invite.code}&tid=${trainerId}&mc=${mc.id}&name=${encodeURIComponent(clientName.trim())}`;
     setInviteUrl(url);
 
     // If an email was given, send a Supabase Auth invite email via the edge function.

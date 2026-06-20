@@ -25,6 +25,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const [expandedSetId, setExpandedSetId] = React.useState(null);
   const [saveError, setSaveError]         = React.useState(null);
   const [switchingEx, setSwitchingEx]     = React.useState(null); // { sIdx, eIdx }
+  const [addingSection, setAddingSection] = React.useState(null); // sIdx when picking from catalogue
 
   const phase = prog.phaseList[phaseIdx];
   const days  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -102,7 +103,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         const ex = s.items[eOrd];
         const { data: exRow } = await supabase
           .from('section_exercises')
-          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', sort_order: eOrd })
+          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, sort_order: eOrd })
           .select('id').single();
         if (!exRow) continue;
 
@@ -133,13 +134,39 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     setDirty(true);
   };
   const delEx = (sIdx, eIdx) => { setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({ ...s, items: s.items.filter((_, i) => i !== eIdx) })) })); setDirty(true); };
-  const addEx = (sIdx) => {
+  const addEx = (sIdx, ex = {}) => {
     const id = 'x' + Date.now();
     setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({
-      ...s, items: [...s.items, { id, name: 'New Exercise', img: IMG_FALLBACK, timed: false, tempo: '', coachNotes: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6 })] }],
+      ...s, items: [...s.items, { id, name: ex.name || 'New Exercise', img: ex.img || IMG_FALLBACK, timed: false, tempo: '', coachNotes: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6 })] }],
     })) }));
     setDirty(true);
     setExpandedExId(id);
+  };
+
+  // ── Supersets — group an exercise with the one above it ────────
+  const linkSuperset = (sIdx, eIdx) => {
+    if (eIdx <= 0) return;
+    setDay(d => ({ ...d, sections: d.sections.map((s, si) => {
+      if (si !== sIdx) return s;
+      const items = [...s.items];
+      const prev = items[eIdx - 1];
+      let g = prev.ssGroup;
+      if (g == null) { g = items.reduce((m, it) => Math.max(m, it.ssGroup || 0), 0) + 1; items[eIdx - 1] = { ...prev, ssGroup: g }; }
+      items[eIdx] = { ...items[eIdx], ssGroup: g };
+      return { ...s, items };
+    }) }));
+    setDirty(true);
+  };
+  const unlinkSuperset = (sIdx, eIdx) => {
+    setDay(d => ({ ...d, sections: d.sections.map((s, si) => {
+      if (si !== sIdx) return s;
+      let items = s.items.map((it, i) => i === eIdx ? { ...it, ssGroup: null } : it);
+      const counts = {};
+      items.forEach(it => { if (it.ssGroup != null) counts[it.ssGroup] = (counts[it.ssGroup] || 0) + 1; });
+      items = items.map(it => (it.ssGroup != null && counts[it.ssGroup] < 2) ? { ...it, ssGroup: null } : it);
+      return { ...s, items };
+    }) }));
+    setDirty(true);
   };
 
   // ── Set edits ─────────────────────────────────────────────────
@@ -308,8 +335,10 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
                 onUpdateEx={(eIdx, patch) => updateEx(sIdx, eIdx, patch)}
                 onDupEx={(eIdx) => dupEx(sIdx, eIdx)}
                 onDelEx={(eIdx) => delEx(sIdx, eIdx)}
-                onAddEx={() => addEx(sIdx)}
+                onAddEx={() => setAddingSection(sIdx)}
                 onSwitchEx={(eIdx) => setSwitchingEx({ sIdx, eIdx })}
+                onSuperset={(eIdx) => linkSuperset(sIdx, eIdx)}
+                onUnsuperset={(eIdx) => unlinkSuperset(sIdx, eIdx)}
                 onUpdateSet={(eIdx, setIdx, patch) => updateSet(sIdx, eIdx, setIdx, patch)}
                 onAddSet={(eIdx, kind) => addSet(sIdx, eIdx, kind)}
                 onDelSet={(eIdx, i) => delSet(sIdx, eIdx, i)}
@@ -325,6 +354,12 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
                   updateEx(switchingEx.sIdx, switchingEx.eIdx, { name, img });
                   setSwitchingEx(null);
                 }}
+              />
+            )}
+            {addingSection !== null && (
+              <ExercisePicker
+                onClose={() => setAddingSection(null)}
+                onPick={({ name, img }) => { addEx(addingSection, { name, img }); setAddingSection(null); }}
               />
             )}
 
@@ -564,8 +599,16 @@ function RestDay({ onAdd }) {
 }
 
 // ── SECTION ───────────────────────────────────────────────────────
-function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const color = sectionColor(s.kind);
+  // Superset labels: A1/A2, B1/B2… per consecutive grouped run.
+  const seen = {}; let li = 0; const cnt = {};
+  const ssLabels = s.items.map(it => {
+    if (it.ssGroup == null) return null;
+    if (!(it.ssGroup in seen)) seen[it.ssGroup] = String.fromCharCode(65 + li++);
+    cnt[it.ssGroup] = (cnt[it.ssGroup] || 0) + 1;
+    return `${seen[it.ssGroup]}${cnt[it.ssGroup]}`;
+  });
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -579,6 +622,8 @@ function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet
         {s.items.map((e, eIdx) => (
           <ExerciseEditor key={e.id} e={e} color={color}
             expanded={expandedExId === e.id} expandedSetId={expandedSetId}
+            ssLabel={ssLabels[eIdx]} canSuperset={eIdx > 0} grouped={e.ssGroup != null}
+            onSuperset={() => onSuperset(eIdx)} onUnsuperset={() => onUnsuperset(eIdx)}
             onExpand={() => onExpandEx(e.id)}
             onExpandSet={onExpandSet}
             onUpdateEx={(patch) => onUpdateEx(eIdx, patch)}
@@ -603,17 +648,20 @@ function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet
 }
 
 // ── EXERCISE EDITOR ───────────────────────────────────────────────
-function ExerciseEditor({ e, color, expanded, expandedSetId, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperset, grouped, onSuperset, onUnsuperset, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const workSets = e.setsList.filter(s => s.kind !== 'WARMUP');
   const summary  = workSets.length === 0 ? `${e.setsList.length} warm-up` : `${e.setsList.length} sets · ${summarize(e)}`;
 
   return (
-    <div style={{ background: 'var(--bg-2)', border: '1px solid '+(expanded?color:'var(--line)'), borderLeft: `2px solid ${color}`, borderRadius: 10, overflow: 'hidden', boxShadow: expanded ? `0 0 calc(8px * var(--glow)) color-mix(in srgb, ${color} 30%, transparent)` : 'none' }}>
+    <div style={{ background: 'var(--bg-2)', border: '1px solid '+(expanded?color:'var(--line)'), borderLeft: grouped ? '2px solid var(--accent-2)' : `2px solid ${color}`, borderRadius: 10, overflow: 'hidden', boxShadow: expanded ? `0 0 calc(8px * var(--glow)) color-mix(in srgb, ${color} 30%, transparent)` : 'none' }}>
       <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', width: '100%', display: 'grid', gridTemplateColumns: '40px 1fr auto', gap: 10, alignItems: 'center', padding: 10 }}>
         <div style={{ width: 40, height: 40, borderRadius: 8, background: `url('${e.img}') center/cover, var(--bg-3)`, border: '1px solid var(--line)' }}/>
         <div style={{ minWidth: 0 }}>
-          <input value={e.name} onClick={ev => ev.stopPropagation()} onChange={ev => onUpdateEx({ name: ev.target.value })}
-            style={{ width: '100%', background: 'transparent', border: 0, outline: 'none', color: 'var(--text)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: 0 }}/>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {ssLabel && <span className="mono" style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--accent-2)', background: 'color-mix(in srgb, var(--accent-2) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-2) 40%, transparent)', borderRadius: 5, padding: '2px 5px', flexShrink: 0 }}>SS {ssLabel}</span>}
+            <input value={e.name} onClick={ev => ev.stopPropagation()} onChange={ev => onUpdateEx({ name: ev.target.value })}
+              style={{ width: '100%', background: 'transparent', border: 0, outline: 'none', color: 'var(--text)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: 0 }}/>
+          </div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 2 }}>{summary}</div>
         </div>
         <div style={{ color: 'var(--text-3)', transform: expanded ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform .2s' }}>
@@ -689,10 +737,15 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, onExpand, onExpandS
             </div>
           </div>
 
-          <div style={{ marginTop: 14, marginBottom: 8 }}>
-            <button onClick={onSwitchEx} className="btn-ghost" style={{ width: '100%', padding: '8px 10px', fontSize: 10 }}>
-              ⇄ SWITCH EXERCISE
+          <div style={{ marginTop: 14, marginBottom: 8, display: 'flex', gap: 6 }}>
+            <button onClick={onSwitchEx} className="btn-ghost" style={{ flex: 1, padding: '8px 10px', fontSize: 10 }}>
+              ⇄ SWITCH
             </button>
+            {grouped ? (
+              <button onClick={onUnsuperset} className="btn-ghost" style={{ flex: 1, padding: '8px 10px', fontSize: 10, color: 'var(--accent-2)', borderColor: 'color-mix(in srgb, var(--accent-2) 45%, var(--line-strong))' }}>⛓ UNSUPERSET</button>
+            ) : canSuperset ? (
+              <button onClick={onSuperset} className="btn-ghost" style={{ flex: 1, padding: '8px 10px', fontSize: 10 }}>⛓ SUPERSET ↑</button>
+            ) : null}
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={onDupEx} className="btn-ghost" style={{ flex: 1, padding: '8px 10px', fontSize: 10 }}>⎘ DUPLICATE</button>
@@ -1067,7 +1120,7 @@ function dbToSections(sections) {
   return sections.map(s => ({
     kind: s.kind, title: s.title,
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
-      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'',
+      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null,
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
         id: 's'+st.id.slice(-8), kind: st.kind,
         repsText: st.reps_text || String(st.reps ?? 8),

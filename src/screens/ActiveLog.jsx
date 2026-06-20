@@ -57,7 +57,7 @@ export function ActiveLog({ go, dayId, userId }) {
     setDbLoading(true);
     supabase
       .from('programme_days')
-      .select(`id, intro, workout_sections ( id, kind, title, sort_order, section_exercises ( id, name, img_url, tempo, coach_notes, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, rest_secs, kind ) ) )`)
+      .select(`id, intro, workout_sections ( id, kind, title, sort_order, section_exercises ( id, name, img_url, tempo, coach_notes, superset_group, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, rest_secs, kind ) ) )`)
       .eq('id', dayId)
       .single()
       .then(({ data }) => {
@@ -77,7 +77,7 @@ export function ActiveLog({ go, dayId, userId }) {
                 }));
               rows.push({
                 id: ex.id, name: ex.name, img: ex.img_url || '',
-                phase, tempo: ex.tempo || '',
+                phase, tempo: ex.tempo || '', ss: ex.superset_group ?? null,
                 rest: parseInt((ex.exercise_sets || [])[0]?.rest_secs) || 60,
                 coach: ex.coach_notes || '',
                 sets, alternatives: [],
@@ -556,6 +556,11 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
 
         {/* Title + actions */}
         <div style={{ marginTop: 4, marginBottom: 18 }}>
+          {ex.ss != null && (
+            <div className="mono" style={{ display: 'inline-block', fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--accent-2)', background: 'color-mix(in srgb, var(--accent-2) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-2) 40%, transparent)', borderRadius: 6, padding: '3px 8px', marginBottom: 8 }}>
+              ⛓ SUPERSET
+            </div>
+          )}
           <div className="h-bold" style={{ fontSize: 23, fontWeight: 900, letterSpacing: '0.01em', lineHeight: 1.05, marginBottom: 14 }}>
             {ex.name.toUpperCase()}
           </div>

@@ -5,7 +5,7 @@ import { HexShape } from '../components/hex'
 export function Login() {
   const invite = React.useMemo(() => {
     const p = new URLSearchParams(window.location.search);
-    return { code: p.get('invite'), tid: p.get('tid'), name: p.get('name') };
+    return { code: p.get('invite'), tid: p.get('tid'), name: p.get('name'), mc: p.get('mc') };
   }, []);
 
   const [email, setEmail] = React.useState('')
@@ -28,7 +28,7 @@ export function Login() {
       if (err) setError(err.message)
     } else {
       const opts = invite.code
-        ? { options: { data: { name: invite.name || '', trainer_id: invite.tid || '' } } }
+        ? { options: { data: { name: invite.name || '', trainer_id: invite.tid || '', managed_client_id: invite.mc || '' } } }
         : {};
       const { error: err } = await supabase.auth.signUp({ email: email.trim(), password, ...opts })
       if (err) {
