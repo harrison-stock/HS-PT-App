@@ -271,7 +271,7 @@ export default function App() {
           }}>✕ EXIT</span>
         </div>
       )}
-      <div style={{ marginTop: clientViewId ? 48 : 0 }}>
+      <div key={screen} className="screen-enter" style={{ marginTop: clientViewId ? 48 : 0 }}>
         {ScreenEl}
       </div>
       {showNav && <BottomNav screen={screen} go={navigate} isTrainer={navIsTrainer}/>}

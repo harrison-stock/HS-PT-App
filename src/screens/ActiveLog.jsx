@@ -57,7 +57,7 @@ export function ActiveLog({ go, dayId, userId }) {
     setDbLoading(true);
     supabase
       .from('programme_days')
-      .select(`id, intro, workout_sections ( id, kind, title, sort_order, section_exercises ( id, name, img_url, tempo, coach_notes, superset_group, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, rest_secs, kind ) ) )`)
+      .select(`id, intro, workout_sections ( id, kind, title, sort_order, section_exercises ( id, name, img_url, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, rest_secs, kind ) ) )`)
       .eq('id', dayId)
       .single()
       .then(({ data }) => {
@@ -77,10 +77,12 @@ export function ActiveLog({ go, dayId, userId }) {
                 }));
               rows.push({
                 id: ex.id, name: ex.name, img: ex.img_url || '',
+                base: { name: ex.name, img: ex.img_url || '' },
                 phase, tempo: ex.tempo || '', ss: ex.superset_group ?? null,
                 rest: parseInt((ex.exercise_sets || [])[0]?.rest_secs) || 60,
                 coach: ex.coach_notes || '',
-                sets, alternatives: [],
+                sets,
+                alternatives: (ex.alternates || []).map(a => ({ name: a.name, img: a.img || '', target: '', reason: 'Alternate' })),
               });
             }
           }
@@ -172,6 +174,7 @@ export function ActiveLog({ go, dayId, userId }) {
       return {
         ...e,
         name: alt.name,
+        img: alt.img || e.img,
         target: alt.target,
         // keep same set scheme; reset perf
         sets: e.sets.map((s) => ({ ...s, done: false, active: false, rpe: null }))
@@ -1200,32 +1203,30 @@ function AlternativesSheet({ ex, onClose, onPick }) {
         </div>
 
         <div className="label" style={{ margin: '0 4px 8px' }}>// OPTIONS</div>
-        <div style={{ display: 'grid', gap: 8 }}>
-          {(ex.alternatives || []).map((alt) =>
-          <button key={alt.id} onClick={() => onPick(alt)}
-          style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-              <div className="card" style={{
-              padding: 12, display: 'flex', alignItems: 'center', gap: 12
-            }}>
-                <div style={{
-                width: 40, height: 40, borderRadius: 8, flexShrink: 0,
-                background: 'var(--bg-3)',
-                display: 'grid', placeItems: 'center',
-                color: 'var(--text-3)'
-              }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{alt.name}</div>
-                  <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 2 }}>
-                    {alt.target.toUpperCase()} · {alt.reason.toUpperCase()}
+        {(() => {
+          // Offer the original (to revert) + coach alternates, minus the current pick.
+          const opts = [{ name: ex.base?.name || ex.name, img: ex.base?.img || ex.img, target: '', reason: 'Original', _orig: true },
+            ...(ex.alternatives || [])].filter(o => o.name !== ex.name);
+          if (opts.length === 0) return <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '4px 4px 10px' }}>No alternates set for this exercise.</div>;
+          return (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {opts.map((alt, i) =>
+              <button key={i} onClick={() => onPick(alt)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
+                <div className="card" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 8, flexShrink: 0, background: alt.img ? `url('${alt.img}') center/cover, var(--bg-3)` : 'var(--bg-3)', border: '1px solid var(--line)' }}/>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{alt.name}</div>
+                    <div className="mono" style={{ fontSize: 9, color: alt._orig ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.08em', marginTop: 2 }}>
+                      {alt._orig ? 'ORIGINAL' : 'ALTERNATE'}
+                    </div>
                   </div>
+                  <IconChevronRight size={14} style={{ color: 'var(--text-3)' }} />
                 </div>
-                <IconChevronRight size={14} style={{ color: 'var(--text-3)' }} />
-              </div>
-            </button>
-          )}
-        </div>
+              </button>
+              )}
+            </div>
+          );
+        })()}
 
         <button onClick={onClose} className="btn-ghost" style={{ width: '100%', marginTop: 14 }}>
           KEEP CURRENT

@@ -1,7 +1,7 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
 import { HexBackButton, HexShape } from '../components/hex'
-import { IconChevronRight } from '../components/icons'
+import { IconChevronRight, IconX2 } from '../components/icons'
 import { loadExercises, videoThumb } from '../lib/exercises'
 
 const IMG_FALLBACK = 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70';
@@ -26,6 +26,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const [saveError, setSaveError]         = React.useState(null);
   const [switchingEx, setSwitchingEx]     = React.useState(null); // { sIdx, eIdx }
   const [addingSection, setAddingSection] = React.useState(null); // sIdx when picking from catalogue
+  const [altFor, setAltFor]               = React.useState(null); // { sIdx, eIdx } when adding an alternate
 
   const phase = prog.phaseList[phaseIdx];
   const days  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -103,7 +104,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         const ex = s.items[eOrd];
         const { data: exRow } = await supabase
           .from('section_exercises')
-          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, sort_order: eOrd })
+          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd })
           .select('id').single();
         if (!exRow) continue;
 
@@ -142,6 +143,10 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     setDirty(true);
     setExpandedExId(id);
   };
+
+  // ── Alternates — swap options the client can pick during a workout ──
+  const addAlternate = (sIdx, eIdx, ex) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, alternates: [...(e.alternates || []), { name: ex.name, img: ex.img }] }))); setDirty(true); };
+  const delAlternate = (sIdx, eIdx, idx) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, alternates: (e.alternates || []).filter((_, i) => i !== idx) }))); setDirty(true); };
 
   // ── Supersets — group an exercise with the one above it ────────
   const linkSuperset = (sIdx, eIdx) => {
@@ -339,6 +344,8 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
                 onSwitchEx={(eIdx) => setSwitchingEx({ sIdx, eIdx })}
                 onSuperset={(eIdx) => linkSuperset(sIdx, eIdx)}
                 onUnsuperset={(eIdx) => unlinkSuperset(sIdx, eIdx)}
+                onAddAlt={(eIdx) => setAltFor({ sIdx, eIdx })}
+                onDelAlt={(eIdx, idx) => delAlternate(sIdx, eIdx, idx)}
                 onUpdateSet={(eIdx, setIdx, patch) => updateSet(sIdx, eIdx, setIdx, patch)}
                 onAddSet={(eIdx, kind) => addSet(sIdx, eIdx, kind)}
                 onDelSet={(eIdx, i) => delSet(sIdx, eIdx, i)}
@@ -360,6 +367,12 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               <ExercisePicker
                 onClose={() => setAddingSection(null)}
                 onPick={({ name, img }) => { addEx(addingSection, { name, img }); setAddingSection(null); }}
+              />
+            )}
+            {altFor !== null && (
+              <ExercisePicker
+                onClose={() => setAltFor(null)}
+                onPick={({ name, img }) => { addAlternate(altFor.sIdx, altFor.eIdx, { name, img }); setAltFor(null); }}
               />
             )}
 
@@ -599,7 +612,7 @@ function RestDay({ onAdd }) {
 }
 
 // ── SECTION ───────────────────────────────────────────────────────
-function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const color = sectionColor(s.kind);
   // Superset labels: A1/A2, B1/B2… per consecutive grouped run.
   const seen = {}; let li = 0; const cnt = {};
@@ -624,6 +637,7 @@ function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet
             expanded={expandedExId === e.id} expandedSetId={expandedSetId}
             ssLabel={ssLabels[eIdx]} canSuperset={eIdx > 0} grouped={e.ssGroup != null}
             onSuperset={() => onSuperset(eIdx)} onUnsuperset={() => onUnsuperset(eIdx)}
+            onAddAlt={() => onAddAlt(eIdx)} onDelAlt={(idx) => onDelAlt(eIdx, idx)}
             onExpand={() => onExpandEx(e.id)}
             onExpandSet={onExpandSet}
             onUpdateEx={(patch) => onUpdateEx(eIdx, patch)}
@@ -648,7 +662,7 @@ function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet
 }
 
 // ── EXERCISE EDITOR ───────────────────────────────────────────────
-function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperset, grouped, onSuperset, onUnsuperset, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperset, grouped, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const workSets = e.setsList.filter(s => s.kind !== 'WARMUP');
   const summary  = workSets.length === 0 ? `${e.setsList.length} warm-up` : `${e.setsList.length} sets · ${summarize(e)}`;
 
@@ -735,6 +749,21 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
               <button onClick={() => onAddSet('FAILURE')} style={addSetBtn('var(--c-coral)')}>+ FAILURE</button>
               <button onClick={() => onAddSet('PARTIAL')} style={addSetBtn('var(--c-pink)')}>+ PARTIAL</button>
             </div>
+          </div>
+
+          {/* Alternates — swap options the client can switch to */}
+          <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+            <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600, marginBottom: 8 }}>ALTERNATES <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· client can swap to these</span></div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {(e.alternates || []).map((alt, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8 }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 6, background: `url('${alt.img || IMG_FALLBACK}') center/cover, var(--bg-3)`, border: '1px solid var(--line)', flexShrink: 0 }}/>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{alt.name}</span>
+                  <button onClick={() => onDelAlt(idx)} aria-label="Remove alternate" style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)', padding: 2 }}><IconX2 size={12}/></button>
+                </div>
+              ))}
+            </div>
+            <button onClick={onAddAlt} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center', marginTop: 8, padding: '8px 0', border: '1px dashed var(--line-strong)', borderRadius: 8, color: 'var(--accent)', fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.12em', fontWeight: 700 }}>+ ADD ALTERNATE</button>
           </div>
 
           <div style={{ marginTop: 14, marginBottom: 8, display: 'flex', gap: 6 }}>
@@ -1120,7 +1149,7 @@ function dbToSections(sections) {
   return sections.map(s => ({
     kind: s.kind, title: s.title,
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
-      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null,
+      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
         id: 's'+st.id.slice(-8), kind: st.kind,
         repsText: st.reps_text || String(st.reps ?? 8),

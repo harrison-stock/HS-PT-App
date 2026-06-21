@@ -307,6 +307,29 @@ body:has([data-role="trainer"]) {
   50% { box-shadow: 0 0 16px 4px var(--accent-glow); }
 }
 
+/* ── Subtle motion / polish ─────────────────────────────────────── */
+@keyframes screenIn   { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes slideInRight { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn     { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp    { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+@keyframes slideRight { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes sheetUp    { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes popIn      { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+
+.screen-enter { animation: screenIn .26s cubic-bezier(.22,.61,.36,1); }
+
+/* Tactile press feedback on the bottom nav + primary/ghost buttons */
+.bnav button, .btn-primary, .btn-ghost { transition: transform .12s ease, opacity .12s ease; }
+.bnav button:active, .btn-primary:active, .btn-ghost:active { transform: scale(0.95); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
 /* Tab pill */
 .seg {
   display: inline-flex;
