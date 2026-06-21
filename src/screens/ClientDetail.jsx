@@ -96,41 +96,60 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go 
   );
 }
 
-// ── OVERVIEW — at-a-glance client dashboard ──────────────────────
+// ── OVERVIEW — Everfit-style client home the coach jots notes on ──
 function OverviewTab({ c, go, onClose, onTab }) {
   const [d, setD] = React.useState(null);
   const today = new Date().toISOString().slice(0, 10);
+  const table = c.managed ? 'managed_clients' : 'profiles';
 
   React.useEffect(() => {
     let alive = true;
     (async () => {
-      const [sessions, injuries, tasks, metric, next] = await Promise.all([
+      const [sessions, injuries, tasks, metrics, next, goal, notes] = await Promise.all([
         supabase.from('workout_sessions').select('id, started_at, completed_at')
-          .eq('client_id', c.id).order('started_at', { ascending: false }).limit(5),
+          .eq('client_id', c.id).order('started_at', { ascending: false }).limit(4),
         supabase.from('client_injuries').select('id, muscle_group, laterality, severity').eq('client_id', c.id).is('resolved_at', null),
         supabase.from('client_tasks').select('id').eq('client_id', c.id).is('completed_at', null),
         supabase.from('body_metrics').select('weight_kg, recorded_at').eq('client_id', c.id)
-          .not('weight_kg', 'is', null).order('recorded_at', { ascending: false }).limit(1).maybeSingle(),
+          .not('weight_kg', 'is', null).order('recorded_at', { ascending: false }).limit(2),
         supabase.from('client_workouts')
           .select('scheduled_date, programme_days(programme_phases(name, programmes(name)))')
           .eq('client_id', c.id).gte('scheduled_date', today).eq('status', 'scheduled')
           .order('scheduled_date').limit(1).maybeSingle(),
+        supabase.from('client_goals').select('title, description, target_date').eq('client_id', c.id)
+          .eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from(table).select('coach_notes, medical_notes').eq('id', c.id).maybeSingle(),
       ]);
       if (!alive) return;
+      const m = metrics.data || [];
       setD({
         sessions: sessions.data || [],
         injuries: injuries.data || [],
         openTasks: (tasks.data || []).length,
-        metric: metric.data || null,
+        metric: m[0] || null,
+        prevMetric: m[1] || null,
         next: next.data || null,
+        goal: goal.data || null,
+        coachNotes: notes.data?.coach_notes || '',
+        medicalNotes: notes.data?.medical_notes || '',
       });
     })();
     return () => { alive = false; };
   }, [c.id]);
 
+  const saveNote = (field) => async (value) => {
+    await supabase.from(table).update({ [field]: value }).eq('id', c.id);
+  };
+
   const next = d?.next;
   const phase = next?.programme_days?.programme_phases;
   const progLabel = phase ? [phase.programmes?.name, phase.name].filter(Boolean).join(' · ') : null;
+
+  const goal = d?.goal;
+  const daysToGoal = goal?.target_date
+    ? Math.round((new Date(goal.target_date) - new Date(today)) / 86400000) : null;
+
+  const wDelta = d?.metric && d?.prevMetric ? +(d.metric.weight_kg - d.prevMetric.weight_kg).toFixed(1) : null;
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -154,48 +173,55 @@ function OverviewTab({ c, go, onClose, onTab }) {
         <KpiCard label="INJURIES" value={d ? d.injuries.length : '—'}        color={d && d.injuries.length ? 'var(--c-coral)' : 'var(--text-2)'} />
       </div>
 
-      {/* Next session + programme */}
-      <div className="card" style={{ padding: 14 }}>
-        <div className="label" style={{ marginBottom: 6 }}>// NEXT SESSION</div>
-        {!d ? <Mono>LOADING…</Mono> : next ? (
-          <>
-            <div className="h-bold" style={{ fontSize: 15 }}>
-              {next.scheduled_date === today ? 'TODAY' : new Date(next.scheduled_date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()}
+      {/* Coach notes — the jot-down area */}
+      <NoteCard
+        label="// NOTES"
+        placeholder="Jot down anything about this client — preferences, cues, conversations, reminders…"
+        loading={!d}
+        initial={d?.coachNotes || ''}
+        onSave={saveNote('coach_notes')}
+      />
+
+      {/* Goal & countdown */}
+      <button onClick={() => onTab('goals')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
+        <div className="card" style={{ padding: 14 }}>
+          <div className="label" style={{ marginBottom: 8 }}>// GOAL</div>
+          {!d ? <Mono>LOADING…</Mono> : goal ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="h-bold" style={{ fontSize: 15, lineHeight: 1.25 }}>{goal.title}</div>
+                {goal.description && (
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    {goal.description}
+                  </div>
+                )}
+              </div>
+              {daysToGoal != null && (
+                <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                  <div className="h-bold" style={{ fontSize: 26, lineHeight: 1, color: daysToGoal < 0 ? 'var(--c-coral)' : 'var(--accent)' }}>
+                    {Math.abs(daysToGoal)}
+                  </div>
+                  <Mono style={{ marginTop: 3 }}>{daysToGoal < 0 ? 'DAYS OVER' : 'DAYS LEFT'}</Mono>
+                </div>
+              )}
             </div>
-            {progLabel && <Mono style={{ marginTop: 4 }}>{progLabel.toUpperCase()}</Mono>}
-          </>
-        ) : <Mono>No upcoming sessions scheduled</Mono>}
-      </div>
+          ) : <Mono>No goal set — tap to add one</Mono>}
+        </div>
+      </button>
 
-      {/* Quick stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <button onClick={() => onTab('data')} style={{ all: 'unset', cursor: 'pointer' }}>
-          <div className="card" style={{ padding: 12, height: '100%', boxSizing: 'border-box' }}>
-            <div className="label" style={{ marginBottom: 6 }}>LATEST WEIGH-IN</div>
-            {d?.metric ? (
-              <>
-                <div className="h-bold" style={{ fontSize: 18 }}>{d.metric.weight_kg}<span style={{ fontSize: 10, color: 'var(--text-3)' }}>kg</span></div>
-                <Mono style={{ marginTop: 2 }}>{new Date(d.metric.recorded_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</Mono>
-              </>
-            ) : <Mono>No data</Mono>}
-          </div>
-        </button>
-        <button onClick={() => onTab('tasks')} style={{ all: 'unset', cursor: 'pointer' }}>
-          <div className="card" style={{ padding: 12, height: '100%', boxSizing: 'border-box' }}>
-            <div className="label" style={{ marginBottom: 6 }}>OPEN TASKS</div>
-            <div className="h-bold" style={{ fontSize: 18, color: d?.openTasks ? 'var(--c-amber)' : 'var(--text)' }}>{d ? d.openTasks : '—'}</div>
-            <Mono style={{ marginTop: 2 }}>tap to manage</Mono>
-          </div>
-        </button>
-      </div>
-
-      {/* Active injuries */}
-      {d && d.injuries.length > 0 && (
-        <button onClick={() => onTab('body')} style={{ all: 'unset', cursor: 'pointer' }}>
-          <div className="card" style={{ padding: 12, borderColor: 'color-mix(in srgb, var(--c-coral) 35%, var(--line))' }}>
-            <div className="label" style={{ marginBottom: 8, color: 'var(--c-coral)' }}>// ACTIVE INJURIES · {d.injuries.length}</div>
+      {/* Limitations / injuries */}
+      <NoteCard
+        label="// LIMITATIONS & MEDICAL"
+        placeholder="Note any injuries, conditions or limitations to train around…"
+        accent="var(--c-coral)"
+        loading={!d}
+        initial={d?.medicalNotes || ''}
+        onSave={saveNote('medical_notes')}
+      >
+        {d && d.injuries.length > 0 && (
+          <button onClick={(e) => { e.stopPropagation(); onTab('body'); }} style={{ all: 'unset', cursor: 'pointer', display: 'block', marginTop: 10 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {d.injuries.slice(0, 6).map(inj => (
+              {d.injuries.slice(0, 8).map(inj => (
                 <span key={inj.id} className="mono" style={{
                   fontSize: 9, fontWeight: 700, padding: '4px 8px', borderRadius: 999,
                   color: SEV_COLOR[inj.severity],
@@ -204,12 +230,45 @@ function OverviewTab({ c, go, onClose, onTab }) {
                 }}>{injuryTitle(inj)}</span>
               ))}
             </div>
+          </button>
+        )}
+      </NoteCard>
+
+      {/* Body metrics + next session */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <button onClick={() => onTab('data')} style={{ all: 'unset', cursor: 'pointer' }}>
+          <div className="card" style={{ padding: 12, height: '100%', boxSizing: 'border-box' }}>
+            <div className="label" style={{ marginBottom: 6 }}>WEIGH-IN</div>
+            {d?.metric ? (
+              <>
+                <div className="h-bold" style={{ fontSize: 18 }}>{d.metric.weight_kg}<span style={{ fontSize: 10, color: 'var(--text-3)' }}>kg</span></div>
+                <Mono style={{ marginTop: 2 }}>
+                  {wDelta != null && wDelta !== 0 && (
+                    <span style={{ color: wDelta < 0 ? 'var(--accent)' : 'var(--c-amber)' }}>{wDelta > 0 ? '▲' : '▼'} {Math.abs(wDelta)}kg · </span>
+                  )}
+                  {new Date(d.metric.recorded_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                </Mono>
+              </>
+            ) : <Mono>No data</Mono>}
           </div>
         </button>
-      )}
+        <button onClick={() => onTab('training')} style={{ all: 'unset', cursor: 'pointer' }}>
+          <div className="card" style={{ padding: 12, height: '100%', boxSizing: 'border-box' }}>
+            <div className="label" style={{ marginBottom: 6 }}>NEXT SESSION</div>
+            {!d ? <Mono>…</Mono> : next ? (
+              <>
+                <div className="h-bold" style={{ fontSize: 15 }}>
+                  {next.scheduled_date === today ? 'TODAY' : new Date(next.scheduled_date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()}
+                </div>
+                {progLabel && <Mono style={{ marginTop: 3 }}>{progLabel.toUpperCase()}</Mono>}
+              </>
+            ) : <Mono>None scheduled</Mono>}
+          </div>
+        </button>
+      </div>
 
-      {/* Recent sessions */}
-      <div className="label">// RECENT SESSIONS</div>
+      {/* Recent updates */}
+      <div className="label">// RECENT UPDATES</div>
       {!d && <Mono>LOADING…</Mono>}
       {d && d.sessions.length === 0 && <EmptyState>No sessions logged yet</EmptyState>}
       {d?.sessions.map(s => {
@@ -225,6 +284,43 @@ function OverviewTab({ c, go, onClose, onTab }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Editable, auto-saving note card (saves on blur). Optional children render
+// below the textarea (e.g. injury chips).
+function NoteCard({ label, placeholder, initial, onSave, loading, accent, children }) {
+  const [val, setVal]     = React.useState(initial || '');
+  const [dirty, setDirty] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+  const col = accent || 'var(--accent)';
+
+  React.useEffect(() => { setVal(initial || ''); setDirty(false); }, [initial]);
+
+  const commit = async () => {
+    if (!dirty) return;
+    await onSave(val);
+    setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 1800);
+  };
+
+  return (
+    <div className="card" style={{ padding: 14, borderColor: accent ? `color-mix(in srgb, ${accent} 30%, var(--line))` : 'var(--line)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div className="label" style={{ color: accent || undefined }}>{label}</div>
+        {saved ? <Mono style={{ color: col }}>✓ SAVED</Mono> : dirty ? <Mono style={{ color: 'var(--c-amber)' }}>UNSAVED</Mono> : null}
+      </div>
+      {loading ? <Mono>LOADING…</Mono> : (
+        <textarea
+          value={val}
+          onChange={e => { setVal(e.target.value); setDirty(true); }}
+          onBlur={commit}
+          placeholder={placeholder}
+          rows={3}
+          style={{ ...fieldSt, resize: 'vertical', minHeight: 64 }}
+        />
+      )}
+      {children}
     </div>
   );
 }
