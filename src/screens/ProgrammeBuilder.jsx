@@ -1151,7 +1151,7 @@ const EXERCISE_LIBRARY = [
   { name: 'Diaphragmatic Breathing', img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', cat: 'COOLDOWN' },
 ];
 
-function ExercisePicker({ onClose, onPick }) {
+export function ExercisePicker({ onClose, onPick }) {
   const [query, setQuery] = React.useState('');
   const [lib, setLib] = React.useState(null);
 

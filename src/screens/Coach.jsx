@@ -5,6 +5,7 @@ import { IconBell, IconBolt, IconCalendar, IconCheck, IconChevronLeft, IconChevr
 import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { ClientDetail } from './ClientDetail'
 import { loadForms } from '../lib/forms'
+import { notify } from '../lib/notifications'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -253,6 +254,7 @@ export function Coach({ go, trainerId, unread = 0, only }) {
         {hubTab === 'adhoc' && (
           <AdhocTab
             workouts={adhocWorkouts} loading={loadingProgs}
+            clients={clients} trainerId={trainerId}
             onNew={newAdhoc} onEdit={openBuilder}
             onDuplicate={duplicateProgramme}
             onDelete={async (id) => { await deleteProgramme(id); }}
@@ -732,7 +734,8 @@ function ProgrammeCard({ p, onPick, onEdit, onDuplicate, onDelete }) {
 }
 
 // ── AD-HOC WORKOUTS TAB ─────────────────────────────────────────
-function AdhocTab({ workouts, loading, onNew, onEdit, onDuplicate, onDelete }) {
+function AdhocTab({ workouts, loading, clients, trainerId, onNew, onEdit, onDuplicate, onDelete }) {
+  const [assignTo, setAssignTo] = React.useState(null); // the workout being assigned
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -749,7 +752,9 @@ function AdhocTab({ workouts, loading, onNew, onEdit, onDuplicate, onDelete }) {
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
           {workouts.map(w => (
-            <ProgrammeCard key={w.id} p={w} onPick={() => onEdit(w)} onEdit={() => onEdit(w)} onDuplicate={() => onDuplicate(w)} onDelete={() => onDelete(w.id)} adhoc/>
+            <AdhocCard key={w.id} w={w}
+              onEdit={() => onEdit(w)} onAssign={() => setAssignTo(w)}
+              onDuplicate={() => onDuplicate(w)} onDelete={() => onDelete(w.id)}/>
           ))}
           {workouts.length === 0 && (
             <div className="card" style={{ padding: 28, textAlign: 'center' }}>
@@ -759,7 +764,130 @@ function AdhocTab({ workouts, loading, onNew, onEdit, onDuplicate, onDelete }) {
           )}
         </div>
       )}
+
+      {assignTo && (
+        <AssignAdhocSheet workout={assignTo} clients={clients} trainerId={trainerId} onClose={() => setAssignTo(null)}/>
+      )}
     </>
+  );
+}
+
+function AdhocCard({ w, onEdit, onAssign, onDuplicate, onDelete }) {
+  const [confirmDel, setConfirmDel] = React.useState(false);
+  const tagColor = TAG_COLOR(w.tag);
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <span className="chip" style={{ fontSize: 8, padding: '2px 6px', color: tagColor, borderColor: 'currentColor' }}>{w.tag}</span>
+        <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em' }}>SINGLE SESSION</span>
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{w.name}</div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button onClick={onAssign} className="btn-primary" style={{ flex: 1, fontSize: 10, padding: '9px 0', color: 'var(--heading-deep)' }}>ASSIGN</button>
+        <button onClick={onEdit} className="btn-ghost" style={{ flex: 1, fontSize: 10, padding: '9px 0' }}>EDIT</button>
+        <button onClick={onDuplicate} className="btn-ghost" style={{ fontSize: 10, padding: '9px 11px' }}>DUPLICATE</button>
+        <button onClick={() => { if (!confirmDel) { setConfirmDel(true); return; } onDelete(); }}
+          className="btn-ghost" style={{ fontSize: 10, padding: '9px 11px', borderColor: confirmDel ? 'var(--c-coral)' : 'var(--line-strong)', color: 'var(--c-coral)' }}>
+          {confirmDel ? 'CONFIRM' : 'DELETE'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TAG_COLOR(tag) {
+  return tag === 'STRENGTH' ? 'var(--accent)' : tag === 'ONBOARD' ? 'var(--c-amber)' : tag === 'REHAB' ? 'var(--c-coral)' : 'var(--c-blue)';
+}
+
+// Assign a one-off workout to a client on a date.
+function AssignAdhocSheet({ workout, clients, trainerId, onClose }) {
+  const [dayId, setDayId]   = React.useState(undefined); // undefined=loading, null=none
+  const [clientId, setClientId] = React.useState('');
+  const [date, setDate]     = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [q, setQ]           = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [done, setDone]     = React.useState(false);
+
+  React.useEffect(() => {
+    const phaseId = workout.phaseList?.[0]?.id;
+    if (!phaseId) { setDayId(null); return; }
+    supabase.from('programme_days').select('id').eq('phase_id', phaseId).order('week_index').order('day_of_week').limit(1).maybeSingle()
+      .then(({ data }) => setDayId(data?.id || null));
+  }, [workout.id]);
+
+  const filtered = (clients || []).filter(c => c.name.toLowerCase().includes(q.toLowerCase()));
+  const selected = clients?.find(c => c.id === clientId);
+
+  const assign = async () => {
+    if (!clientId || !dayId || !date || saving) return;
+    setSaving(true);
+    await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: dayId, scheduled_date: date });
+    if (selected && !selected.managed) {
+      notify({ recipientId: clientId, actorId: trainerId, kind: 'task', title: 'New workout assigned', body: workout.name, link: { screen: 'workouts' } });
+    }
+    setSaving(false); setDone(true);
+  };
+
+  return (
+    <SheetShell onClose={onClose}>
+      <div style={{ padding: '0 18px 14px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+        <div className="label" style={{ marginBottom: 4 }}>// ASSIGN WORKOUT</div>
+        <div className="h-bold" style={{ fontSize: 20 }}>{workout.name.toUpperCase()}</div>
+      </div>
+
+      {done ? (
+        <div style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center' }}>
+          <div>
+            <div style={{ fontSize: 30, color: 'var(--accent)', marginBottom: 10 }}>✓</div>
+            <div className="h-bold" style={{ fontSize: 16, marginBottom: 6 }}>WORKOUT ASSIGNED</div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 20 }}>
+              {selected?.name?.toUpperCase()} · {new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase()}
+            </div>
+            <button onClick={onClose} className="btn-primary" style={{ width: 200 }}>DONE</button>
+          </div>
+        </div>
+      ) : (
+        <div className="scroller" style={{ flex: 1, padding: '16px 18px', minHeight: 0, display: 'grid', gap: 14, alignContent: 'start' }}>
+          {dayId === null && (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--c-amber)', padding: '10px 12px', background: 'color-mix(in srgb, var(--c-amber) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--c-amber) 35%, transparent)', borderRadius: 8, lineHeight: 1.6 }}>
+              This workout has no session built yet — open it in EDIT and add some exercises first.
+            </div>
+          )}
+          <div>
+            <div className="label" style={{ marginBottom: 7 }}>// CLIENT</div>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search clients…" style={{ ...inviteInputSt, marginBottom: 8 }}/>
+            <div style={{ display: 'grid', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+              {filtered.map(c => (
+                <button key={c.id} onClick={() => setClientId(c.id)} style={{
+                  all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 10,
+                  background: clientId === c.id ? 'var(--accent-soft)' : 'var(--bg-2)',
+                  border: `1px solid ${clientId === c.id ? 'var(--accent)' : 'var(--line)'}`,
+                }}>
+                  <Hex size={28} style={{ background: c.accent, color: 'var(--on-accent)', fontFamily: 'Orbitron', fontSize: 9, fontWeight: 800 }}>{c.initials}</Hex>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: clientId === c.id ? 'var(--accent)' : 'var(--text)' }}>{c.name}</span>
+                  {c.managed && <span className="mono" style={{ fontSize: 8, color: 'var(--c-amber)', fontWeight: 700 }}>PENDING</span>}
+                  {clientId === c.id && <IconCheck size={13} style={{ color: 'var(--accent)' }}/>}
+                </button>
+              ))}
+              {filtered.length === 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', padding: '8px 2px' }}>No clients match.</div>}
+            </div>
+          </div>
+          <div>
+            <div className="label" style={{ marginBottom: 7 }}>// DATE</div>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inviteInputSt, appearance: 'auto' }}/>
+          </div>
+        </div>
+      )}
+
+      {!done && (
+        <div style={{ padding: '12px 18px 28px', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+          <button onClick={assign} disabled={!clientId || !dayId || !date || saving} className="btn-primary"
+            style={{ width: '100%', opacity: clientId && dayId && date ? 1 : 0.4, pointerEvents: clientId && dayId && date ? 'auto' : 'none' }}>
+            {saving ? 'ASSIGNING…' : 'ASSIGN WORKOUT →'}
+          </button>
+        </div>
+      )}
+    </SheetShell>
   );
 }
 
