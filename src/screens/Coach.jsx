@@ -1,9 +1,10 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
 import { Hex, HexBackButton } from '../components/hex'
-import { IconBell, IconBolt, IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconMore, IconUser } from '../components/icons'
+import { IconBell, IconBolt, IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconMore, IconUser, IconPlus, IconX2 } from '../components/icons'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { ClientDetail } from './ClientDetail'
+import { loadForms } from '../lib/forms'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -24,6 +25,7 @@ function computeStreak(daysSet, lastDate) {
 
 export function Coach({ go, trainerId, unread = 0, only }) {
   const [tab, setTab]                       = React.useState('clients');
+  const [hubTab, setHubTab]                 = React.useState('programmes');
   const [clientId, setClientId]             = React.useState(null);
   const [programmeId, setProgrammeId]       = React.useState(null);
   const [builderProgramme, setBuilderProgramme] = React.useState(null);
@@ -118,10 +120,22 @@ export function Coach({ go, trainerId, unread = 0, only }) {
     setBuilderOpenRoadmap(true);
     setBuilderProgramme({
       id: null,
-      name: 'New Programme', tag: 'STRENGTH',
+      name: 'New Programme', tag: 'STRENGTH', is_adhoc: false,
       weeks: 4, phases: 1, clients: 0,
       lastEdited: 'new',
       phaseList: [{ id: null, name: 'Phase 1', focus: 'Foundation', weeks: 4 }],
+    });
+  };
+
+  // Ad-hoc workout = a one-off single-week "programme" with one phase.
+  const newAdhoc = () => {
+    setBuilderOpenRoadmap(true);
+    setBuilderProgramme({
+      id: null,
+      name: 'New Workout', tag: 'STRENGTH', is_adhoc: true,
+      weeks: 1, phases: 1, clients: 0,
+      lastEdited: 'new',
+      phaseList: [{ id: null, name: 'Workout', focus: 'Ad-hoc session', weeks: 1 }],
     });
   };
 
@@ -200,23 +214,52 @@ export function Coach({ go, trainerId, unread = 0, only }) {
     return <ProgrammeBuilder programme={builderProgramme} onClose={closeBuilder} openRoadmap={builderOpenRoadmap} trainerId={trainerId}/>;
   }
 
-  // Dedicated Programmes hub (its own bottom-nav tab).
+  // Dedicated Programmes hub (its own bottom-nav tab) — programmes, ad-hoc
+  // workouts and reusable task templates.
   if (only === 'programmes') {
+    const fullProgrammes = programmes.filter(p => !p.is_adhoc);
+    const adhocWorkouts  = programmes.filter(p => p.is_adhoc);
+    const hubTabs = [
+      { id: 'programmes', label: 'Programmes', count: loadingProgs ? null : fullProgrammes.length },
+      { id: 'adhoc',      label: 'Ad-hoc',     count: loadingProgs ? null : adhocWorkouts.length },
+      { id: 'templates',  label: 'Task Templates' },
+    ];
     return (
       <div className="scroller coach-wrap">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', padding: '8px 0 14px' }}>
           <div>
             <div className="label">// COACH</div>
-            <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>PROGRAMMES</div>
+            <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>BUILD HUB</div>
           </div>
         </div>
-        <ProgrammesTab
-          programmes={programmes} loading={loadingProgs}
-          onPick={setProgrammeId} onNew={newProgramme}
-          onEdit={openBuilder}
-          onDuplicate={duplicateProgramme}
-          onDelete={async (id) => { await deleteProgramme(id); }}
-        />
+
+        <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
+          {hubTabs.map(t => (
+            <CTab key={t.id} active={hubTab === t.id} onClick={() => setHubTab(t.id)} label={t.label} count={t.count}/>
+          ))}
+        </div>
+
+        {hubTab === 'programmes' && (
+          <ProgrammesTab
+            programmes={fullProgrammes} loading={loadingProgs}
+            onPick={setProgrammeId} onNew={newProgramme}
+            onEdit={openBuilder}
+            onDuplicate={duplicateProgramme}
+            onDelete={async (id) => { await deleteProgramme(id); }}
+          />
+        )}
+
+        {hubTab === 'adhoc' && (
+          <AdhocTab
+            workouts={adhocWorkouts} loading={loadingProgs}
+            onNew={newAdhoc} onEdit={openBuilder}
+            onDuplicate={duplicateProgramme}
+            onDelete={async (id) => { await deleteProgramme(id); }}
+          />
+        )}
+
+        {hubTab === 'templates' && <TaskTemplatesTab trainerId={trainerId}/>}
+
         {programme && (
           <ProgrammeSheet p={programme}
             trainerId={trainerId}
@@ -291,7 +334,7 @@ export function Coach({ go, trainerId, unread = 0, only }) {
 function shapeProgramme(p) {
   const phases = [...(p.programme_phases || [])].sort((a, b) => a.phase_index - b.phase_index);
   return {
-    id: p.id, name: p.name, tag: p.tag,
+    id: p.id, name: p.name, tag: p.tag, is_adhoc: !!p.is_adhoc,
     weeks: phases.reduce((s, ph) => s + (ph.weeks || 0), 0),
     phases: phases.length,
     clients: 0,
@@ -686,6 +729,146 @@ function ProgrammeCard({ p, onPick, onEdit, onDuplicate, onDelete }) {
     </div>
   );
 }
+
+// ── AD-HOC WORKOUTS TAB ─────────────────────────────────────────
+function AdhocTab({ workouts, loading, onNew, onEdit, onDuplicate, onDelete }) {
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div className="label">// AD-HOC WORKOUTS · {loading ? '…' : workouts.length}</div>
+        <button onClick={onNew} className="btn-ghost" style={{ padding: '6px 10px', borderColor: 'var(--accent)', color: 'var(--accent)', fontSize: 10 }}>
+          + NEW WORKOUT
+        </button>
+      </div>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, marginBottom: 12 }}>
+        One-off sessions you can assign to any client on any date — no phases or weeks. Great for trials, makeup sessions or testing days.
+      </div>
+      {loading ? (
+        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {workouts.map(w => (
+            <ProgrammeCard key={w.id} p={w} onPick={() => onEdit(w)} onEdit={() => onEdit(w)} onDuplicate={() => onDuplicate(w)} onDelete={() => onDelete(w.id)} adhoc/>
+          ))}
+          {workouts.length === 0 && (
+            <div className="card" style={{ padding: 28, textAlign: 'center' }}>
+              <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 12 }}>NO AD-HOC WORKOUTS YET</div>
+              <button onClick={onNew} className="btn-primary" style={{ fontSize: 11, padding: '10px 18px' }}>+ CREATE A WORKOUT</button>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── TASK TEMPLATES TAB ──────────────────────────────────────────
+const TT_KINDS = ['check', 'log', 'photo', 'form'];
+function TaskTemplatesTab({ trainerId }) {
+  const [templates, setTemplates] = React.useState(null);
+  const [forms, setForms] = React.useState([]);
+  const [adding, setAdding] = React.useState(false);
+  const [title, setTitle] = React.useState('');
+  const [kind, setKind] = React.useState('check');
+  const [formId, setFormId] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const reload = () => supabase.from('task_templates').select('*').eq('trainer_id', trainerId)
+    .order('sort_order').order('created_at').then(({ data }) => setTemplates(data || []));
+  React.useEffect(() => { reload(); loadForms().then(setForms); }, [trainerId]);
+
+  const selForm = forms.find(f => f.id === formId);
+  const effTitle = (title.trim() || (kind === 'form' && selForm ? selForm.title : '')).trim();
+  const canSave = !!effTitle && !saving && (kind !== 'form' || !!formId);
+
+  const save = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    await supabase.from('task_templates').insert({
+      trainer_id: trainerId, title: effTitle, kind, form_id: kind === 'form' ? formId : null,
+      sort_order: (templates?.length || 0),
+    });
+    setSaving(false); setAdding(false); setTitle(''); setKind('check'); setFormId(''); reload();
+  };
+
+  const del = async (id) => { await supabase.from('task_templates').delete().eq('id', id); reload(); };
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div className="label">// TASK TEMPLATES · {templates === null ? '…' : templates.length}</div>
+        <button onClick={() => setAdding(a => !a)} className="btn-ghost" style={{ padding: '6px 10px', borderColor: 'var(--accent)', color: 'var(--accent)', fontSize: 10 }}>
+          + NEW TEMPLATE
+        </button>
+      </div>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, marginBottom: 12 }}>
+        Reusable tasks and form assignments. Pick one in a client's Tasks tab to assign it in a tap.
+      </div>
+
+      {adding && (
+        <div className="card" style={{ padding: 14, display: 'grid', gap: 10, marginBottom: 12 }}>
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>TASK TITLE</div>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Log today's weight" style={ttInputSt}/>
+          </div>
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>TYPE</div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {TT_KINDS.map(k => (
+                <button key={k} onClick={() => setKind(k)} style={{
+                  all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '7px 0', borderRadius: 7,
+                  fontSize: 8.5, fontFamily: 'JetBrains Mono', fontWeight: 700,
+                  background: kind === k ? 'var(--accent-soft)' : 'var(--bg-3)',
+                  border: `1px solid ${kind === k ? 'var(--accent)' : 'var(--line)'}`,
+                  color: kind === k ? 'var(--accent)' : 'var(--text-3)',
+                }}>{k.toUpperCase()}</button>
+              ))}
+            </div>
+          </div>
+          {kind === 'form' && (
+            <div>
+              <div className="label" style={{ marginBottom: 6 }}>FORM</div>
+              <select value={formId} onChange={e => setFormId(e.target.value)} style={{ ...ttInputSt, appearance: 'auto' }}>
+                <option value="">— Select a form —</option>
+                {forms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
+              </select>
+            </div>
+          )}
+          <button onClick={save} disabled={!canSave} className="btn-primary" style={{ opacity: canSave ? 1 : 0.4 }}>
+            {saving ? 'SAVING…' : 'SAVE TEMPLATE'}
+          </button>
+        </div>
+      )}
+
+      {templates === null ? (
+        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
+      ) : templates.length === 0 ? (
+        <div className="card" style={{ padding: 28, textAlign: 'center' }}>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em' }}>NO TEMPLATES YET</div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {templates.map(t => (
+            <div key={t.id} className="card" style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2, letterSpacing: '0.08em' }}>{t.kind.toUpperCase()}</div>
+              </div>
+              <button onClick={() => del(t.id)} aria-label="Delete template" style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}><IconX2 size={13}/></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+const ttInputSt = {
+  width: '100%', boxSizing: 'border-box',
+  background: 'var(--bg-3)', border: '1px solid var(--line-strong)', borderRadius: 8,
+  padding: '10px 11px', color: 'var(--text)', outline: 'none',
+  fontFamily: 'JetBrains Mono', fontSize: 12,
+};
 
 // ── SCHEDULE TAB ────────────────────────────────────────────────
 function ScheduleTab({ schedule, clients, onPick }) {

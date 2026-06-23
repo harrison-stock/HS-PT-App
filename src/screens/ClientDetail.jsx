@@ -85,7 +85,7 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go 
       </div>
 
       {/* ── Content ── */}
-      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '14px 14px 40px' }}>
+      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '14px 14px 40px', width: '100%', maxWidth: 820, margin: '0 auto', boxSizing: 'border-box' }}>
         {tab === 'overview' && <OverviewTab  c={c} go={go} onClose={onClose} onTab={setTab} />}
         {tab === 'training' && <TrainingTab  c={c} trainerId={trainerId} programmes={programmes} onChanged={onChanged} />}
         {tab === 'body'     && <BodyTab      c={c} trainerId={trainerId} />}
@@ -397,12 +397,10 @@ function Sparkline({ values, color = 'var(--accent)', height = 44 }) {
   ]);
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
   const area = `${line} L ${w} ${height} L 0 ${height} Z`;
-  const last = pts[pts.length - 1];
   return (
-    <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" width="100%" height={height} style={{ display: 'block', overflow: 'visible' }}>
+    <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" width="100%" height={height} style={{ display: 'block' }}>
       <path d={area} fill={`color-mix(in srgb, ${color} 14%, transparent)`} stroke="none" />
       <path d={line} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={last[0]} cy={last[1]} r="2.6" fill={color} stroke="var(--bg-2)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
@@ -885,13 +883,30 @@ function TasksTab({ c, trainerId }) {
   const [kind, setKind]     = React.useState('check');
   const [due, setDue]       = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const [templates, setTemplates] = React.useState([]);
 
   const reload = () =>
     supabase.from('client_tasks').select('*').eq('client_id', c.id)
       .order('due_date', { ascending: true })
       .then(({ data }) => setTasks(data || []));
 
-  React.useEffect(() => { reload(); loadForms().then(setForms); }, [c.id]);
+  React.useEffect(() => {
+    reload();
+    loadForms().then(setForms);
+    supabase.from('task_templates').select('*').eq('trainer_id', trainerId)
+      .order('sort_order').order('created_at').then(({ data }) => setTemplates(data || []));
+  }, [c.id]);
+
+  // Assign a saved template in one tap.
+  const applyTemplate = async (t) => {
+    await supabase.from('client_tasks').insert({
+      client_id: c.id, trainer_id: trainerId,
+      title: t.title, kind: t.kind, due_date: null, form_id: t.kind === 'form' ? t.form_id : null,
+    });
+    notify({ recipientId: c.id, actorId: trainerId, kind: t.kind === 'form' ? 'form' : 'task',
+      title: t.kind === 'form' ? 'New form to complete' : 'New task assigned', body: t.title, link: { screen: 'dashboard' } });
+    reload();
+  };
 
   const selForm = forms.find(f => f.id === formId);
   const effTitle = (title.trim() || (kind === 'form' && selForm ? selForm.title : '')).trim();
@@ -934,6 +949,22 @@ function TasksTab({ c, trainerId }) {
           border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)', borderRadius: 6, padding: '4px 8px',
         }}><IconPlus size={10}/> NEW TASK</button>
       </div>
+
+      {templates.length > 0 && (
+        <div>
+          <div className="label" style={{ marginBottom: 6 }}>// FROM TEMPLATE</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {templates.map(t => (
+              <button key={t.id} onClick={() => applyTemplate(t)} className="mono" style={{
+                all: 'unset', cursor: 'pointer', fontSize: 9.5, fontWeight: 700, padding: '6px 10px', borderRadius: 999,
+                background: 'var(--accent-soft)', color: 'var(--accent)',
+                border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+              }}><IconPlus size={10}/> {t.title}</button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {adding && (
         <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>

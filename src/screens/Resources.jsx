@@ -66,7 +66,7 @@ export function Resources({ go, userId, isTrainer }) {
   }
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 110px', paddingTop: 64, maxWidth: isTrainer ? 720 : undefined, margin: isTrainer ? '0 auto' : undefined, boxSizing: 'border-box' }}>
+    <div className="scroller" style={{ padding: '0 16px 110px', paddingTop: 64, maxWidth: isTrainer ? 820 : undefined, margin: isTrainer ? '0 auto' : undefined, boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
         <div>
           <div className="label">// LIBRARY</div>

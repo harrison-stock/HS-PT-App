@@ -430,7 +430,7 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
     if (!progId) {
       const { data: newProg, error: err } = await supabase
         .from('programmes')
-        .insert({ trainer_id: trainerId, name: name.trim(), tag })
+        .insert({ trainer_id: trainerId, name: name.trim(), tag, is_adhoc: !!prog.is_adhoc })
         .select('id').single();
       if (!newProg) {
         setSaving(false);

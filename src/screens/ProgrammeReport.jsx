@@ -54,7 +54,7 @@ export function ProgrammeReport({ clientId, clientName, onClose }) {
         </div>
       </div>
 
-      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '14px 16px 48px', maxWidth: 720, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '14px 16px 48px', maxWidth: 820, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
         {progs === null && <Mono>LOADING…</Mono>}
         {progs && progs.length === 0 && (
           <div className="card" style={{ padding: 28, textAlign: 'center' }}>
@@ -216,9 +216,8 @@ function MiniSpark({ values, color = 'var(--accent)', height = 30 }) {
   const pts = vals.map((v, i) => [(i / (vals.length - 1)) * w, height - pad - ((v - min) / range) * (height - pad * 2)]);
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
   return (
-    <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" width="100%" height={height} style={{ display: 'block', overflow: 'visible' }}>
+    <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" width="100%" height={height} style={{ display: 'block' }}>
       <path d={line} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="2.4" fill={color} stroke="var(--bg-2)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

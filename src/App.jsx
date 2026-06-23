@@ -282,7 +282,7 @@ export default function App() {
 function BottomNav({ screen, go, isTrainer }) {
   const items = isTrainer ? [
     { id: 'coach',      label: 'COACH',     Icon: IconBolt },
-    { id: 'programmes', label: 'PROGRAMS',  Icon: IconCalendar },
+    { id: 'programmes', label: 'BUILD',     Icon: IconCalendar },
     { id: 'exercises',  label: 'EXERCISES', Icon: IconDumbbell },
     { id: 'forms',      label: 'FORMS',     Icon: IconDoc },
     { id: 'resources',  label: 'RECIPES',   Icon: IconBook },
