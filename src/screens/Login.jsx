@@ -147,6 +147,61 @@ export function Login() {
   )
 }
 
+// Set-password screen — shown after an invite/recovery email link (the user has
+// a session but no usable password yet). Also used by the coach's reset flow.
+export function SetPassword({ onDone, onSignOut }) {
+  const [pw, setPw] = React.useState('')
+  const [pw2, setPw2] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState(null)
+
+  const submit = async (e) => {
+    e.preventDefault()
+    if (pw.length < 6) { setError('Password must be at least 6 characters'); return }
+    if (pw !== pw2) { setError('Passwords do not match'); return }
+    setLoading(true); setError(null)
+    const { error: err } = await supabase.auth.updateUser({ password: pw })
+    setLoading(false)
+    if (err) setError(err.message)
+    else onDone()
+  }
+
+  return (
+    <div style={wrapStyle}>
+      <div style={{ marginBottom: 30, textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14, filter: 'drop-shadow(0 0 calc(22px * var(--glow)) var(--accent-glow))' }}>
+          <img src="/logo-mark.png" alt="HS PT" width={88} style={{ display: 'block', height: 'auto' }} />
+        </div>
+        <div className="h-bold" style={{ fontSize: 20, letterSpacing: '0.1em', color: 'var(--heading-deep)' }}>SET YOUR PASSWORD</div>
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 6, lineHeight: 1.5, maxWidth: 300 }}>
+          Choose a password to finish setting up your account. You'll use it to sign in from now on.
+        </div>
+      </div>
+      <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'grid', gap: 14 }}>
+        <div>
+          <div className="label" style={{ marginBottom: 7 }}>NEW PASSWORD</div>
+          <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" required minLength={6} autoComplete="new-password" style={inputStyle} />
+        </div>
+        <div>
+          <div className="label" style={{ marginBottom: 7 }}>CONFIRM PASSWORD</div>
+          <input type="password" value={pw2} onChange={e => setPw2(e.target.value)} placeholder="••••••••" required minLength={6} autoComplete="new-password" style={inputStyle} />
+        </div>
+        {error && (
+          <div className="mono" style={{ fontSize: 11, color: 'var(--c-coral)', padding: '10px 12px', background: 'color-mix(in srgb, var(--c-coral) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--c-coral) 35%, transparent)', borderRadius: 8, letterSpacing: '0.04em', lineHeight: 1.5 }}>{error}</div>
+        )}
+        <button type="submit" disabled={loading} className="btn-primary" style={{ marginTop: 4, color: 'var(--heading-deep)', opacity: loading ? 0.6 : 1 }}>
+          {loading ? '…' : 'SAVE PASSWORD & CONTINUE'}
+        </button>
+      </form>
+      {onSignOut && (
+        <button onClick={onSignOut} className="mono" style={{ all: 'unset', cursor: 'pointer', marginTop: 22, fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em' }}>
+          SIGN OUT
+        </button>
+      )}
+    </div>
+  )
+}
+
 const wrapStyle = {
   minHeight: '100dvh',
   display: 'flex', flexDirection: 'column',

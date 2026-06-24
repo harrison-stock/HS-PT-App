@@ -2,7 +2,7 @@ import React from 'react'
 import { supabase } from './lib/supabase'
 import { HexShape } from './components/hex'
 import { IconHome, IconCalendar, IconChart, IconBook, IconUser, IconBolt, IconActivity, IconDumbbell, IconDoc, IconPlay } from './components/icons'
-import { Login } from './screens/Login'
+import { Login, SetPassword } from './screens/Login'
 import { Dashboard } from './screens/Dashboard'
 import { Workouts } from './screens/Workouts'
 import { ActiveLog } from './screens/ActiveLog'
@@ -60,6 +60,16 @@ export default function App() {
   const [profile, setProfile] = React.useState(null);
   const [authLoading, setAuthLoading] = React.useState(true);
   const [bootError, setBootError] = React.useState(false);
+  // Invite / password-recovery email links land here with a session but no
+  // usable password — force a set-password step. Captured from the URL hash
+  // before supabase-js consumes it, and persisted across that processing.
+  const [needsPassword, setNeedsPassword] = React.useState(() => {
+    try {
+      const h = window.location.hash || '';
+      if (/type=(invite|recovery)/.test(h)) sessionStorage.setItem('hs_set_pw', '1');
+      return sessionStorage.getItem('hs_set_pw') === '1';
+    } catch (e) { return false; }
+  });
   const [unread, setUnread] = React.useState(0);
 
   React.useEffect(() => {
@@ -73,9 +83,13 @@ export default function App() {
     }).catch(finish);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === 'PASSWORD_RECOVERY') {
+        try { sessionStorage.setItem('hs_set_pw', '1'); } catch (e) {}
+        setNeedsPassword(true);
+      }
       setSession(session);
       if (session) fetchProfile(session.user.id);
-      else { setProfile(null); setAuthLoading(false); }
+      else { setProfile(null); setAuthLoading(false); setNeedsPassword(false); }
     });
 
     // Watchdog — never hang forever if the backend is paused/unreachable.
@@ -101,25 +115,17 @@ export default function App() {
       setAuthLoading(false);
     }
 
+    // Mark the invite claimed. The managed_clients link + data merge is handled
+    // server-side by the handle_new_user trigger (it has the rights; the client
+    // does not), so we only stamp the claim here.
     const pendingInvite = localStorage.getItem('pt_pending_invite');
     if (pendingInvite) {
       localStorage.removeItem('pt_pending_invite');
-      const { data: inv } = await supabase
-        .from('invites')
-        .select('managed_client_id')
-        .eq('code', pendingInvite)
-        .single();
       await supabase
         .from('invites')
         .update({ claimed_by: userId, claimed_at: new Date().toISOString() })
         .eq('code', pendingInvite)
         .is('claimed_by', null);
-      if (inv?.managed_client_id) {
-        await supabase
-          .from('managed_clients')
-          .update({ linked_profile_id: userId })
-          .eq('id', inv.managed_client_id);
-      }
     }
   };
 
@@ -219,6 +225,16 @@ export default function App() {
   if (authLoading) return <LoadingScreen />;
   if (bootError && !profile) return <BootError onRetry={() => window.location.reload()} />;
   if (!session) return <Login />;
+  if (needsPassword) return (
+    <SetPassword
+      onDone={() => {
+        try { sessionStorage.removeItem('hs_set_pw'); } catch (e) {}
+        if (window.location.hash) { try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) {} }
+        setNeedsPassword(false);
+      }}
+      onSignOut={() => { try { sessionStorage.removeItem('hs_set_pw'); } catch (e) {} supabase.auth.signOut(); }}
+    />
+  );
 
   const isTrainer = profile?.role === 'trainer';
   const user = {

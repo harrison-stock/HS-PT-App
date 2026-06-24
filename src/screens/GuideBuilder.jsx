@@ -35,9 +35,10 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
     const file = e.target.files?.[0]; e.target.value = '';
     if (!file) return;
     setUploading(true);
-    const { url } = await uploadGuideImage(trainerId, file);
+    const { url, error } = await uploadGuideImage(trainerId, file);
     setUploading(false);
     if (url) set({ img: url });
+    else alert('Image upload failed — please try again.' + (error?.message ? `\n\n${error.message}` : ''));
   };
 
   return (

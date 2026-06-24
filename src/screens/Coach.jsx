@@ -1190,7 +1190,8 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
             </div>
             {emailed && (
               <div className="mono" style={{ fontSize: 10, color: 'var(--accent)', padding: '10px 12px', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)', borderRadius: 8, letterSpacing: '0.04em', lineHeight: 1.6, textAlign: 'center' }}>
-                ✉ INVITE EMAILED TO {clientEmail.trim().toUpperCase()}
+                ✉ INVITE EMAILED TO {clientEmail.trim().toUpperCase()}<br/>
+                <span style={{ color: 'var(--text-3)' }}>They'll tap the link, set a password and connect to you automatically.</span>
               </div>
             )}
             {error && (
@@ -1198,25 +1199,31 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
                 {error}
               </div>
             )}
-            <div>
-              <div className="label" style={{ marginBottom: 7 }}>// INVITE LINK</div>
-              <div style={{
-                padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--line-strong)',
-                borderRadius: 10, wordBreak: 'break-all',
-                fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--text-2)', lineHeight: 1.7,
-              }}>{inviteUrl}</div>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={copy} className={copied ? 'btn-primary' : 'btn-ghost'} style={{ flex: 1 }}>
-                {copied ? '✓ COPIED' : '⎘ COPY LINK'}
-              </button>
-              {clientEmail.trim() && (
-                <button onClick={emailInvite} className="btn-ghost" style={{ flex: 1 }}>✉ EMAIL INVITE</button>
-              )}
-            </div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5, textAlign: 'center' }}>
-              No email is sent automatically — copy the link or use Email Invite to open your mail app with it pre-filled.
-            </div>
+            {/* Manual link is the fallback — only when no invite email was sent,
+                so a given email has exactly one onboarding route (no duplicates). */}
+            {!emailed && (
+              <>
+                <div>
+                  <div className="label" style={{ marginBottom: 7 }}>// INVITE LINK</div>
+                  <div style={{
+                    padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--line-strong)',
+                    borderRadius: 10, wordBreak: 'break-all',
+                    fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--text-2)', lineHeight: 1.7,
+                  }}>{inviteUrl}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={copy} className={copied ? 'btn-primary' : 'btn-ghost'} style={{ flex: 1 }}>
+                    {copied ? '✓ COPIED' : '⎘ COPY LINK'}
+                  </button>
+                  {clientEmail.trim() && (
+                    <button onClick={emailInvite} className="btn-ghost" style={{ flex: 1 }}>✉ EMAIL INVITE</button>
+                  )}
+                </div>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5, textAlign: 'center' }}>
+                  Share this link — they'll create their account and connect to you automatically.
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
