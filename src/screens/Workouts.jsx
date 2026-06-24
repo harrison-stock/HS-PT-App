@@ -41,25 +41,41 @@ function shapeWorkout(row) {
 
   const sections = (day.workout_sections || [])
     .sort((a, b) => a.sort_order - b.sort_order)
-    .map(s => ({
-      kind: s.kind,
-      title: s.title,
-      minutes: Math.max(5, (s.section_exercises?.length || 0) * 3),
-      intro: '',
-      items: (s.section_exercises || [])
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .map(ex => ({
-          name: ex.name,
-          img: ex.img_url || null,
-          tempo: ex.tempo || '',
-          ss: ex.superset_group ?? null,
-          target: deriveTarget(ex.exercise_sets),
-          load: deriveLoad(ex.exercise_sets),
-        })),
-    }));
+    .map(s => {
+      // Estimate per section from logged rest + any clocked (timed) work.
+      let secRest = 0, secWork = 0;
+      (s.section_exercises || []).forEach(ex => (ex.exercise_sets || []).forEach(st => {
+        secRest += parseInt(st.rest_secs) || 0;
+        if (ex.timed) secWork += parseInt(st.time_secs) || 0;
+      }));
+      const fromClock = secRest + secWork;
+      const minutes = fromClock > 0
+        ? Math.max(1, Math.round(fromClock / 60))
+        : Math.max(5, (s.section_exercises?.length || 0) * 3);
+      return {
+        kind: s.kind,
+        title: s.title,
+        minutes, _secs: fromClock,
+        intro: '',
+        items: (s.section_exercises || [])
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map(ex => ({
+            name: ex.name,
+            img: ex.img_url || null,
+            tempo: ex.tempo || '',
+            ss: ex.superset_group ?? null,
+            target: deriveTarget(ex.exercise_sets),
+            load: deriveLoad(ex.exercise_sets),
+          })),
+      };
+    });
 
   const exerciseCount = sections.reduce((n, s) => n + s.items.length, 0);
-  const duration = sections.reduce((n, s) => n + s.minutes, 0) || 45;
+  // Total ≈ all rest timers + clocked work + a 5-min transition buffer.
+  const clockedSecs = sections.reduce((n, s) => n + s._secs, 0);
+  const duration = clockedSecs > 0
+    ? Math.round(clockedSecs / 60) + 5
+    : (sections.reduce((n, s) => n + s.minutes, 0) || 45);
   const dayLabel = DAY_LABELS[day.day_of_week] || `Day ${day.day_of_week + 1}`;
 
   return {
@@ -114,8 +130,8 @@ export function Workouts({ go, openPreview, userId }) {
           workout_sections (
             id, kind, title, sort_order,
             section_exercises (
-              id, name, img_url, tempo, superset_group, sort_order,
-              exercise_sets ( set_index, reps, weight_kg )
+              id, name, img_url, tempo, timed, superset_group, sort_order,
+              exercise_sets ( set_index, reps, weight_kg, rest_secs, time_secs )
             )
           )
         )
@@ -391,10 +407,10 @@ function PreviewBody({ w, sections, expanded, onToggle, onOpenSection, onClose, 
       </div>
 
       <div className="scroller" style={{ flex: 1, padding: '16px 18px 0', minHeight: 0 }}>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 6 }}>
           <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
             <IconClock size={12} style={{ color: 'var(--accent)' }}/>
-            {w.duration} mins
+            ~{w.duration} mins
           </span>
           <span style={{ width: 3, height: 3, background: 'var(--text-3)', borderRadius: '50%' }}/>
           <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)', letterSpacing: '0.06em' }}>
@@ -404,6 +420,9 @@ function PreviewBody({ w, sections, expanded, onToggle, onOpenSection, onClose, 
           <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)', letterSpacing: '0.06em' }}>
             {sections.reduce((n, s) => n + s.items.length, 0)} exercises
           </span>
+        </div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', marginBottom: 14 }}>
+          EST. COMPLETION · REST TIMERS + TRANSITIONS
         </div>
 
         {w.coachNotes && (

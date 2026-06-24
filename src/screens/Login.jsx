@@ -72,11 +72,11 @@ export function Login() {
         }}>
           <img src="/logo-mark.png" alt="HS PT" width={104} style={{ display: 'block', height: 'auto' }} />
         </div>
-        <div className="h-bold" style={{ fontSize: 20, letterSpacing: '0.1em', color: 'var(--heading-deep)' }}>
+        <div style={{ fontFamily: 'Orbitron', fontWeight: 900, fontSize: 30, letterSpacing: '0.06em', color: '#189caa' }}>
           HS PT
         </div>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.18em', marginTop: 5 }}>
-          HARRISON STOCK PERFORMANCE
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.14em', marginTop: 7 }}>
+          HARRISON STOCK | PERSONAL TRAINING &amp; NUTRITION
         </div>
       </div>
 
