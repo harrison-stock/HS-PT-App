@@ -1,0 +1,124 @@
+<!--
+  HS PT — Supabase Auth email templates.
+  Paste each block into Supabase → Authentication → Emails → Templates.
+  Subjects are listed above each template. Logo is served from the live app.
+  Brand: #189caa (teal). Email-safe: tables + inline styles, no web fonts.
+-->
+
+<!-- =====================================================================
+     CONFIRM SIGNUP        Subject:  Confirm your HS PT account
+     ===================================================================== -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a0e11;padding:32px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6eaec;">
+      <tr><td align="center" style="background:#0a0e11;padding:28px 24px 22px;">
+        <img src="https://app.harrisonstock.co.uk/logo-mark.png" width="60" alt="HS PT" style="display:block;border:0;outline:none;margin:0 auto 10px;" />
+        <div style="font-size:20px;font-weight:800;letter-spacing:2px;color:#189caa;">HS PT</div>
+        <div style="font-size:10px;letter-spacing:2px;color:#8a9296;margin-top:6px;text-transform:uppercase;">Harrison Stock · Personal Training &amp; Nutrition</div>
+      </td></tr>
+      <tr><td style="padding:30px 30px 8px;">
+        <h1 style="margin:0 0 12px;font-size:21px;color:#0a1f22;">Confirm your email</h1>
+        <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#445;">Welcome aboard. Tap the button below to confirm your email and activate your HS PT account.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+          <tr><td align="center" bgcolor="#189caa" style="border-radius:10px;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 30px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Confirm email &rarr;</a>
+          </td></tr>
+        </table>
+        <p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:#889;">If the button doesn't work, copy and paste this link:</p>
+        <p style="margin:0 0 8px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#189caa;">{{ .ConfirmationURL }}</a></p>
+      </td></tr>
+      <tr><td style="padding:18px 30px 28px;border-top:1px solid #eef1f2;">
+        <p style="margin:0;font-size:11px;line-height:1.6;color:#9aa;">If you didn't create an HS PT account, you can safely ignore this email.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+
+
+<!-- =====================================================================
+     INVITE USER          Subject:  You're invited to HS PT
+     ===================================================================== -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a0e11;padding:32px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6eaec;">
+      <tr><td align="center" style="background:#0a0e11;padding:28px 24px 22px;">
+        <img src="https://app.harrisonstock.co.uk/logo-mark.png" width="60" alt="HS PT" style="display:block;border:0;outline:none;margin:0 auto 10px;" />
+        <div style="font-size:20px;font-weight:800;letter-spacing:2px;color:#189caa;">HS PT</div>
+        <div style="font-size:10px;letter-spacing:2px;color:#8a9296;margin-top:6px;text-transform:uppercase;">Harrison Stock · Personal Training &amp; Nutrition</div>
+      </td></tr>
+      <tr><td style="padding:30px 30px 8px;">
+        <h1 style="margin:0 0 12px;font-size:21px;color:#0a1f22;">You're invited{{ if .Data.name }}, {{ .Data.name }}{{ end }}</h1>
+        <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#445;">Harrison has set up your training space on the HS PT app. Accept your invite to set a password and get started with your programme, recipes and resources.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+          <tr><td align="center" bgcolor="#189caa" style="border-radius:10px;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 30px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Accept invite &amp; set password &rarr;</a>
+          </td></tr>
+        </table>
+        <p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:#889;">If the button doesn't work, copy and paste this link:</p>
+        <p style="margin:0 0 8px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#189caa;">{{ .ConfirmationURL }}</a></p>
+      </td></tr>
+      <tr><td style="padding:18px 30px 28px;border-top:1px solid #eef1f2;">
+        <p style="margin:0;font-size:11px;line-height:1.6;color:#9aa;">Tip: once you're in, add the app to your home screen for one-tap access.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+
+
+<!-- =====================================================================
+     RESET PASSWORD       Subject:  Reset your HS PT password
+     ===================================================================== -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a0e11;padding:32px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6eaec;">
+      <tr><td align="center" style="background:#0a0e11;padding:28px 24px 22px;">
+        <img src="https://app.harrisonstock.co.uk/logo-mark.png" width="60" alt="HS PT" style="display:block;border:0;outline:none;margin:0 auto 10px;" />
+        <div style="font-size:20px;font-weight:800;letter-spacing:2px;color:#189caa;">HS PT</div>
+        <div style="font-size:10px;letter-spacing:2px;color:#8a9296;margin-top:6px;text-transform:uppercase;">Harrison Stock · Personal Training &amp; Nutrition</div>
+      </td></tr>
+      <tr><td style="padding:30px 30px 8px;">
+        <h1 style="margin:0 0 12px;font-size:21px;color:#0a1f22;">Reset your password</h1>
+        <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#445;">We received a request to reset your HS PT password. Tap below to choose a new one.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+          <tr><td align="center" bgcolor="#189caa" style="border-radius:10px;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 30px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Set a new password &rarr;</a>
+          </td></tr>
+        </table>
+        <p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:#889;">If the button doesn't work, copy and paste this link:</p>
+        <p style="margin:0 0 8px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#189caa;">{{ .ConfirmationURL }}</a></p>
+      </td></tr>
+      <tr><td style="padding:18px 30px 28px;border-top:1px solid #eef1f2;">
+        <p style="margin:0;font-size:11px;line-height:1.6;color:#9aa;">If you didn't request this, you can ignore this email — your password won't change.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+
+
+<!-- =====================================================================
+     MAGIC LINK           Subject:  Your HS PT sign-in link
+     ===================================================================== -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a0e11;padding:32px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6eaec;">
+      <tr><td align="center" style="background:#0a0e11;padding:28px 24px 22px;">
+        <img src="https://app.harrisonstock.co.uk/logo-mark.png" width="60" alt="HS PT" style="display:block;border:0;outline:none;margin:0 auto 10px;" />
+        <div style="font-size:20px;font-weight:800;letter-spacing:2px;color:#189caa;">HS PT</div>
+        <div style="font-size:10px;letter-spacing:2px;color:#8a9296;margin-top:6px;text-transform:uppercase;">Harrison Stock · Personal Training &amp; Nutrition</div>
+      </td></tr>
+      <tr><td style="padding:30px 30px 8px;">
+        <h1 style="margin:0 0 12px;font-size:21px;color:#0a1f22;">Your sign-in link</h1>
+        <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#445;">Tap below to sign in to HS PT. This link expires shortly and can only be used once.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+          <tr><td align="center" bgcolor="#189caa" style="border-radius:10px;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 30px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">Sign in &rarr;</a>
+          </td></tr>
+        </table>
+        <p style="margin:0 0 8px;font-size:12px;line-height:1.5;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#189caa;">{{ .ConfirmationURL }}</a></p>
+      </td></tr>
+      <tr><td style="padding:18px 30px 28px;border-top:1px solid #eef1f2;">
+        <p style="margin:0;font-size:11px;line-height:1.6;color:#9aa;">If you didn't request this, you can ignore this email.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
