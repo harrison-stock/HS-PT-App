@@ -34,6 +34,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const [addingSection, setAddingSection] = React.useState(null); // sIdx when picking from catalogue
   const [altFor, setAltFor]               = React.useState(null); // { sIdx, eIdx } when adding an alternate
   const [showMaster, setShowMaster]       = React.useState(false);
+  const [showCopy, setShowCopy]           = React.useState(false);
 
   const phase = prog.phaseList[phaseIdx];
   const days  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -75,15 +76,17 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     return () => { cancelled = true; };
   }, [phaseIdx, weekIdx, dayIdx, prog]);
 
-  const move = (setter) => { setter(); setDirty(false); };
+  // Autosave the current day before navigating away (no silent data loss).
+  const flush = async () => { if (dirty && day) return await saveDay(); return true; };
+  const move = async (setter) => { const ok = await flush(); if (ok === false) return; setter(); };
 
   // ── Save ─────────────────────────────────────────────────────
-  // Writes the current day's sections/exercises/sets under a known phase id.
-  const writeDay = async (phid) => {
+  // Writes a day-content object to a specific (phase, week, day) slot.
+  const writeDayContent = async (phid, week, dow, content) => {
     const { data: dayRow, error: dayErr } = await supabase
       .from('programme_days')
       .upsert(
-        { phase_id: phid, week_index: weekIdx, day_of_week: dayIdx, intro: day.intro || '', notes: day.notes || '' },
+        { phase_id: phid, week_index: week, day_of_week: dow, intro: content.intro || '', notes: content.notes || '' },
         { onConflict: 'phase_id,week_index,day_of_week' }
       )
       .select('id').single();
@@ -91,8 +94,8 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
 
     await supabase.from('workout_sections').delete().eq('day_id', dayRow.id);
 
-    for (let sOrd = 0; sOrd < day.sections.length; sOrd++) {
-      const s = day.sections[sOrd];
+    for (let sOrd = 0; sOrd < content.sections.length; sOrd++) {
+      const s = content.sections[sOrd];
       const { data: sec } = await supabase
         .from('workout_sections')
         .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, sort_order: sOrd })
@@ -121,9 +124,10 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
       }
     }
   };
+  const writeDay = (phid) => writeDayContent(phid, weekIdx, dayIdx, day);
 
   const saveDay = async () => {
-    if (!day) return;
+    if (!day) return true;
     setSaving(true);
     setSaveError(null);
     try {
@@ -152,15 +156,35 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           phaseList: [{ ...(p.phaseList[0] || {}), id: phid, name: 'Workout', focus: 'Ad-hoc', weeks: 1 }] }));
       }
 
-      if (!phid) { setSaving(false); setSaveError('No phase to save into — open the roadmap first.'); return; }
+      if (!phid) { setSaving(false); setSaveError('No phase to save into — open the roadmap first.'); return false; }
 
       await writeDay(phid);
       await supabase.from('programmes').update({ updated_at: new Date().toISOString() }).eq('id', pid);
       setSaving(false);
       setDirty(false);
+      return true;
     } catch (e) {
       setSaving(false);
       setSaveError(e.message || 'Save failed');
+      return false;
+    }
+  };
+
+  // Copy the current day into other (week × weekday) slots, with optional
+  // week-on-week progression baked into each target.
+  const copyDayTo = async (targets, progression) => {
+    if (!day || !phase?.id) return { error: 'Open the roadmap and save this day first.' };
+    const ok = await saveDay();
+    if (!ok) return { error: 'Could not save the current day.' };
+    try {
+      for (const t of targets) {
+        const content = progressDay(day, t.week - weekIdx, progression);
+        await writeDayContent(phase.id, t.week, t.dow, content);
+      }
+      await supabase.from('programmes').update({ updated_at: new Date().toISOString() }).eq('id', prog.id);
+      return { count: targets.length };
+    } catch (e) {
+      return { error: e.message || 'Copy failed' };
     }
   };
 
@@ -259,7 +283,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
       {/* Top bar */}
       <div style={{ padding: '54px 14px 10px', background: 'linear-gradient(180deg, var(--bg-1) 70%, transparent)', borderBottom: '1px solid var(--line)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <HexBackButton onClick={onClose} size={36}/>
+          <HexBackButton onClick={async () => { await flush(); onClose(); }} size={36}/>
           <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
             <div className="mono" style={{ fontSize: 8, color: 'var(--accent)', letterSpacing: '0.16em', fontWeight: 600 }}>// {isAdhoc ? 'WORKOUT BUILDER' : 'PROGRAMME BUILDER'}</div>
             {isAdhoc ? (
@@ -273,8 +297,16 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
             )}
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
+            {!isAdhoc && day && (
+              <button onClick={() => setShowCopy(true)} style={{
+                all: 'unset', cursor: 'pointer',
+                padding: '8px 10px', borderRadius: 8,
+                background: 'var(--bg-2)', border: '1px solid var(--line-strong)',
+                color: 'var(--accent)', fontFamily: 'JetBrains Mono', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+              }}>COPY</button>
+            )}
             {!isAdhoc && (
-              <button onClick={() => setShowMaster(true)} style={{
+              <button onClick={async () => { await flush(); setShowMaster(true); }} style={{
                 all: 'unset', cursor: 'pointer',
                 padding: '8px 10px', borderRadius: 8,
                 background: 'var(--bg-2)', border: '1px solid var(--line-strong)',
@@ -282,7 +314,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               }}>MASTER</button>
             )}
             {!isAdhoc && (
-              <button onClick={() => setRoadmapMode(true)} style={{
+              <button onClick={async () => { await flush(); setRoadmapMode(true); }} style={{
                 all: 'unset', cursor: 'pointer',
                 padding: '8px 10px', borderRadius: 8,
                 background: 'var(--bg-2)', border: '1px solid var(--line-strong)',
@@ -481,8 +513,159 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           }}
         />
       )}
+
+      {showCopy && phase && (
+        <CopySheet
+          weeks={phase.weeks || 1} curWeek={weekIdx} curDow={dayIdx}
+          onClose={() => setShowCopy(false)}
+          onCopy={copyDayTo}
+        />
+      )}
     </div>
   );
+}
+
+// ── COPY DAY SHEET ───────────────────────────────────────────────
+const COPY_DOW = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+function CopySheet({ weeks, curWeek, curDow, onClose, onCopy }) {
+  // Default: replicate this day to the same weekday across every other week.
+  const [selWeeks, setSelWeeks] = React.useState(() => Array.from({ length: weeks }, (_, i) => i).filter(i => i !== curWeek));
+  const [selDows, setSelDows]   = React.useState([curDow]);
+  const [wMode, setWMode]       = React.useState('none'); // none | kg | pct
+  const [wStep, setWStep]       = React.useState(2.5);
+  const [repStep, setRepStep]   = React.useState(0);
+  const [busy, setBusy]         = React.useState(false);
+  const [done, setDone]         = React.useState(0);
+
+  const toggle = (arr, set, v) => set(arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v].sort((a, b) => a - b));
+
+  // Build targets = selected weeks × selected days, minus the source slot.
+  const targets = [];
+  selWeeks.forEach(w => selDows.forEach(d => { if (!(w === curWeek && d === curDow)) targets.push({ week: w, dow: d }); }));
+
+  const run = async () => {
+    if (!targets.length || busy) return;
+    setBusy(true);
+    const progression = wMode === 'none' && !repStep ? null
+      : { weightMode: wMode === 'pct' ? 'pct' : 'kg', weightStep: wMode === 'none' ? 0 : wStep, repsStep: repStep };
+    const res = await onCopy(targets, progression);
+    setBusy(false);
+    if (res?.error) alert(res.error);
+    else { setDone(res.count || targets.length); setTimeout(onClose, 1200); }
+  };
+
+  const cell = (active) => ({
+    all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '8px 0', borderRadius: 7,
+    fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+    background: active ? 'var(--accent-soft)' : 'var(--bg-3)',
+    border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+    color: active ? 'var(--accent)' : 'var(--text-3)',
+  });
+
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 210, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '12px 18px 8px' }}>
+          <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }}/>
+          <div className="label">// COPY THIS DAY</div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 6, lineHeight: 1.5 }}>
+            Copy this session into other weeks and weekdays. Optionally progress the load each week.
+          </div>
+        </div>
+
+        {done > 0 ? (
+          <div style={{ padding: '30px 18px 40px', textAlign: 'center' }}>
+            <div style={{ fontSize: 30, color: 'var(--accent)', marginBottom: 8 }}>✓</div>
+            <div className="h-bold" style={{ fontSize: 16 }}>COPIED TO {done} DAY{done === 1 ? '' : 'S'}</div>
+          </div>
+        ) : (
+          <>
+            <div className="scroller" style={{ padding: '6px 18px 14px', overflowY: 'auto', display: 'grid', gap: 16 }}>
+              <div>
+                <div className="label" style={{ marginBottom: 8 }}>WEEKS</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                  {Array.from({ length: weeks }, (_, i) => (
+                    <button key={i} onClick={() => toggle(selWeeks, setSelWeeks, i)} style={cell(selWeeks.includes(i))}>
+                      W{i + 1}{i === curWeek ? '*' : ''}
+                    </button>
+                  ))}
+                </div>
+                <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', marginTop: 5 }}>* current week — source slot is never overwritten</div>
+              </div>
+
+              <div>
+                <div className="label" style={{ marginBottom: 8 }}>WEEKDAYS</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+                  {COPY_DOW.map((d, i) => (
+                    <button key={i} onClick={() => toggle(selDows, setSelDows, i)} style={{ ...cell(selDows.includes(i)), fontSize: 8.5 }}>{d}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="label" style={{ marginBottom: 8 }}>WEEKLY PROGRESSION <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(across weeks)</span></div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                  {[['none', 'NONE'], ['kg', '+ KG'], ['pct', '+ %']].map(([v, l]) => (
+                    <button key={v} onClick={() => setWMode(v)} style={{ ...cell(wMode === v), flex: 1 }}>{l}</button>
+                  ))}
+                </div>
+                {wMode !== 'none' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <CopyStepBtn onClick={() => setWStep(s => Math.max(0.5, +(s - (wMode === 'pct' ? 1 : 0.5)).toFixed(2)))}>−</CopyStepBtn>
+                    <div className="h-bold" style={{ fontSize: 18, minWidth: 70, textAlign: 'center', color: 'var(--accent)' }}>{wStep}{wMode === 'pct' ? '%' : 'kg'}<span className="mono" style={{ fontSize: 8, color: 'var(--text-3)', display: 'block', fontWeight: 400 }}>PER WEEK</span></div>
+                    <CopyStepBtn onClick={() => setWStep(s => +(s + (wMode === 'pct' ? 1 : 0.5)).toFixed(2))}>+</CopyStepBtn>
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="mono" style={{ fontSize: 10, color: 'var(--text-2)', minWidth: 50 }}>REPS</span>
+                  <CopyStepBtn onClick={() => setRepStep(s => s - 1)}>−</CopyStepBtn>
+                  <div className="h-bold" style={{ fontSize: 16, minWidth: 54, textAlign: 'center' }}>{repStep > 0 ? `+${repStep}` : repStep}</div>
+                  <CopyStepBtn onClick={() => setRepStep(s => s + 1)}>+</CopyStepBtn>
+                  <span className="mono" style={{ fontSize: 8, color: 'var(--text-3)' }}>PER WEEK</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: '12px 18px 28px', borderTop: '1px solid var(--line)' }}>
+              <button onClick={run} disabled={!targets.length || busy} className="btn-primary"
+                style={{ width: '100%', opacity: targets.length && !busy ? 1 : 0.4, pointerEvents: targets.length && !busy ? 'auto' : 'none' }}>
+                {busy ? 'COPYING…' : `COPY → ${targets.length} DAY${targets.length === 1 ? '' : 'S'}`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CopyStepBtn({ onClick, children }) {
+  return (
+    <button onClick={onClick} style={{
+      all: 'unset', cursor: 'pointer', width: 36, height: 36, borderRadius: 9,
+      background: 'var(--bg-3)', border: '1px solid var(--line-strong)', color: 'var(--accent)',
+      display: 'grid', placeItems: 'center', fontSize: 20, fontWeight: 700,
+    }}>{children}</button>
+  );
+}
+
+// Apply week-on-week progression to a cloned day. weekOffset = target − source.
+function progressDay(day, weekOffset, p) {
+  if (!p || weekOffset === 0 || (!p.weightStep && !p.repsStep)) return day;
+  const adj = (st, ex) => {
+    let weight = st.weight, repsText = st.repsText;
+    if (!ex.banded && !ex.timed && p.weightStep && st.kind !== 'WARMUP') {
+      weight = p.weightMode === 'pct'
+        ? Math.max(0, Math.round((st.weight * (1 + (p.weightStep / 100) * weekOffset)) * 2) / 2)
+        : Math.max(0, +(st.weight + p.weightStep * weekOffset).toFixed(2));
+    }
+    if (p.repsStep && st.kind !== 'WARMUP') {
+      const n = parseInt(st.repsText);
+      if (!isNaN(n)) repsText = String(Math.max(1, n + p.repsStep * weekOffset));
+    }
+    return { ...st, weight, repsText };
+  };
+  return { ...day, sections: day.sections.map(s => ({ ...s, items: s.items.map(ex => ({ ...ex, setsList: ex.setsList.map(st => adj(st, ex)) })) })) };
 }
 
 // ── ROADMAP PANEL ────────────────────────────────────────────────
