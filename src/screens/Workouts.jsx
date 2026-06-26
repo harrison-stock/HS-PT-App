@@ -541,7 +541,7 @@ function PreviewBody({ w, sections, expanded, onToggle, onOpenSection, onClose, 
               </span>
             )}
           </div>
-          <div className="h-bold" style={{ fontSize: 26, lineHeight: 1.1, color: '#fff', textShadow: '0 2px 16px rgba(0,0,0,0.85)' }}>
+          <div className="h-bold" style={{ fontSize: 26, lineHeight: 1.1, color: '#eceff4', textShadow: '0 2px 16px rgba(0,0,0,0.85)' }}>
             {w.name.toUpperCase()}
           </div>
         </div>

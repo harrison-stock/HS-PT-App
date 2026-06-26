@@ -445,7 +445,7 @@ function CoachHeader({ clientCount, pendingCount, go, unread = 0 }) {
             {unread > 0 && (
               <span className="mono" style={{
                 position: 'absolute', top: -1, right: -1, minWidth: 14, height: 14, padding: '0 3px',
-                borderRadius: 999, background: 'var(--c-coral)', color: '#fff', fontSize: 8, fontWeight: 800,
+                borderRadius: 999, background: 'var(--c-coral)', color: '#eceff4', fontSize: 8, fontWeight: 800,
                 display: 'grid', placeItems: 'center', border: '1.5px solid var(--bg-1)',
               }}>{unread > 9 ? '9+' : unread}</span>
             )}

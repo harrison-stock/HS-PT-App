@@ -96,7 +96,7 @@ function ExerciseRow({ e, onOpen }) {
       <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', alignItems: 'stretch', borderLeft: `2px solid ${col}` }}>
         <div style={{ width: 72, flexShrink: 0, position: 'relative', background: thumb ? `url('${thumb}') center/cover` : 'var(--bg-3)' }}>
           {(e.video_url) && (
-            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#fff' }}><IconPlay size={16}/></div>
+            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#eceff4' }}><IconPlay size={16}/></div>
           )}
         </div>
         <div style={{ padding: 12, flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>

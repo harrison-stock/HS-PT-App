@@ -93,7 +93,7 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
             </Field>
             {preview && (
               <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', aspectRatio: '16/9', background: `url('${preview}') center/cover, var(--bg-3)` }}>
-                {d.video && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><Hex size={48} style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}><IconPlay size={18}/></Hex></div>}
+                {d.video && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><Hex size={48} style={{ background: 'rgba(0,0,0,0.55)', color: '#eceff4' }}><IconPlay size={18}/></Hex></div>}
               </div>
             )}
             <Field label="COVER IMAGE">

@@ -250,7 +250,7 @@ function PhotosTab({ userId }) {
                 {img &&
                 <>
                   <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 55%, rgba(0,0,0,0.6))' }} />
-                  <span className="mono" style={{ position: 'absolute', bottom: 5, left: 6, fontSize: 8.5, color: '#fff', letterSpacing: '0.1em', fontWeight: 700 }}>{pose.label}</span>
+                  <span className="mono" style={{ position: 'absolute', bottom: 5, left: 6, fontSize: 8.5, color: '#eceff4', letterSpacing: '0.1em', fontWeight: 700 }}>{pose.label}</span>
                   <span style={{ position: 'absolute', top: 5, right: 5 }}>
                     <Hex size={18} square style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
                       <IconCheck size={9} sw={3} />
@@ -299,12 +299,12 @@ function PhotosTab({ userId }) {
               border: '1px solid var(--line)'
             }}>
               <span style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 60%, rgba(0,0,0,0.55))' }} />
-              <span className="mono" style={{ position: 'absolute', bottom: 4, left: 5, fontSize: 8, color: '#fff', letterSpacing: '0.1em', fontWeight: 700 }}>{pose.label}</span>
+              <span className="mono" style={{ position: 'absolute', bottom: 4, left: 5, fontSize: 8, color: '#eceff4', letterSpacing: '0.1em', fontWeight: 700 }}>{pose.label}</span>
               {row && (
                 <button onClick={() => removePhoto(row)} aria-label="Remove photo" style={{
                   all: 'unset', cursor: 'pointer', position: 'absolute', top: 4, right: 4,
                   width: 20, height: 20, borderRadius: 6, display: 'grid', placeItems: 'center',
-                  background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, lineHeight: 1,
+                  background: 'rgba(0,0,0,0.55)', color: '#eceff4', fontSize: 11, lineHeight: 1,
                 }}>✕</button>
               )}
             </div>);

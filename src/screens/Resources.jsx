@@ -226,7 +226,7 @@ function RecipeCard({ r, onOpen, isFav, onToggleFav, onEdit }) {
         all: 'unset', cursor: 'pointer', position: 'absolute', bottom: 8, right: 8, zIndex: 2,
         padding: '4px 9px', borderRadius: 999,
         background: 'rgba(10,15,20,0.78)', border: '1px solid rgba(255,255,255,0.22)',
-        color: '#fff', fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em',
+        color: '#eceff4', fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em',
       }}>EDIT</button>
       }
       {onToggleFav &&
@@ -296,7 +296,7 @@ function GuideCard({ g, isFav, onToggleFav, onEdit, onOpen }) {
       style={{
         all: 'unset', cursor: 'pointer', position: 'absolute', bottom: 8, right: 8, zIndex: 2,
         padding: '4px 9px', borderRadius: 999, background: 'rgba(10,15,20,0.78)', border: '1px solid rgba(255,255,255,0.22)',
-        color: '#fff', fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em',
+        color: '#eceff4', fontFamily: 'JetBrains Mono', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em',
       }}>EDIT</button>
       }
       {onToggleFav &&
@@ -383,7 +383,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
             position: 'absolute', top: 22, right: 64, zIndex: 2,
             all: 'unset', cursor: 'pointer', padding: '7px 12px', borderRadius: 999,
             background: 'rgba(10,15,20,0.82)', border: '1px solid rgba(255,255,255,0.3)',
-            color: '#fff', fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+            color: '#eceff4', fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
             backdropFilter: 'blur(8px)',
           }}>EDIT</button>
           }
@@ -392,7 +392,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
               background: isFav ? 'var(--c-coral)' : 'rgba(10,15,20,0.82)',
               border: '1.5px solid ' + (isFav ? 'var(--c-coral)' : 'rgba(255,255,255,0.45)'),
               backdropFilter: 'blur(8px)',
-              color: '#fff',
+              color: '#eceff4',
               boxShadow: isFav ? '0 0 calc(12px * var(--glow)) color-mix(in srgb, var(--c-coral) 65%, transparent)' : '0 2px 10px rgba(0,0,0,0.5)'
             }}>
               <IconHeart size={15} fill={isFav ? '#fff' : 'none'} />
@@ -411,7 +411,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
                 padding: '5px 11px', borderRadius: 999,
                 background: 'rgba(10,15,20,0.78)', backdropFilter: 'blur(8px)',
                 border: '1px solid rgba(255,255,255,0.18)',
-                color: '#fff',
+                color: '#eceff4',
                 fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em'
               }}>
                 <IconClock size={12} />

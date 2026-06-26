@@ -569,7 +569,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
               filter: 'drop-shadow(0 0 calc(16px * var(--glow)) var(--accent-glow))'
             }} />
             <div className="label" style={{ color: 'var(--accent)', marginBottom: 6 }}>// SESSION PAUSED</div>
-            <div className="h-bold" style={{ fontSize: 30, marginBottom: 6, color: '#fff' }}>PAUSED</div>
+            <div className="h-bold" style={{ fontSize: 30, marginBottom: 6, color: '#eceff4' }}>PAUSED</div>
             <div className="mono" style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', letterSpacing: '0.08em', marginBottom: 24 }}>
               {fmt(sessionTime)} ELAPSED
             </div>
@@ -613,7 +613,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
               <div style={{ display: 'grid', gap: 8 }}>
                 <button onClick={() => { if (userId) clearActiveWorkout(userId); go('dashboard'); }} style={{
                   width: '100%', padding: '12px 16px', borderRadius: 11,
-                  background: 'var(--c-coral)', color: '#fff', border: 'none', cursor: 'pointer',
+                  background: 'var(--c-coral)', color: '#eceff4', border: 'none', cursor: 'pointer',
                   fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase'
                 }}>YES, QUIT</button>
                 <button onClick={() => setConfirmQuit(false)} className="btn-ghost" style={{ width: '100%' }}>

@@ -238,12 +238,12 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
               {autoThumb && (
                 <div style={{ position: 'relative', marginTop: 10, borderRadius: 12, overflow: 'hidden', aspectRatio: '16/9', background: `url('${autoThumb}') center/cover, var(--bg-3)` }}>
                   <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-                    <Hex size={48} style={{ background: 'rgba(0,0,0,0.55)', color: '#fff' }}><IconPlay size={18}/></Hex>
+                    <Hex size={48} style={{ background: 'rgba(0,0,0,0.55)', color: '#eceff4' }}><IconPlay size={18}/></Hex>
                   </div>
                   {d.thumbnail_url && (
                     <button onClick={() => set({ thumbnail_url: '' })} aria-label="Remove thumbnail" style={{
                       position: 'absolute', top: 8, right: 8, all: 'unset', cursor: 'pointer',
-                      width: 24, height: 24, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'grid', placeItems: 'center',
+                      width: 24, height: 24, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#eceff4', display: 'grid', placeItems: 'center',
                     }}><IconX2 size={12}/></button>
                   )}
                 </div>
@@ -276,7 +276,7 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
                     <div key={u} style={{ position: 'relative', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: `url('${u}') center/cover, var(--bg-3)`, border: '1px solid var(--line)' }}>
                       <button onClick={() => delPhoto(u)} aria-label="Remove photo" style={{
                         position: 'absolute', top: 3, right: 3, all: 'unset', cursor: 'pointer',
-                        width: 20, height: 20, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', display: 'grid', placeItems: 'center',
+                        width: 20, height: 20, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#eceff4', display: 'grid', placeItems: 'center',
                       }}><IconX2 size={10}/></button>
                     </div>
                   ))}
