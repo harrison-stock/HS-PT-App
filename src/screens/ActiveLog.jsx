@@ -9,6 +9,7 @@ import { ExerciseComments } from './ExerciseComments'
 import { notify, trainerOf } from '../lib/notifications'
 import { saveActiveWorkout, loadActiveWorkout, clearActiveWorkout } from '../lib/activeWorkout'
 import { BANDS, bandOf } from '../components/bands'
+import { ExercisePicker } from './ProgrammeBuilder'
 
 // Active Workout — Everfit-style swipeable cards.
 // One full-page card per exercise; horizontal snap-scroll between them.
@@ -24,6 +25,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
   const [altsForId, setAltsForId] = React.useState(null);
   const [historyForId, setHistoryForId] = React.useState(null);
   const [commentForId, setCommentForId] = React.useState(null);
+  const [addingEx, setAddingEx] = React.useState(false);
   const [paused, setPaused] = React.useState(false);
   const [confirmQuit, setConfirmQuit] = React.useState(false);
   const [complete, setComplete] = React.useState(false);
@@ -169,11 +171,14 @@ export function ActiveLog({ go, dayId, userId, resume }) {
         .insert({ client_id: userId, day_id: dayId, started_at: sessionStartRef.current, completed_at: new Date().toISOString() })
         .select('id').single();
       if (ws) {
+        // Client-added exercises have non-DB ids — log them by name with a null
+        // exercise_id (the FK only accepts real section_exercises rows).
+        const isDbId = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id);
         const logRows = [];
         exercises.forEach(ex => {
           ex.sets.forEach((s, i) => {
             if (s.done) logRows.push({
-              session_id: ws.id, exercise_id: ex.id, set_index: i,
+              session_id: ws.id, exercise_id: isDbId(ex.id) ? ex.id : null, exercise_name: ex.name, set_index: i,
               actual_reps: s.time ? null : (typeof s.reps === 'number' ? s.reps : (parseInt(s.reps) || null)),
               actual_weight_kg: (s.time || s.band) ? null : (s.kg || null),
               actual_band: s.band || null,
@@ -266,6 +271,39 @@ export function ActiveLog({ go, dayId, userId, resume }) {
     }));
   };
 
+  // Remove the last set (keep at least one).
+  const delSet = (exId) => {
+    setExercises((prev) => prev.map((e) => e.id !== exId ? e : (e.sets.length > 1 ? { ...e, sets: e.sets.slice(0, -1) } : e)));
+  };
+
+  // Add an exercise mid-session — inserted at the end of the current phase.
+  const activeExRef = React.useRef(null);
+  const addExercise = (ex) => {
+    setExercises((prev) => {
+      const cur = prev.find((e) => e.id === activeExRef.current) || prev[prev.length - 1];
+      const phaseId = cur?.phase || prev[0]?.phase || 'main';
+      let insertAt = prev.length;
+      for (let i = prev.length - 1; i >= 0; i--) { if (prev[i].phase === phaseId) { insertAt = i + 1; break; } }
+      const newEx = {
+        id: 'cx' + Date.now(),
+        name: ex.name, img: ex.img || '',
+        base: { name: ex.name, img: ex.img || '' },
+        phase: phaseId, ss: null, banded: !!ex.banded, unilateral: !!ex.unilateral,
+        tempo: '', rest: 60, coach: '', alternatives: [],
+        sets: [{ reps: '10', kg: null, band: ex.banded ? 'medium' : undefined, perSide: !!ex.unilateral, done: false, active: false, rpe: null }],
+      };
+      return [...prev.slice(0, insertAt), newEx, ...prev.slice(insertAt)];
+    });
+    setAddingEx(false);
+  };
+
+  // Remove an exercise (or every member of a superset group).
+  const delExercise = (ids) => {
+    const set = new Set(Array.isArray(ids) ? ids : [ids]);
+    setExercises((prev) => prev.filter((e) => !set.has(e.id)));
+    setActiveIdx((i) => Math.max(0, i - 1));
+  };
+
   const altsFor = exercises.find((e) => e.id === altsForId);
   const historyFor = exercises.find((e) => e.id === historyForId);
 
@@ -316,6 +354,9 @@ export function ActiveLog({ go, dayId, userId, resume }) {
   const currentPhaseId = activeItem.type === 'ex' ? activeItem.ex.phase
     : activeItem.type === 'superset' ? activeItem.group[0].phase
     : activeItem.phaseId;
+  activeExRef.current = activeItem.type === 'ex' ? activeItem.ex.id
+    : activeItem.type === 'superset' ? activeItem.group[0].id
+    : activeExRef.current;
   const lastIdx = railItems.length - 1;
 
   if (dbLoading) return (
@@ -435,6 +476,9 @@ export function ActiveLog({ go, dayId, userId, resume }) {
           onComplete={(exId, si) => completeSet(exId, si)}
           onUpdate={(exId, si, p) => updateSet(exId, si, p)}
           onAddRound={() => it.group.forEach(e => addSet(e.id, 'WORK'))}
+          onRemoveRound={() => it.group.forEach(e => delSet(e.id))}
+          onAddExercise={() => setAddingEx(true)}
+          onDelGroup={() => delExercise(it.group.map(e => e.id))}
           onTitle={(exId) => setAltsForId(exId)}
           onComment={dayId ? (exId) => setCommentForId(exId) : null}
           onHistory={(exId) => setHistoryForId(exId)} /> :
@@ -444,6 +488,9 @@ export function ActiveLog({ go, dayId, userId, resume }) {
         onUpdate={(si, p) => updateSet(it.ex.id, si, p)}
         onTitle={() => setAltsForId(it.ex.id)}
         onAddSet={(kind) => addSet(it.ex.id, kind)}
+        onDelSet={() => delSet(it.ex.id)}
+        onAddExercise={() => setAddingEx(true)}
+        onDelExercise={() => delExercise(it.ex.id)}
         onComment={dayId ? () => setCommentForId(it.ex.id) : null}
         onHistory={() => setHistoryForId(it.ex.id)} />
 
@@ -537,6 +584,8 @@ export function ActiveLog({ go, dayId, userId, resume }) {
       </div>
 
       {/* Alternatives sheet */}
+      {addingEx && <ExercisePicker onClose={() => setAddingEx(false)} onPick={addExercise} />}
+
       {altsFor && <AlternativesSheet ex={altsFor} onClose={() => setAltsForId(null)} onPick={swapExercise} />}
 
       {/* Prior progress sheet */}
@@ -630,7 +679,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
 }
 
 // ── EXERCISE CARD (one per swipe page) ───────────────────────────
-function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onHistory, onComment, intro }) {
+function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onDelExercise, onHistory, onComment, intro }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   return (
@@ -748,7 +797,20 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
                 onKind={(kind) => onUpdate(i, kindPatch(s, kind))} />);
             });
           })()}
-          <AddSetControl onAdd={onAddSet} />
+          <AddSetControl onAdd={onAddSet} onRemove={ex.sets.length > 1 ? onDelSet : null} />
+        </div>
+
+        {/* Add / remove exercise */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          {onAddExercise && (
+            <button onClick={onAddExercise} className="btn-ghost" style={{ flex: 1, fontSize: 11 }}>+ ADD EXERCISE</button>
+          )}
+          {onDelExercise && (
+            <button onClick={() => { if (confirm(`Remove "${ex.name}" from today's workout?`)) onDelExercise(); }}
+              className="btn-ghost" style={{ flex: 1, fontSize: 11, color: 'var(--c-coral)', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))' }}>
+              ✕ REMOVE EXERCISE
+            </button>
+          )}
         </div>
 
         {/* Coach note */}
@@ -884,7 +946,7 @@ function FinishSlide({ phaseId, onFinish }) {
 // ── SUPERSET CARD (interleaved, round-based) ─────────────────────
 // Renders a superset group as rounds: round 1 = one set of each exercise,
 // round 2 = the next set of each, etc., so the client alternates A1→A2→A1…
-function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onComment, onHistory, intro }) {
+function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onRemoveRound, onAddExercise, onDelGroup, onComment, onHistory, intro }) {
   const phase = PHASES.find((p) => p.id === group[0].phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   const maxRounds = Math.max(...group.map((e) => e.sets.length));
@@ -946,7 +1008,23 @@ function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onComm
               })}
             </div>
           ))}
-          <button onClick={onAddRound} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center', padding: '12px 0', color: phaseColor, fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.12em', fontWeight: 700 }}>+ ADD ROUND</button>
+          <div style={{ display: 'flex', borderTop: '1px dashed var(--line-strong)' }}>
+            <button onClick={onAddRound} style={{ all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '12px 0', color: phaseColor, fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.12em', fontWeight: 700 }}>+ ADD ROUND</button>
+            {onRemoveRound && group[0]?.sets?.length > 1 && (
+              <button onClick={onRemoveRound} style={{ all: 'unset', cursor: 'pointer', padding: '12px 18px', color: 'var(--c-coral)', fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 700, borderLeft: '1px dashed var(--line-strong)' }}>−</button>
+            )}
+          </div>
+        </div>
+
+        {/* Add / remove exercise */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          {onAddExercise && <button onClick={onAddExercise} className="btn-ghost" style={{ flex: 1, fontSize: 11 }}>+ ADD EXERCISE</button>}
+          {onDelGroup && (
+            <button onClick={() => { if (confirm('Remove this superset from today\'s workout?')) onDelGroup(); }}
+              className="btn-ghost" style={{ flex: 1, fontSize: 11, color: 'var(--c-coral)', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))' }}>
+              ✕ REMOVE SUPERSET
+            </button>
+          )}
         </div>
 
         {group.some((e) => e.coach) && (
@@ -1357,13 +1435,13 @@ function addSetBtnStyle(c) {
   };
 }
 
-// Single "ADD SET" button — adds a plain set. Change a set's status by
-// tapping its number/letter badge in the row.
-function AddSetControl({ onAdd }) {
+// "ADD SET" (and optional "REMOVE") — change a set's status by tapping its
+// number/letter badge in the row.
+function AddSetControl({ onAdd, onRemove }) {
   return (
-    <div style={{ padding: '10px 12px', borderTop: '1px dashed var(--line-strong)' }}>
+    <div style={{ padding: '10px 12px', borderTop: '1px dashed var(--line-strong)', display: 'flex', gap: 8 }}>
       <button onClick={() => onAdd()} style={{
-        width: '100%', padding: '10px 12px', borderRadius: 8,
+        flex: 1, padding: '10px 12px', borderRadius: 8,
         background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
         border: '1px solid color-mix(in srgb, var(--accent) 38%, transparent)',
         color: 'var(--accent)', cursor: 'pointer',
@@ -1373,6 +1451,16 @@ function AddSetControl({ onAdd }) {
       }}>
         <IconPlus size={13} /> Add Set
       </button>
+      {onRemove && (
+        <button onClick={() => onRemove()} aria-label="Remove last set" style={{
+          padding: '10px 14px', borderRadius: 8,
+          background: 'color-mix(in srgb, var(--c-coral) 8%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--c-coral) 35%, transparent)',
+          color: 'var(--c-coral)', cursor: 'pointer',
+          fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>−</button>
+      )}
     </div>);
 
 }
@@ -1835,7 +1923,7 @@ export function SessionResults({ dayId, userId, go, onClose }) {
     if (!dayId || !userId) { setState('none'); return; }
     supabase
       .from('workout_sessions')
-      .select('id, started_at, completed_at, logged_sets ( exercise_id, set_index, actual_reps, actual_weight_kg, actual_time_secs, section_exercises ( id, name, workout_sections ( kind ) ) )')
+      .select('id, started_at, completed_at, logged_sets ( exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, section_exercises ( id, name, workout_sections ( kind ) ) )')
       .eq('client_id', userId)
       .eq('day_id', dayId)
       .not('completed_at', 'is', null)
@@ -1850,15 +1938,16 @@ export function SessionResults({ dayId, userId, go, onClose }) {
           .sort((a, b) => a.set_index - b.set_index)
           .forEach((ls) => {
             const se = ls.section_exercises;
-            if (!se) return;
-            if (!exMap.has(se.id)) exMap.set(se.id, {
-              id: se.id, name: se.name,
-              phase: KIND_TO_PHASE[se.workout_sections?.kind] || 'main',
+            const key = se ? se.id : `adhoc:${ls.exercise_name || 'Exercise'}`;
+            if (!exMap.has(key)) exMap.set(key, {
+              id: key, name: se ? se.name : (ls.exercise_name || 'Exercise'),
+              phase: se ? (KIND_TO_PHASE[se.workout_sections?.kind] || 'main') : 'main',
               sets: [],
             });
-            exMap.get(se.id).sets.push({
+            exMap.get(key).sets.push({
               reps: ls.actual_time_secs ? `${ls.actual_time_secs}s` : (ls.actual_reps ?? 0),
               kg: ls.actual_weight_kg ? parseFloat(ls.actual_weight_kg) : null,
+              band: ls.actual_band || null,
               done: true,
               time: !!ls.actual_time_secs,
             });
