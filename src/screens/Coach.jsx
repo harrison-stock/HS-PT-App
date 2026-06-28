@@ -33,7 +33,7 @@ export function Coach({ go, trainerId, unread = 0, only }) {
   const [builderOpenRoadmap, setBuilderOpenRoadmap] = React.useState(false);
   const [programmes, setProgrammes]         = React.useState([]);
   const [loadingProgs, setLoadingProgs]     = React.useState(true);
-  const [inUse, setInUse]                   = React.useState(() => new Set());
+  const [progClients, setProgClients]       = React.useState({}); // programmeId → [clientId]
   const [clients, setClients]               = React.useState([]);
   const [loadingClients, setLoadingClients] = React.useState(true);
   const [inviteOpen, setInviteOpen]         = React.useState(false);
@@ -60,12 +60,17 @@ export function Coach({ go, trainerId, unread = 0, only }) {
     setLoadingProgs(true);
     const [{ data }, { data: assigned }] = await Promise.all([
       supabase.from('programmes').select('*, programme_phases(*)').order('updated_at', { ascending: false }),
-      supabase.from('client_workouts').select('programme_days(programme_phases(programme_id))'),
+      supabase.from('client_workouts').select('client_id, programme_days(programme_phases(programme_id))'),
     ]);
     if (data) setProgrammes(data.map(shapeProgramme));
-    const used = new Set();
-    (assigned || []).forEach(w => { const pid = w.programme_days?.programme_phases?.programme_id; if (pid) used.add(pid); });
-    setInUse(used);
+    const map = {};
+    (assigned || []).forEach(w => {
+      const pid = w.programme_days?.programme_phases?.programme_id;
+      if (pid && w.client_id) (map[pid] = map[pid] || new Set()).add(w.client_id);
+    });
+    const obj = {};
+    Object.keys(map).forEach(pid => { obj[pid] = [...map[pid]]; });
+    setProgClients(obj);
     setLoadingProgs(false);
   };
 
@@ -252,7 +257,7 @@ export function Coach({ go, trainerId, unread = 0, only }) {
 
         {hubTab === 'programmes' && (
           <ProgrammesTab
-            programmes={fullProgrammes} loading={loadingProgs} inUse={inUse}
+            programmes={fullProgrammes} loading={loadingProgs} progClients={progClients} clients={clients}
             onPick={setProgrammeId} onNew={newProgramme}
             onEdit={openBuilder}
             onDuplicate={duplicateProgramme}
@@ -608,8 +613,9 @@ const PROG_STATUS = [
   { id: 'completed', label: 'Completed' },
   { id: 'archived',  label: 'Archived' },
 ];
-function ProgrammesTab({ programmes, loading, inUse, onPick, onNew, onEdit, onDuplicate, onSetStatus, onDelete }) {
+function ProgrammesTab({ programmes, loading, progClients, clients, onPick, onNew, onEdit, onDuplicate, onSetStatus, onDelete }) {
   const [filter, setFilter] = React.useState('active');
+  const byId = React.useMemo(() => Object.fromEntries((clients || []).map(c => [c.id, c])), [clients]);
   const counts = { active: 0, completed: 0, archived: 0 };
   programmes.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
   const shown = programmes.filter(p => (p.status || 'active') === filter);
@@ -643,7 +649,9 @@ function ProgrammesTab({ programmes, loading, inUse, onPick, onNew, onEdit, onDu
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
           {shown.map(p => (
-            <ProgrammeCard key={p.id} p={p} inUse={inUse?.has(p.id)}
+            <ProgrammeCard key={p.id} p={p}
+              assigned={(progClients?.[p.id] || []).map(id => byId[id]).filter(Boolean)}
+              assignedCount={(progClients?.[p.id] || []).length}
               onPick={() => onPick(p.id)}
               onEdit={() => onEdit(p)}
               onDuplicate={() => onDuplicate(p)}
@@ -669,9 +677,10 @@ function ProgrammesTab({ programmes, loading, inUse, onPick, onNew, onEdit, onDu
   );
 }
 
-function ProgrammeCard({ p, inUse, onPick, onEdit, onDuplicate, onSetStatus, onDelete }) {
+function ProgrammeCard({ p, assigned = [], assignedCount = 0, onPick, onEdit, onDuplicate, onSetStatus, onDelete }) {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [confirmDel, setConfirmDel] = React.useState(false);
+  const inUse = assignedCount > 0;
   const tagColor = p.tag === 'STRENGTH' ? 'var(--accent)'
                  : p.tag === 'ONBOARD'  ? 'var(--c-amber)'
                  : p.tag === 'REHAB'    ? 'var(--c-coral)'
@@ -701,6 +710,25 @@ function ProgrammeCard({ p, inUse, onPick, onEdit, onDuplicate, onSetStatus, onD
               <div style={{ fontSize: 16, fontWeight: 600, paddingRight: 30 }}>{p.name}</div>
             </div>
           </div>
+
+          {/* Assigned clients at a glance */}
+          {inUse && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div style={{ display: 'flex' }}>
+                {assigned.slice(0, 5).map((c, i) => (
+                  <div key={c.id} title={c.name} style={{ marginLeft: i === 0 ? 0 : -8, zIndex: 5 - i }}>
+                    <Hex size={24} style={{ background: c.accent, color: 'var(--on-accent)', fontFamily: 'Orbitron', fontSize: 8, fontWeight: 800, boxShadow: '0 0 0 2px var(--bg-2)' }}>{c.initials}</Hex>
+                  </div>
+                ))}
+                {assigned.length > 5 && (
+                  <div style={{ marginLeft: -8 }}><Hex size={24} style={{ background: 'var(--bg-3)', color: 'var(--text-2)', fontFamily: 'JetBrains Mono', fontSize: 8, fontWeight: 700, boxShadow: '0 0 0 2px var(--bg-2)' }}>+{assigned.length - 5}</Hex></div>
+                )}
+              </div>
+              <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 700 }}>
+                {assignedCount} CLIENT{assignedCount !== 1 ? 'S' : ''}{assigned.length < assignedCount ? ' ASSIGNED' : ''}
+              </span>
+            </div>
+          )}
 
           {p.phaseList.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${p.phaseList.length}, 1fr)`, gap: 4, marginBottom: 8 }}>
