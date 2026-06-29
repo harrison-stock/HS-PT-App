@@ -143,19 +143,22 @@ export function Coach({ go, trainerId, unread = 0, only }) {
     fetchClients();
   };
 
-  // Permanently remove a client from this trainer's roster.
-  // Managed (never-signed-up) clients are deleted outright; real accounts are
-  // detached from the trainer (their auth login survives, but they leave the roster).
+  // Permanently remove a client from this trainer's roster. Real accounts are
+  // backed by an Auth user that only the service role can delete, so this runs
+  // through the delete-client edge function (managed clients are deleted there
+  // too). Returns an error string on failure so the UI can surface it.
   const removeClient = async (c) => {
-    setArchivedClients(prev => prev.filter(x => x.id !== c.id));
-    if (c.managed) {
-      await supabase.from('managed_clients').delete().eq('id', c.id);
-    } else {
-      await supabase.from('profiles')
-        .update({ trainer_id: null, archived: false })
-        .eq('id', c.id);
+    const prev = archivedClients;
+    setArchivedClients(p => p.filter(x => x.id !== c.id));
+    const { data, error } = await supabase.functions.invoke('delete-client', {
+      body: { clientId: c.id, managed: !!c.managed },
+    });
+    if (error || data?.error) {
+      setArchivedClients(prev); // roll back the optimistic removal
+      return error?.message || data?.error || 'Could not remove client';
     }
     fetchClients();
+    return null;
   };
 
   const newProgramme = () => {
@@ -619,10 +622,20 @@ function ClientsTab({ clients, archived = [], loading, onPick, onInvite, onResto
 
 function ArchivedClientRow({ c, onRestore, onRemove }) {
   const [confirming, setConfirming] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+
+  const doRemove = async () => {
+    setBusy(true); setErr('');
+    const msg = await onRemove();
+    if (msg) { setErr(msg); setBusy(false); setConfirming(false); }
+    // on success the row unmounts, so no need to clear busy
+  };
+
   return (
     <div className="card" style={{
       padding: 12, display: 'grid', gridTemplateColumns: '40px 1fr auto', gap: 12,
-      alignItems: 'center', opacity: 0.92,
+      alignItems: 'center', opacity: busy ? 0.5 : 0.92,
     }}>
       <Hex size={36} style={{
         background: 'var(--bg-3, var(--bg-2))', color: 'var(--text-3)',
@@ -633,19 +646,19 @@ function ArchivedClientRow({ c, onRestore, onRemove }) {
         <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-2, var(--text))' }}>
           {c.name}
         </div>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {c.email || 'ARCHIVED'}
+        <div className="mono" style={{ fontSize: 10, color: err ? 'var(--c-coral)' : 'var(--text-3)', letterSpacing: '0.06em', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {err || c.email || 'ARCHIVED'}
         </div>
       </div>
 
       {confirming ? (
         <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={onRemove} style={{
-            all: 'unset', cursor: 'pointer', padding: '5px 9px', borderRadius: 6,
+          <button onClick={doRemove} disabled={busy} style={{
+            all: 'unset', cursor: busy ? 'default' : 'pointer', padding: '5px 9px', borderRadius: 6,
             background: 'var(--c-coral)', color: '#fff',
             fontFamily: 'JetBrains Mono', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700,
-          }}>DELETE</button>
-          <button onClick={() => setConfirming(false)} style={{
+          }}>{busy ? '…' : 'DELETE'}</button>
+          <button onClick={() => setConfirming(false)} disabled={busy} style={{
             all: 'unset', cursor: 'pointer', padding: '5px 9px', borderRadius: 6,
             background: 'var(--bg-2)', color: 'var(--text-3)',
             fontFamily: 'JetBrains Mono', fontSize: 9, letterSpacing: '0.08em', fontWeight: 700,
