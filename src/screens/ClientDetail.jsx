@@ -455,7 +455,7 @@ function mondayOf(d) {
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 function TrainingTab({ c, trainerId, programmes, onChanged }) {
-  const [weeks, setWeeks]   = React.useState(2);
+  const [weeks, setWeeks]   = React.useState(4);
   const [anchor, setAnchor] = React.useState(() => mondayOf(new Date()));
   const [workouts, setWorkouts] = React.useState([]);
   const [showAssign, setShowAssign] = React.useState(false);
@@ -528,28 +528,60 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
 function CalendarWeek({ start, wMap }) {
   const today = ymd(new Date());
   const DOW = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  // Label any new month that begins in this week (the 1st, or the week's first
+  // day if the month rolled over mid-week before it) so the boundary is obvious.
+  const monthMarks = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start); d.setDate(d.getDate() + i);
+    if (i === 0 || d.getDate() === 1) monthMarks.push({ col: i, label: MONTHS[d.getMonth()], year: d.getFullYear() });
+  }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
-      {Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(start); d.setDate(d.getDate() + i);
-        const ds = ymd(d);
-        const isToday = ds === today;
-        const ws = wMap[ds] || [];
-        return (
-          <div key={i} style={{
-            minHeight: 150, borderRadius: 10, padding: 8,
-            background: isToday ? 'var(--accent-soft)' : 'var(--bg-2)',
-            border: `1px solid ${isToday ? 'var(--accent)' : 'var(--line)'}`,
-          }}>
-            <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: isToday ? 'var(--accent)' : 'var(--text-3)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
-              <span>{DOW[i]}</span><span style={{ fontWeight: 700, color: isToday ? 'var(--accent)' : 'var(--text-2)' }}>{d.getDate()}</span>
+    <div style={{ display: 'grid', gap: 4 }}>
+      {/* Month band — shows which month(s) this week falls in */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+        {Array.from({ length: 7 }, (_, i) => {
+          const mark = monthMarks.find(m => m.col === i);
+          const isNewMonth = i !== 0 && mark; // the actual 1st-of-month boundary
+          return (
+            <div key={i} className="mono" style={{
+              fontSize: 8, letterSpacing: '0.12em', fontWeight: 700,
+              color: mark ? (isNewMonth ? 'var(--accent)' : 'var(--text-2)') : 'transparent',
+              paddingLeft: 2, paddingBottom: 1,
+              borderLeft: isNewMonth ? '2px solid var(--accent)' : '2px solid transparent',
+            }}>
+              {mark ? mark.label : '·'}
             </div>
-            <div style={{ display: 'grid', gap: 6 }}>
-              {ws.map(w => <WorkoutCell key={w.id} w={w} />)}
+          );
+        })}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+        {Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(start); d.setDate(d.getDate() + i);
+          const ds = ymd(d);
+          const isToday = ds === today;
+          const firstOfMonth = d.getDate() === 1;
+          const ws = wMap[ds] || [];
+          return (
+            <div key={i} style={{
+              minHeight: 150, borderRadius: 10, padding: 8,
+              background: isToday ? 'var(--accent-soft)' : 'var(--bg-2)',
+              border: `1px solid ${isToday ? 'var(--accent)' : 'var(--line)'}`,
+              borderLeft: firstOfMonth ? '3px solid var(--accent)' : `1px solid ${isToday ? 'var(--accent)' : 'var(--line)'}`,
+            }}>
+              <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: isToday ? 'var(--accent)' : 'var(--text-3)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                <span>{DOW[i]}</span>
+                <span style={{ fontWeight: 700, color: firstOfMonth ? 'var(--accent)' : isToday ? 'var(--accent)' : 'var(--text-2)' }}>
+                  {firstOfMonth ? `${MONTHS[d.getMonth()]} ${d.getDate()}` : d.getDate()}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {ws.map(w => <WorkoutCell key={w.id} w={w} />)}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
