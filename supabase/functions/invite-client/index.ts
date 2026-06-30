@@ -84,14 +84,28 @@ Deno.serve(async (req) => {
     const trainerName = (prof?.name || '').trim() || 'Your coach';
     const firstName = (name || '').trim().split(/\s+/)[0] || 'there';
 
+    // Plain-text alternative — mail with both parts lands in the inbox far more
+    // often than HTML-only mail.
+    const text =
+`Hi ${firstName},
+
+${trainerName} has invited you to join their training app — your programmes, workouts, progress tracking and check-ins, all in one place.
+
+Set up your account:
+${inviteUrl}
+
+— Harrison Stock · Personal Training & Nutrition`;
+
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: FROM,
         to: [email],
+        reply_to: user.email || undefined,
         subject: `${trainerName} has invited you to train`,
         html: inviteEmailHtml(firstName, trainerName, inviteUrl),
+        text,
       }),
     });
 
