@@ -136,6 +136,15 @@ export function Coach({ go, trainerId, unread = 0, only }) {
     setLoadingClients(false);
   };
 
+  // Remove a pending (managed, never-signed-up) client outright — no archive
+  // step needed since there's no real account behind it. Clears its invite too.
+  const removePendingClient = async (c) => {
+    setClients(prev => prev.filter(x => x.id !== c.id));
+    await supabase.from('invites').delete().eq('managed_client_id', c.id);
+    await supabase.from('managed_clients').delete().eq('id', c.id);
+    fetchClients();
+  };
+
   // Bring an archived client back onto the active roster.
   const restoreClient = async (c) => {
     setArchivedClients(prev => prev.filter(x => x.id !== c.id));
@@ -347,7 +356,7 @@ export function Coach({ go, trainerId, unread = 0, only }) {
         ))}
       </div>
 
-      {tab === 'clients'    && <ClientsTab clients={clients} loading={loadingClients} onPick={setClientId} onInvite={() => setInviteOpen(true)}/>}
+      {tab === 'clients'    && <ClientsTab clients={clients} loading={loadingClients} onPick={setClientId} onInvite={() => setInviteOpen(true)} onRemovePending={removePendingClient}/>}
       {tab === 'archived'   && <ArchivedTab archived={archivedClients} loading={loadingClients} onRestore={restoreClient} onRemove={removeClient}/>}
 
       {activeClient && (
@@ -546,7 +555,7 @@ function KPIRow({ kpis }) {
 }
 
 // ── CLIENTS TAB ─────────────────────────────────────────────────
-function ClientsTab({ clients, loading, onPick, onInvite }) {
+function ClientsTab({ clients, loading, onPick, onInvite, onRemovePending }) {
   const [q, setQ] = React.useState('');
 
   const filtered = clients.filter(c =>
@@ -577,7 +586,7 @@ function ClientsTab({ clients, loading, onPick, onInvite }) {
         </div>
       ) : (
         <div className="grid-2-wide" style={{ display: 'grid', gap: 8 }}>
-          {filtered.map(c => <ClientRow key={c.id} c={c} onPick={() => onPick(c.id)}/>)}
+          {filtered.map(c => <ClientRow key={c.id} c={c} onPick={() => onPick(c.id)} onRemovePending={onRemovePending}/>)}
           {filtered.length === 0 && (
             <div className="card" style={{ padding: 28, textAlign: 'center' }}>
               <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 8 }}>
@@ -686,14 +695,20 @@ function ArchivedClientRow({ c, onRestore, onRemove }) {
   );
 }
 
-function ClientRow({ c, onPick }) {
+function ClientRow({ c, onPick, onRemovePending }) {
+  const [confirm, setConfirm] = React.useState(false);
   const statusColor = c.status === 'invited'         ? 'var(--c-amber)'
                     : c.status === 'needs-attention' ? 'var(--c-coral)'
                     : c.status === 'inactive'        ? 'var(--text-3)'
                     : c.status === 'new'             ? 'var(--c-amber)'
                     :                                  'var(--accent)';
+  const removePending = (e) => {
+    e.stopPropagation();
+    if (!confirm) { setConfirm(true); setTimeout(() => setConfirm(false), 3000); return; }
+    onRemovePending?.(c);
+  };
   return (
-    <button onClick={onPick} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
+    <div onClick={onPick} style={{ cursor: 'pointer', display: 'block' }}>
       <div className="card" style={{
         padding: 12, display: 'grid', gridTemplateColumns: '44px 1fr auto', gap: 12,
         alignItems: 'center', borderLeft: `2px solid ${statusColor}`,
@@ -723,9 +738,19 @@ function ClientRow({ c, onPick }) {
           )}
         </div>
 
-        <IconChevronRight size={16} style={{ color: 'var(--text-3)' }}/>
+        {c.managed && onRemovePending ? (
+          <button onClick={removePending} className="mono" style={{
+            all: 'unset', cursor: 'pointer', flexShrink: 0, padding: '6px 9px', borderRadius: 6,
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+            color: confirm ? '#fff' : 'var(--text-3)',
+            background: confirm ? 'var(--c-coral)' : 'transparent',
+            border: `1px solid color-mix(in srgb, var(--c-coral) ${confirm ? 60 : 30}%, var(--line))`,
+          }}>{confirm ? 'CONFIRM' : 'REMOVE'}</button>
+        ) : (
+          <IconChevronRight size={16} style={{ color: 'var(--text-3)' }}/>
+        )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -1291,13 +1316,29 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
     setSaving(true);
     setError(null);
 
-    // Create the managed client row so the trainer can work with them immediately
-    const { data: mc, error: mcErr } = await supabase
-      .from('managed_clients')
-      .insert({ trainer_id: trainerId, name: clientName.trim(), email: clientEmail.trim() })
-      .select('id')
-      .single();
-    if (mcErr || !mc) { setSaving(false); setError(mcErr?.message || 'Could not add client'); return; }
+    // Reuse an existing unlinked managed client for this email (avoids piling up
+    // duplicates when an invite is retried), otherwise create a fresh row.
+    let mc = null;
+    if (clientEmail.trim()) {
+      const { data: existing } = await supabase
+        .from('managed_clients')
+        .select('id')
+        .eq('trainer_id', trainerId).eq('email', clientEmail.trim()).is('linked_profile_id', null)
+        .limit(1).maybeSingle();
+      if (existing) {
+        mc = existing;
+        await supabase.from('managed_clients').update({ name: clientName.trim() }).eq('id', mc.id);
+      }
+    }
+    if (!mc) {
+      const { data: created, error: mcErr } = await supabase
+        .from('managed_clients')
+        .insert({ trainer_id: trainerId, name: clientName.trim(), email: clientEmail.trim() })
+        .select('id')
+        .single();
+      if (mcErr || !created) { setSaving(false); setError(mcErr?.message || 'Could not add client'); return; }
+      mc = created;
+    }
 
     // Create an invite linked to this managed client (for the client to sign up later)
     const { data: invite, error: invErr } = await supabase

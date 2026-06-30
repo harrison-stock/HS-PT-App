@@ -134,7 +134,10 @@ function OverviewTab({ c, go, onClose, onTab }) {
           .order('scheduled_date', { ascending: true }),
         supabase.from('client_goals').select('title, description, target_date').eq('client_id', c.id)
           .eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from(table).select('coach_notes, medical_notes').eq('id', c.id).maybeSingle(),
+        // managed_clients has no notes columns — skip to avoid a 400.
+        c.managed
+          ? Promise.resolve({ data: null })
+          : supabase.from(table).select('coach_notes, medical_notes').eq('id', c.id).maybeSingle(),
         supabase.from('progress_photos').select('taken_on', { count: 'exact' }).eq('client_id', c.id)
           .order('taken_on', { ascending: false }).limit(1),
       ]);
@@ -155,6 +158,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
   }, [c.id]);
 
   const saveNote = (field) => async (value) => {
+    if (c.managed) return; // managed_clients has no notes columns
     await supabase.from(table).update({ [field]: value }).eq('id', c.id);
   };
 
