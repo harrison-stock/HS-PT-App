@@ -150,8 +150,10 @@ export function Coach({ go, trainerId, unread = 0, only }) {
   const removeClient = async (c) => {
     const prev = archivedClients;
     setArchivedClients(p => p.filter(x => x.id !== c.id));
+    const { data: { session } } = await supabase.auth.getSession();
     const { data, error } = await supabase.functions.invoke('delete-client', {
       body: { clientId: c.id, managed: !!c.managed },
+      headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
     });
     if (error || data?.error) {
       setArchivedClients(prev); // roll back the optimistic removal
@@ -1310,8 +1312,12 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
 
     // If an email was given, send a Supabase Auth invite email via the edge function.
     if (clientEmail.trim()) {
+      // Attach the signed-in coach's JWT explicitly so the function gateway
+      // always receives an Authorization header.
+      const { data: { session } } = await supabase.auth.getSession();
       const { data, error: fnErr } = await supabase.functions.invoke('invite-client', {
         body: { email: clientEmail.trim(), name: clientName.trim(), managedClientId: mc.id, redirectTo: window.location.origin },
+        headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
       });
       if (!fnErr && !data?.error) setEmailed(true);
       else setError('Client added, but the invite email couldn’t be sent — share the link below instead.');
