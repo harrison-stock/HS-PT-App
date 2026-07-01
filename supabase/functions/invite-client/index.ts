@@ -26,7 +26,8 @@ const json = (body: unknown, status = 200) =>
 // address avoids that. Replies still route to the coach via reply_to below.
 const FROM = 'Harrison Stock PT <admin@harrisonstock.co.uk>';
 
-function inviteEmailHtml(firstName: string, trainerName: string, inviteUrl: string) {
+function inviteEmailHtml(greetingName: string, trainerFirst: string, inviteUrl: string) {
+  const greeting = greetingName ? `You're invited, ${greetingName},` : `You're invited,`;
   return `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#ECEFF4;font-family:Arial,Helvetica,sans-serif;">
@@ -36,25 +37,27 @@ function inviteEmailHtml(firstName: string, trainerName: string, inviteUrl: stri
           <tr><td>
             <img src="https://app.harrisonstock.co.uk/email-header.png" width="480" style="display:block;width:100%;height:auto;border:0;" alt="Harrison Stock — Personal Training &amp; Nutrition"/>
           </td></tr>
-          <tr><td style="padding:30px 34px 6px;">
-            <p style="font-size:16px;color:#094E53;margin:0 0 16px;font-weight:600;">Hi ${firstName},</p>
+          <tr><td align="center" style="padding:22px 34px 0;">
+            <p style="font-size:10px;color:#8693A0;margin:0;letter-spacing:0.14em;font-weight:700;">HARRISON STOCK &middot; PERSONAL TRAINING &amp; NUTRITION</p>
+          </td></tr>
+          <tr><td style="padding:16px 34px 6px;">
+            <h1 style="font-size:22px;line-height:1.25;color:#094E53;margin:0 0 14px;font-weight:800;">${greeting}</h1>
             <p style="font-size:15px;line-height:1.55;color:#4A5A60;margin:0;">
-              ${trainerName} has invited you to join their training app — your programmes, workouts, progress tracking and check-ins, all in one place.
+              ${trainerFirst} has set up your training profile on the HS PT app. Accept your invite and set your password to access your programme, recipes and resources.
             </p>
           </td></tr>
           <tr><td align="center" style="padding:24px 34px 8px;">
             <a href="${inviteUrl}" style="display:inline-block;background:#189CAA;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;letter-spacing:0.02em;padding:15px 30px;border-radius:10px;">
-              Set up your account &rarr;
+              Accept invite &amp; set password &rarr;
             </a>
           </td></tr>
           <tr><td style="padding:14px 34px 30px;">
             <p style="font-size:12px;line-height:1.55;color:#8693A0;margin:0;">
-              Or paste this link into your browser:<br/>
+              If the button doesn't work, copy and paste this link:<br/>
               <a href="${inviteUrl}" style="color:#189CAA;word-break:break-all;">${inviteUrl}</a>
             </p>
           </td></tr>
         </table>
-        <p style="font-size:11px;color:#8693A0;margin:18px 0 0;letter-spacing:0.04em;">HARRISON STOCK &middot; PERSONAL TRAINING &amp; NUTRITION</p>
       </td></tr>
     </table>
   </body>
@@ -86,20 +89,19 @@ Deno.serve(async (req) => {
     if (!resendKey) return json({ error: 'RESEND_API_KEY is not set — add it under Edge Functions → Secrets' }, 500);
 
     const trainerName = (prof?.name || '').trim() || 'Your coach';
-    const hasName = !!(name || '').trim();
-    const firstName = hasName ? (name as string).trim().split(/\s+/)[0] : 'there';
-    const subject = hasName
-      ? `${firstName}, you've been invited to the HS PT app`
-      : `You've been invited to the HS PT app`;
+    const trainerFirst = trainerName.split(/\s+/)[0];
+    const greetingName = (name || '').trim().split(/\s+/)[0] || '';
+    const subject = 'Welcome to the HS PT App';
 
     // Plain-text alternative — mail with both parts lands in the inbox far more
-    // often than HTML-only mail.
+    // often than HTML-only mail. Mirrors the HTML copy.
+    const greetLine = greetingName ? `You're invited, ${greetingName},` : `You're invited,`;
     const text =
-`Hi ${firstName},
+`${greetLine}
 
-${trainerName} has invited you to join their training app — your programmes, workouts, progress tracking and check-ins, all in one place.
+${trainerFirst} has set up your training profile on the HS PT app. Accept your invite and set your password to access your programme, recipes and resources.
 
-Set up your account:
+Accept invite & set password:
 ${inviteUrl}
 
 — Harrison Stock · Personal Training & Nutrition`;
@@ -112,7 +114,7 @@ ${inviteUrl}
         to: [email],
         reply_to: user.email || undefined,
         subject,
-        html: inviteEmailHtml(firstName, trainerName, inviteUrl),
+        html: inviteEmailHtml(greetingName, trainerFirst, inviteUrl),
         text,
       }),
     });
