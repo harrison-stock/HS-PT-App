@@ -84,7 +84,11 @@ Deno.serve(async (req) => {
     if (!resendKey) return json({ error: 'RESEND_API_KEY is not set — add it under Edge Functions → Secrets' }, 500);
 
     const trainerName = (prof?.name || '').trim() || 'Your coach';
-    const firstName = (name || '').trim().split(/\s+/)[0] || 'there';
+    const hasName = !!(name || '').trim();
+    const firstName = hasName ? (name as string).trim().split(/\s+/)[0] : 'there';
+    const subject = hasName
+      ? `${firstName}, you've been invited to the HS PT app`
+      : `You've been invited to the HS PT app`;
 
     // Plain-text alternative — mail with both parts lands in the inbox far more
     // often than HTML-only mail.
@@ -105,7 +109,7 @@ ${inviteUrl}
         from: FROM,
         to: [email],
         reply_to: user.email || undefined,
-        subject: `${trainerName} has invited you to train`,
+        subject,
         html: inviteEmailHtml(firstName, trainerName, inviteUrl),
         text,
       }),
