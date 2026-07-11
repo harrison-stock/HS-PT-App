@@ -14,15 +14,17 @@ const TAG_COLORS = {
   ENDURANCE: 'var(--accent-2)', HYBRID: 'var(--c-blue)', SPORT: 'var(--c-pink)',
 };
 
-export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trainerId }) {
+// `startAt` ({ phaseIdx, weekIdx, dayIdx }) deep-links straight to one day —
+// used by the coach's client calendar to jump to the exact assigned workout.
+export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trainerId, startAt }) {
   const isAdhoc = !!programme.is_adhoc;
   const [prog, setProg]             = React.useState(programme);
   const [roadmapMode, setRoadmapMode] = React.useState(openRoadmap && !isAdhoc);
   const [adhocName, setAdhocName]   = React.useState(programme.name);
   const [adhocTag, setAdhocTag]     = React.useState(programme.tag || 'STRENGTH');
-  const [phaseIdx, setPhaseIdx]     = React.useState(0);
-  const [weekIdx, setWeekIdx]       = React.useState(0);
-  const [dayIdx, setDayIdx]         = React.useState(0);
+  const [phaseIdx, setPhaseIdx]     = React.useState(() => clampIdx(startAt?.phaseIdx, programme.phaseList?.length));
+  const [weekIdx, setWeekIdx]       = React.useState(() => clampIdx(startAt?.weekIdx, programme.phaseList?.[clampIdx(startAt?.phaseIdx, programme.phaseList?.length)]?.weeks));
+  const [dayIdx, setDayIdx]         = React.useState(() => clampIdx(startAt?.dayIdx, 7));
   const [dirty, setDirty]           = React.useState(false);
   const [saving, setSaving]         = React.useState(false);
   const [day, setDay]               = React.useState(null);
@@ -170,6 +172,18 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     }
   };
 
+  // Cmd/Ctrl+S saves the day instead of opening the browser's save dialog.
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (dirty && !saving) saveDay();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   // Copy the current day into other (week × weekday) slots, with optional
   // week-on-week progression baked into each target.
   const copyDayTo = async (targets, progression) => {
@@ -281,7 +295,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     <div style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
 
       {/* Top bar */}
-      <div style={{ padding: '54px 14px 10px', background: 'linear-gradient(180deg, var(--bg-1) 70%, transparent)', borderBottom: '1px solid var(--line)' }}>
+      <div className="pb-topbar" style={{ background: 'linear-gradient(180deg, var(--bg-1) 70%, transparent)', borderBottom: '1px solid var(--line)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <HexBackButton onClick={async () => { await flush(); onClose(); }} size={36}/>
           <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
@@ -352,59 +366,65 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           </div>
         </div>
       ) : (
-      /* Phase / Week / Day pickers */
-      <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid var(--line)', background: 'var(--bg-1)' }}>
-        <div className="label" style={{ marginBottom: 6 }}>// PHASE</div>
-        <div style={{ display: 'flex', gap: 4, overflowX: 'auto', scrollbarWidth: 'none', marginBottom: 10 }}>
-          {prog.phaseList.map((ph, i) => (
-            <button key={i} onClick={() => move(() => setPhaseIdx(i))} style={{
-              all: 'unset', cursor: 'pointer', whiteSpace: 'nowrap',
-              padding: '6px 10px', borderRadius: 6,
-              border: '1px solid ' + (phaseIdx === i ? 'var(--accent)' : 'var(--line-strong)'),
-              background: phaseIdx === i ? 'var(--accent-soft)' : 'transparent',
-              color: phaseIdx === i ? 'var(--accent)' : 'var(--text-2)',
-              fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.08em', fontWeight: 600,
-            }}>P{i+1} · {ph.name.toUpperCase()}</button>
-          ))}
-        </div>
-
-        {phase && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div className="label">// WEEK · {phase.weeks} TOTAL</div>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em' }}>FOCUS: {phase.focus?.toUpperCase()}</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(phase.weeks, 8)}, 1fr)`, gap: 4, marginBottom: 10 }}>
-              {Array.from({ length: phase.weeks }, (_, i) => (
-                <button key={i} onClick={() => move(() => setWeekIdx(i))} style={{
-                  all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '7px 0', borderRadius: 6,
-                  border: '1px solid ' + (weekIdx === i ? 'var(--accent)' : 'var(--line)'),
-                  background: weekIdx === i ? 'var(--accent-soft)' : 'var(--bg-2)',
-                  color: weekIdx === i ? 'var(--accent)' : 'var(--text-2)',
-                  fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.05em', fontWeight: 600,
-                }}>W{i+1}</button>
+      /* Phase / Week / Day pickers — stacked on phones, one row on desktop */
+      <div className="pb-pickers" style={{ borderBottom: '1px solid var(--line)', background: 'var(--bg-1)' }}>
+        <div className="pb-picker-grid">
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>// PHASE</div>
+            <div style={{ display: 'flex', gap: 4, overflowX: 'auto', scrollbarWidth: 'none', flexWrap: 'wrap' }}>
+              {prog.phaseList.map((ph, i) => (
+                <button key={i} onClick={() => move(() => setPhaseIdx(i))} style={{
+                  all: 'unset', cursor: 'pointer', whiteSpace: 'nowrap',
+                  padding: '6px 10px', borderRadius: 6,
+                  border: '1px solid ' + (phaseIdx === i ? 'var(--accent)' : 'var(--line-strong)'),
+                  background: phaseIdx === i ? 'var(--accent-soft)' : 'transparent',
+                  color: phaseIdx === i ? 'var(--accent)' : 'var(--text-2)',
+                  fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.08em', fontWeight: 600,
+                }}>P{i+1} · {ph.name.toUpperCase()}</button>
               ))}
             </div>
-          </>
-        )}
+          </div>
 
-        <div className="label" style={{ marginBottom: 6 }}>// DAY</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-          {days.map((d, i) => (
-            <button key={i} onClick={() => move(() => setDayIdx(i))} style={{
-              all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '6px 0', borderRadius: 6,
-              border: '1px solid ' + (dayIdx === i ? 'var(--accent)' : 'var(--line)'),
-              background: dayIdx === i ? 'var(--accent-soft)' : 'var(--bg-2)',
-              color: dayIdx === i ? 'var(--accent)' : 'var(--text-2)',
-              fontFamily: 'JetBrains Mono', fontSize: 9, letterSpacing: '0.1em', fontWeight: 600,
-            }}>{d.toUpperCase()}</button>
-          ))}
+          {phase && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div className="label">// WEEK · {phase.weeks} TOTAL</div>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em' }}>FOCUS: {phase.focus?.toUpperCase()}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(phase.weeks, 8)}, 1fr)`, gap: 4 }}>
+                {Array.from({ length: phase.weeks }, (_, i) => (
+                  <button key={i} onClick={() => move(() => setWeekIdx(i))} style={{
+                    all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '7px 0', borderRadius: 6,
+                    border: '1px solid ' + (weekIdx === i ? 'var(--accent)' : 'var(--line)'),
+                    background: weekIdx === i ? 'var(--accent-soft)' : 'var(--bg-2)',
+                    color: weekIdx === i ? 'var(--accent)' : 'var(--text-2)',
+                    fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.05em', fontWeight: 600,
+                  }}>W{i+1}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>// DAY</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+              {days.map((d, i) => (
+                <button key={i} onClick={() => move(() => setDayIdx(i))} style={{
+                  all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '6px 0', borderRadius: 6,
+                  border: '1px solid ' + (dayIdx === i ? 'var(--accent)' : 'var(--line)'),
+                  background: dayIdx === i ? 'var(--accent-soft)' : 'var(--bg-2)',
+                  color: dayIdx === i ? 'var(--accent)' : 'var(--text-2)',
+                  fontFamily: 'JetBrains Mono', fontSize: 9, letterSpacing: '0.1em', fontWeight: 600,
+                }}>{d.toUpperCase()}</button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
       )}
 
       {/* Body */}
-      <div className="scroller" style={{ flex: 1, padding: '16px 16px 32px', minHeight: 0, width: '100%', maxWidth: 720, margin: '0 auto', boxSizing: 'border-box' }}>
+      <div className="scroller pb-body" style={{ flex: 1, padding: '16px 16px 32px', minHeight: 0, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
         {saveError && (
           <div className="mono" style={{
             marginBottom: 12, padding: '10px 12px', borderRadius: 8, fontSize: 10, lineHeight: 1.5,
@@ -438,6 +458,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               />
             </div>
 
+            <div className="pb-sections">
             {day.sections.map((s, sIdx) => (
               <Section key={s.kind + sIdx} s={s} sIdx={sIdx}
                 expandedExId={expandedExId} expandedSetId={expandedSetId}
@@ -459,6 +480,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
                 onApplyToAll={(eIdx, i) => applyToAll(sIdx, eIdx, i)}
               />
             ))}
+            </div>
 
             {switchingEx !== null && (
               <ExercisePicker
@@ -564,7 +586,7 @@ function CopySheet({ weeks, curWeek, curDow, onClose, onCopy }) {
 
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 210, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '12px 18px 8px' }}>
           <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }}/>
           <div className="label">// COPY THIS DAY</div>
@@ -737,7 +759,7 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '54px 14px 10px', background: 'linear-gradient(180deg, var(--bg-1) 70%, transparent)', borderBottom: '1px solid var(--line)' }}>
+      <div className="pb-topbar" style={{ background: 'linear-gradient(180deg, var(--bg-1) 70%, transparent)', borderBottom: '1px solid var(--line)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <HexBackButton onClick={onBack} size={36}/>
           <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
@@ -1398,7 +1420,7 @@ export function ExercisePicker({ onClose, onPick }) {
       background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
       display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
+      <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{
         background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20,
         border: '1px solid var(--line-strong)', borderBottom: 0,
         maxHeight: '80vh', display: 'flex', flexDirection: 'column',
@@ -1445,6 +1467,11 @@ export function ExercisePicker({ onClose, onPick }) {
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────
+function clampIdx(v, len) {
+  const n = Number.isInteger(v) ? v : 0;
+  return Math.max(0, Math.min(n, (len || 1) - 1));
+}
+
 function mapDay(day, sIdx, eIdx, mapEx) {
   return { ...day, sections: day.sections.map((s, si) => si!==sIdx ? s : ({ ...s, items: s.items.map((e, ei) => ei!==eIdx ? e : mapEx(e)) })) };
 }
