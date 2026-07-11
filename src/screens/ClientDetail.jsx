@@ -471,6 +471,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
   const [anchor, setAnchor] = React.useState(() => mondayOf(new Date()));
   const [workouts, setWorkouts] = React.useState([]);
   const [showAssign, setShowAssign] = React.useState(false);
+  const [editing, setEditing] = React.useState(null);
 
   const loadWorkouts = React.useCallback(() => {
     const start = new Date(anchor);
@@ -488,6 +489,14 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
       clientId={c.id} clientName={c.name} trainerId={trainerId} programmes={programmes}
       onClose={() => setShowAssign(false)}
       onAssigned={() => { setShowAssign(false); loadWorkouts(); onChanged?.(); }}
+    />
+  );
+
+  if (editing) return (
+    <EditWorkout
+      w={editing}
+      onClose={() => setEditing(null)}
+      onSaved={() => { setEditing(null); loadWorkouts(); onChanged?.(); }}
     />
   );
 
@@ -529,7 +538,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ minWidth: 760, display: 'grid', gap: 10 }}>
           {Array.from({ length: weeks }, (_, wk) => (
-            <CalendarWeek key={wk} start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()} wMap={wMap} />
+            <CalendarWeek key={wk} start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()} wMap={wMap} onSelect={setEditing} />
           ))}
         </div>
       </div>
@@ -537,7 +546,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
   );
 }
 
-function CalendarWeek({ start, wMap }) {
+function CalendarWeek({ start, wMap, onSelect }) {
   const today = ymd(new Date());
   const DOW = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
   // Label any new month that begins in this week (the 1st, or the week's first
@@ -588,7 +597,7 @@ function CalendarWeek({ start, wMap }) {
                 </span>
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
-                {ws.map(w => <WorkoutCell key={w.id} w={w} />)}
+                {ws.map(w => <WorkoutCell key={w.id} w={w} onClick={() => onSelect(w)} />)}
               </div>
             </div>
           );
@@ -598,7 +607,7 @@ function CalendarWeek({ start, wMap }) {
   );
 }
 
-function WorkoutCell({ w }) {
+function WorkoutCell({ w, onClick }) {
   const day = w.programme_days;
   const phase = day?.programme_phases;
   const done = w.status === 'completed';
@@ -609,8 +618,8 @@ function WorkoutCell({ w }) {
   const more = totalEx - shownEx;
 
   return (
-    <div style={{
-      borderRadius: 8, padding: 8, background: 'var(--bg-1)',
+    <div onClick={onClick} style={{
+      borderRadius: 8, padding: 8, background: 'var(--bg-1)', cursor: onClick ? 'pointer' : 'default',
       border: `1px solid ${done ? 'color-mix(in srgb, var(--accent) 45%, var(--line))' : 'var(--line-strong)'}`,
       borderLeft: `2px solid ${done ? 'var(--accent)' : 'var(--c-amber)'}`,
     }}>
@@ -631,6 +640,73 @@ function WorkoutCell({ w }) {
       ))}
       {more > 0 && <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.04em' }}>+{more} more exercise{more === 1 ? '' : 's'}</div>}
       {totalEx === 0 && <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)' }}>No exercises</div>}
+    </div>
+  );
+}
+
+// Coach-side edit of a single scheduled workout — reschedule or remove it
+// straight from the calendar, without deleting the underlying programme.
+function EditWorkout({ w, onClose, onSaved }) {
+  const day = w.programme_days;
+  const phase = day?.programme_phases;
+  const [date, setDate]           = React.useState(w.scheduled_date);
+  const [saving, setSaving]       = React.useState(false);
+  const [removeConfirm, setRemoveConfirm] = React.useState(false);
+  const sections = [...(day?.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
+
+  const save = async () => {
+    if (!date || date === w.scheduled_date || saving) return;
+    setSaving(true);
+    await supabase.from('client_workouts').update({ scheduled_date: date }).eq('id', w.id);
+    setSaving(false);
+    onSaved();
+  };
+
+  const remove = async () => {
+    if (!removeConfirm) { setRemoveConfirm(true); return; }
+    setSaving(true);
+    await supabase.from('client_workouts').delete().eq('id', w.id);
+    setSaving(false);
+    onSaved();
+  };
+
+  return (
+    <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="label">// EDIT WORKOUT</div>
+        <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
+      </div>
+
+      <div style={{ borderRadius: 8, padding: 10, background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 4 }}>
+          {(phase?.name || 'WORKOUT').toUpperCase()}
+        </div>
+        {sections.length === 0 && <Mono>No exercises</Mono>}
+        {sections.map((s, i) => (
+          <div key={i} style={{ fontSize: 11, marginTop: 2 }}>
+            {s.title || SECTION_LABEL[s.kind] || 'Block'} · {(s.section_exercises?.length || 0)} ex
+          </div>
+        ))}
+      </div>
+
+      <FieldLabel label="SCHEDULED DATE">
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={fieldSt}/>
+      </FieldLabel>
+
+      <button onClick={save} disabled={saving || date === w.scheduled_date} className="btn-primary"
+        style={{ opacity: date !== w.scheduled_date ? 1 : 0.4 }}>
+        {saving ? 'SAVING…' : 'SAVE CHANGES →'}
+      </button>
+
+      <button onClick={remove} disabled={saving} className="mono" style={{
+        all: 'unset', cursor: 'pointer', textAlign: 'center', padding: 10, borderRadius: 8,
+        background: 'transparent',
+        border: `1px solid color-mix(in srgb, var(--c-coral) ${removeConfirm ? 60 : 35}%, var(--line))`,
+        color: removeConfirm ? 'var(--c-coral)' : 'var(--text-3)',
+        fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+      }}>
+        {removeConfirm ? 'CONFIRM REMOVE — TAP AGAIN' : 'REMOVE FROM CALENDAR'}
+      </button>
     </div>
   );
 }
@@ -1299,7 +1375,10 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
 }
 
 // ── ASSIGN WORKOUT (duplicate from Coach.jsx for self-contained use) ───────
+const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
 function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, onAssigned }) {
+  const [mode, setMode]         = React.useState('all'); // 'all' = whole programme, 'day' = single day
   const [progId, setProgId]     = React.useState(null);
   const [phaseIdx, setPhaseIdx] = React.useState(0);
   const [week, setWeek]         = React.useState(1);
@@ -1307,8 +1386,12 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
   const [loading, setLoading]   = React.useState(false);
   const [dayId, setDayId]       = React.useState(null);
   const [date, setDate]         = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [phaseSel, setPhaseSel] = React.useState({}); // phaseId → included in bulk assign
+  const [allDays, setAllDays]   = React.useState([]); // [{ dayId, dayOffset }] for bulk assign
+  const [loadingAll, setLoadingAll] = React.useState(false);
   const [saving, setSaving]     = React.useState(false);
   const [saved, setSaved]       = React.useState(false);
+  const [savedCount, setSavedCount] = React.useState(0);
 
   const prog  = programmes.find(p => p.id === progId);
   const phase = prog?.phaseList?.[phaseIdx];
@@ -1322,25 +1405,74 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
       .then(({ data }) => { setDays(data || []); setLoading(false); });
   }, [phase?.id, week]);
 
+  // Default every phase to included whenever the programme changes.
+  React.useEffect(() => {
+    if (!prog) { setPhaseSel({}); return; }
+    setPhaseSel(Object.fromEntries(prog.phaseList.map(ph => [ph.id, true])));
+  }, [prog?.id]);
+
+  // Fetch every programme_days row across the selected phases and work out,
+  // for each, how many days after the start-of-week-1 it should land on.
+  React.useEffect(() => {
+    if (mode !== 'all' || !prog) { setAllDays([]); return; }
+    const selected = prog.phaseList.filter(ph => phaseSel[ph.id]);
+    if (!selected.length) { setAllDays([]); return; }
+    setLoadingAll(true);
+    supabase.from('programme_days').select('id, phase_id, week_index, day_of_week')
+      .in('phase_id', selected.map(ph => ph.id))
+      .then(({ data }) => {
+        const byPhase = {};
+        (data || []).forEach(d => (byPhase[d.phase_id] = byPhase[d.phase_id] || []).push(d));
+        let offset = 0;
+        const rows = [];
+        prog.phaseList.forEach(ph => {
+          if (!phaseSel[ph.id]) return;
+          (byPhase[ph.id] || []).forEach(d => rows.push({ dayId: d.id, dayOffset: (offset + d.week_index) * 7 + d.day_of_week }));
+          offset += ph.weeks || 0;
+        });
+        rows.sort((a, b) => a.dayOffset - b.dayOffset);
+        setAllDays(rows);
+        setLoadingAll(false);
+      });
+  }, [mode, prog?.id, phaseSel]);
+
   const assign = async () => {
     if (!dayId || !date || saving) return;
     setSaving(true);
     await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: dayId, scheduled_date: date });
-    setSaving(false); setSaved(true);
+    setSaving(false); setSavedCount(1); setSaved(true);
+    setTimeout(() => onAssigned(), 1400);
+  };
+
+  const assignAll = async () => {
+    if (!allDays.length || !date || saving) return;
+    setSaving(true);
+    const monday = mondayOf(new Date(`${date}T00:00:00`));
+    const rows = allDays.map(r => {
+      const d = new Date(monday); d.setDate(d.getDate() + r.dayOffset);
+      return { client_id: clientId, trainer_id: trainerId, day_id: r.dayId, scheduled_date: ymd(d) };
+    });
+    await supabase.from('client_workouts').insert(rows);
+    setSaving(false); setSavedCount(rows.length); setSaved(true);
     setTimeout(() => onAssigned(), 1400);
   };
 
   if (saved) return (
-    <div style={{ padding: 32, textAlign: 'center', color: 'var(--accent)', fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '0.14em', fontSize: 16 }}>✓ WORKOUT ASSIGNED</div>
+    <div style={{ padding: 32, textAlign: 'center', color: 'var(--accent)', fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '0.14em', fontSize: 16 }}>
+      ✓ {savedCount} WORKOUT{savedCount === 1 ? '' : 'S'} ASSIGNED
+    </div>
   );
-
-  const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
   return (
     <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="label">// ASSIGN WORKOUT — {clientName.toUpperCase()}</div>
         <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6 }}>
+        <ToggleBtn active={mode === 'all'} onClick={() => { setMode('all'); setDayId(null); }}>WHOLE PROGRAMME</ToggleBtn>
+        <ToggleBtn active={mode === 'day'} onClick={() => setMode('day')}>SINGLE DAY</ToggleBtn>
       </div>
 
       {/* Programme select */}
@@ -1351,7 +1483,39 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
         </select>
       </FieldLabel>
 
-      {prog && (
+      {prog && mode === 'all' && (
+        <>
+          <FieldLabel label="PHASES TO ASSIGN">
+            <div style={{ display: 'grid', gap: 6 }}>
+              {prog.phaseList.map(ph => (
+                <button key={ph.id} onClick={() => setPhaseSel(s => ({ ...s, [ph.id]: !s[ph.id] }))} style={{
+                  all: 'unset', cursor: 'pointer', padding: '8px 10px', borderRadius: 8,
+                  background: phaseSel[ph.id] ? 'var(--accent-soft)' : 'var(--bg-3)',
+                  border: `1px solid ${phaseSel[ph.id] ? 'var(--accent)' : 'var(--line)'}`,
+                  display: 'flex', gap: 8, alignItems: 'center',
+                }}>
+                  <span style={{ flex: 1, fontSize: 11 }}>{ph.name} <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>· {ph.weeks || 0}WK</span></span>
+                  {phaseSel[ph.id] && <IconCheck size={12} style={{ color: 'var(--accent)', flexShrink: 0 }}/>}
+                </button>
+              ))}
+            </div>
+          </FieldLabel>
+
+          <FieldLabel label="START DATE (WEEK 1, DAY 1)">
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={fieldSt}/>
+            <Mono style={{ marginTop: 6 }}>Aligned to the Monday of the selected week</Mono>
+          </FieldLabel>
+
+          {loadingAll && <Mono>CALCULATING SCHEDULE…</Mono>}
+
+          <button onClick={assignAll} disabled={!allDays.length || !date || saving} className="btn-primary"
+            style={{ opacity: allDays.length && date ? 1 : 0.4, pointerEvents: allDays.length && date ? 'auto' : 'none' }}>
+            {saving ? 'ASSIGNING…' : allDays.length ? `ASSIGN ${allDays.length} WORKOUT${allDays.length === 1 ? '' : 'S'} →` : 'SELECT AT LEAST ONE PHASE'}
+          </button>
+        </>
+      )}
+
+      {prog && mode === 'day' && (
         <>
           <FieldLabel label="PHASE">
             <select value={phaseIdx} onChange={e => { setPhaseIdx(+e.target.value); setWeek(1); setDayId(null); }} style={{ ...fieldSt, appearance: 'auto' }}>
@@ -1365,39 +1529,39 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
               </select>
             </FieldLabel>
           )}
+
+          {loading && <Mono>LOADING DAYS…</Mono>}
+          {days.length > 0 && (
+            <FieldLabel label="DAY">
+              <div style={{ display: 'grid', gap: 6 }}>
+                {days.map(d => (
+                  <button key={d.id} onClick={() => setDayId(d.id === dayId ? null : d.id)} style={{
+                    all: 'unset', cursor: 'pointer', padding: '8px 10px', borderRadius: 8,
+                    background: dayId === d.id ? 'var(--accent-soft)' : 'var(--bg-3)',
+                    border: `1px solid ${dayId === d.id ? 'var(--accent)' : 'var(--line)'}`,
+                    display: 'flex', gap: 8, alignItems: 'center',
+                  }}>
+                    <span className="mono" style={{ fontSize: 10, color: dayId === d.id ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700 }}>{DAY_LABELS[d.day_of_week]}</span>
+                    <span style={{ flex: 1, fontSize: 11 }}>{(d.workout_sections || []).map(s => s.title).join(' · ')}</span>
+                    {dayId === d.id && <IconCheck size={12} style={{ color: 'var(--accent)', flexShrink: 0 }}/>}
+                  </button>
+                ))}
+              </div>
+            </FieldLabel>
+          )}
+
+          {dayId && (
+            <FieldLabel label="SCHEDULED DATE">
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={fieldSt}/>
+            </FieldLabel>
+          )}
+
+          <button onClick={assign} disabled={!dayId || !date || saving} className="btn-primary"
+            style={{ opacity: dayId && date ? 1 : 0.4, pointerEvents: dayId && date ? 'auto' : 'none' }}>
+            {saving ? 'ASSIGNING…' : 'ASSIGN WORKOUT →'}
+          </button>
         </>
       )}
-
-      {loading && <Mono>LOADING DAYS…</Mono>}
-      {days.length > 0 && (
-        <FieldLabel label="DAY">
-          <div style={{ display: 'grid', gap: 6 }}>
-            {days.map(d => (
-              <button key={d.id} onClick={() => setDayId(d.id === dayId ? null : d.id)} style={{
-                all: 'unset', cursor: 'pointer', padding: '8px 10px', borderRadius: 8,
-                background: dayId === d.id ? 'var(--accent-soft)' : 'var(--bg-3)',
-                border: `1px solid ${dayId === d.id ? 'var(--accent)' : 'var(--line)'}`,
-                display: 'flex', gap: 8, alignItems: 'center',
-              }}>
-                <span className="mono" style={{ fontSize: 10, color: dayId === d.id ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700 }}>{DAY_LABELS[d.day_of_week]}</span>
-                <span style={{ flex: 1, fontSize: 11 }}>{(d.workout_sections || []).map(s => s.title).join(' · ')}</span>
-                {dayId === d.id && <IconCheck size={12} style={{ color: 'var(--accent)', flexShrink: 0 }}/>}
-              </button>
-            ))}
-          </div>
-        </FieldLabel>
-      )}
-
-      {dayId && (
-        <FieldLabel label="SCHEDULED DATE">
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={fieldSt}/>
-        </FieldLabel>
-      )}
-
-      <button onClick={assign} disabled={!dayId || !date || saving} className="btn-primary"
-        style={{ opacity: dayId && date ? 1 : 0.4, pointerEvents: dayId && date ? 'auto' : 'none' }}>
-        {saving ? 'ASSIGNING…' : 'ASSIGN WORKOUT →'}
-      </button>
     </div>
   );
 }
