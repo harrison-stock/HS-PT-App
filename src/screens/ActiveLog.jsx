@@ -2,7 +2,7 @@ import React from 'react'
 import { supabase } from '../lib/supabase'
 import { ACTIVE_EXERCISES, PHASES, MUSCLE_LABELS } from '../data/index'
 import { muscleGroupsFor } from '../lib/muscleVolume'
-import { BodyMap } from './Progress'
+import { BodyMap, MiniLine } from './Progress'
 import { Hex, HexBackButton } from '../components/hex'
 import { IconPause, IconPlay, IconCheck, IconX2, IconChevronLeft, IconChevronRight, IconPlus, IconTrophy, IconTimer, IconFlame, IconBand, IconDumbbell, IconLeaf, IconActivity, IconSwap, IconTrend, IconMetronome, IconClipboard } from '../components/icons'
 import { ExerciseComments } from './ExerciseComments'
@@ -21,6 +21,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
   const [sessionTime, setSessionTime] = React.useState(0);
   const [restTime, setRestTime] = React.useState(0);
   const [resting, setResting] = React.useState(false);
+  const [restLeaving, setRestLeaving] = React.useState(false);
   const [timesUp, setTimesUp] = React.useState(false);
   const [altsForId, setAltsForId] = React.useState(null);
   const [historyForId, setHistoryForId] = React.useState(null);
@@ -35,21 +36,47 @@ export function ActiveLog({ go, dayId, userId, resume }) {
   const [dbLoading, setDbLoading] = React.useState(!!dayId);
   const [loadError, setLoadError] = React.useState(false);
   const [dayIntro, setDayIntro] = React.useState('');
+  const [sectionIntros, setSectionIntros] = React.useState({}); // phase id → coach's slide text
   const sessionStartRef = React.useRef(new Date().toISOString());
 
+  // Session clock — anchored to the wall clock so it stays accurate even if
+  // the phone locks or the browser throttles timers in the background.
+  const clockBaseRef = React.useRef(null);
   React.useEffect(() => {
-    if (paused) return;
-    const t = setInterval(() => setSessionTime((s) => s + 1), 1000);
-    return () => clearInterval(t);
-  }, [paused]);
+    if (paused) { clockBaseRef.current = null; return; }
+    const tick = () => {
+      if (clockBaseRef.current == null) return;
+      setSessionTime(Math.max(0, Math.round((Date.now() - clockBaseRef.current) / 1000)));
+    };
+    // Re-anchor from whatever the clock currently shows (covers resume-from-
+    // snapshot, un-pausing, and first mount alike).
+    setSessionTime((s) => { clockBaseRef.current = Date.now() - s * 1000; return s; });
+    const t = setInterval(tick, 1000);
+    const onVis = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
+  }, [paused, dbLoading]);
+  // Dismiss the rest card with a short slide-out before unmounting it.
+  const endRest = React.useCallback((showTimesUp = false) => {
+    setResting((r) => {
+      if (!r) return r;
+      setRestLeaving(true);
+      setTimeout(() => {
+        setResting(false); setRestLeaving(false); setRestTime(0);
+        if (showTimesUp) setTimesUp(true);
+      }, 200);
+      return r;
+    });
+  }, []);
+
   React.useEffect(() => {
-    if (!resting || paused) return;
+    if (!resting || restLeaving || paused) return;
     const t = setInterval(() => setRestTime((s) => {
-      if (s <= 1) {setResting(false);setTimesUp(true);return 0;}
+      if (s <= 1) { endRest(true); return 0; }
       return s - 1;
     }), 1000);
     return () => clearInterval(t);
-  }, [resting, paused]);
+  }, [resting, restLeaving, paused, endRest]);
   // Auto-dismiss the "time's up" banner
   React.useEffect(() => {
     if (!timesUp) return;
@@ -61,17 +88,31 @@ export function ActiveLog({ go, dayId, userId, resume }) {
     if (!dayId) return;
     setDbLoading(true);
     setLoadError(false);
-    supabase
-      .from('programme_days')
-      .select(`id, intro, workout_sections ( id, kind, title, sort_order, section_exercises ( id, name, img_url, timed, banded, unilateral, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) ) )`)
-      .eq('id', dayId)
-      .single()
+    const SECTION_FIELDS = (withIntro) => `id, kind, title, sort_order${withIntro ? ', intro' : ''}, section_exercises ( id, name, img_url, timed, banded, unilateral, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) )`;
+    (async () => {
+      let { data, error } = await supabase
+        .from('programme_days')
+        .select(`id, intro, workout_sections ( ${SECTION_FIELDS(true)} )`)
+        .eq('id', dayId)
+        .single();
+      // Fallback if migration 036 (per-section slide text) isn't applied yet.
+      if (!data && error) {
+        ({ data, error } = await supabase
+          .from('programme_days')
+          .select(`id, intro, workout_sections ( ${SECTION_FIELDS(false)} )`)
+          .eq('id', dayId)
+          .single());
+      }
+      return { data, error };
+    })()
       .then(({ data, error }) => {
         if (data) {
           const SECTION_TO_PHASE = { PULSE_RAISER: 'pulse', BANDED: 'banded', MAIN: 'main', COOLDOWN: 'cooldown' };
           const rows = [];
+          const intros = {};
           for (const sec of (data.workout_sections || []).sort((a, b) => a.sort_order - b.sort_order)) {
             const phase = SECTION_TO_PHASE[sec.kind] || 'main';
+            if (sec.intro && !intros[phase]) intros[phase] = sec.intro;
             for (const ex of (sec.section_exercises || []).sort((a, b) => a.sort_order - b.sort_order)) {
               const sets = (ex.exercise_sets || [])
                 .sort((a, b) => a.set_index - b.set_index)
@@ -129,6 +170,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
           if (rows.length > 0) setExercises(rows);
           else setLoadError(true);
           setDayIntro(data.intro || '');
+          setSectionIntros(intros);
         } else {
           setLoadError(true);
           if (error) console.error('load workout', error);
@@ -212,9 +254,10 @@ export function ActiveLog({ go, dayId, userId, resume }) {
     const card = el.children[activeIdx];
     if (card) {
       programmaticRef.current = true;
-      el.scrollTo({ left: card.offsetLeft, behavior: 'instant' });
+      el.scrollTo({ left: card.offsetLeft, behavior: 'smooth' });
       clearTimeout(progClearRef.current);
-      progClearRef.current = setTimeout(() => {programmaticRef.current = false;}, 120);
+      // Long enough for the smooth scroll to settle before user-scroll syncing resumes.
+      progClearRef.current = setTimeout(() => {programmaticRef.current = false;}, 500);
     }
   }, [activeIdx]);
 
@@ -305,11 +348,13 @@ export function ActiveLog({ go, dayId, userId, resume }) {
     setAddingEx(false);
   };
 
-  // Remove an exercise (or every member of a superset group).
-  const delExercise = (ids) => {
+  // Tick off every set of an exercise in one tap — no rest timer.
+  const completeAllSets = (ids) => {
     const set = new Set(Array.isArray(ids) ? ids : [ids]);
-    setExercises((prev) => prev.filter((e) => !set.has(e.id)));
-    setActiveIdx((i) => Math.max(0, i - 1));
+    setExercises((prev) => prev.map((e) => !set.has(e.id) ? e : {
+      ...e, sets: e.sets.map((s) => ({ ...s, done: true, active: false })),
+    }));
+    endRest();
   };
 
   const altsFor = exercises.find((e) => e.id === altsForId);
@@ -413,47 +458,36 @@ export function ActiveLog({ go, dayId, userId, resume }) {
           </button>
         </div>
 
-        {/* Phase strip — hexagon progress nodes (mirrors home roadmap) */}
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phaseCounts.length}, 1fr)`, gap: 10, marginBottom: 10 }} data-comment-anchor="86e6e73e80-div-154-9">
+        {/* Phase strip — compact icons-only hexagon nodes */}
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phaseCounts.length}, 1fr)`, gap: 8, marginBottom: 4 }} data-comment-anchor="86e6e73e80-div-154-9">
           {phaseCounts.map((p) => {
             const isCurrent = currentPhaseId === p.id;
             const allDone = p.count > 0 && p.done === p.count;
             return (
               <button key={p.id} onClick={() => p.firstRailIdx >= 0 && setActiveIdx(p.firstRailIdx)}
+              aria-label={`${p.label} · ${p.done}/${p.count}`}
               style={{
                 all: 'unset', cursor: 'pointer', boxSizing: 'border-box',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                padding: '5px 2px 4px', borderRadius: 11,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '4px 2px', borderRadius: 10,
                 background: isCurrent ? `color-mix(in srgb, ${p.accent} 12%, transparent)` : 'transparent',
                 border: isCurrent ? `1.5px solid ${p.accent}` : '1.5px solid transparent',
                 boxShadow: isCurrent ? `0 0 calc(10px * var(--glow)) color-mix(in srgb, ${p.accent} 35%, transparent)` : 'none'
               }}>
-                <div style={{ position: 'relative', width: 28, height: 28, display: 'grid', placeItems: 'center' }}>
-                  {allDone ?
-                  // Fully done → solid fill + tick
-                  <Hex size={26} square style={{
-                    background: p.accent, color: 'var(--on-accent)',
-                    boxShadow: `0 0 calc(7px * var(--glow)) color-mix(in srgb, ${p.accent} 55%, transparent)`
-                  }}>
-                    <IconCheck size={11} sw={3} />
-                  </Hex> :
-                  // Not done → coloured (phase accent tint), with cute phase icon
-                  <Hex size={26} square style={{
-                    background: `color-mix(in srgb, ${p.accent} ${isCurrent ? 26 : 16}%, var(--bg-3))`,
-                    border: `1.5px solid color-mix(in srgb, ${p.accent} ${isCurrent ? 70 : 42}%, transparent)`,
-                    color: p.accent
-                  }}>
-                    {(PHASE_ICON[p.id] || PHASE_ICON._default)(13)}
-                  </Hex>}
-                </div>
-                <div className="mono" style={{
-                  fontSize: 9.5, letterSpacing: '0.1em',
-                  color: p.accent, opacity: isCurrent || allDone ? 1 : 0.78, fontWeight: 700
-                }}>{p.label.toUpperCase()}</div>
-                <div className="mono" style={{
-                  fontSize: 9.5, letterSpacing: '0.04em', fontWeight: 600,
-                  color: isCurrent ? 'var(--text)' : 'var(--text-2)'
-                }}>{p.done}/{p.count}</div>
+                {allDone ?
+                <Hex size={26} square style={{
+                  background: p.accent, color: 'var(--on-accent)',
+                  boxShadow: `0 0 calc(7px * var(--glow)) color-mix(in srgb, ${p.accent} 55%, transparent)`
+                }}>
+                  <IconCheck size={11} sw={3} />
+                </Hex> :
+                <Hex size={26} square style={{
+                  background: `color-mix(in srgb, ${p.accent} ${isCurrent ? 26 : 16}%, var(--bg-3))`,
+                  border: `1.5px solid color-mix(in srgb, ${p.accent} ${isCurrent ? 70 : 42}%, transparent)`,
+                  color: p.accent
+                }}>
+                  {(PHASE_ICON[p.id] || PHASE_ICON._default)(13)}
+                </Hex>}
               </button>);
 
           })}
@@ -466,7 +500,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
       `}</style>
       <div ref={scrollRef} onScroll={onScroll} className="everfit-rail"
       style={{
-        position: 'absolute', top: 192, bottom: 130, left: 0, right: 0,
+        position: 'absolute', top: 148, bottom: 96, left: 0, right: 0,
         overflowX: 'auto', overflowY: 'hidden',
         display: 'flex',
         scrollSnapType: 'x mandatory',
@@ -477,7 +511,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
         it.type === 'finish' ?
         <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setComplete(true); }} /> :
         it.type === 'divider' ?
-        <SectionDivider key={`d${i}`} phaseId={it.phaseId} nextPhaseId={it.nextPhaseId} exercises={exercises} onContinue={() => setActiveIdx(i + 1)} /> :
+        <SectionDivider key={`d${i}`} phaseId={it.phaseId} nextPhaseId={it.nextPhaseId} exercises={exercises} slideText={sectionIntros[it.nextPhaseId]} onContinue={() => setActiveIdx(i + 1)} /> :
         it.type === 'superset' ?
         <SupersetCard key={`ss${it.group[0].id}`} group={it.group}
           intro={it.exIdx === 0 ? dayIntro : ''}
@@ -486,7 +520,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
           onAddRound={() => it.group.forEach(e => addSet(e.id, 'WORK'))}
           onRemoveRound={() => it.group.forEach(e => delSet(e.id))}
           onAddExercise={() => setAddingEx(true)}
-          onDelGroup={() => delExercise(it.group.map(e => e.id))}
+          onCompleteAll={() => completeAllSets(it.group.map(e => e.id))}
           onTitle={(exId) => setAltsForId(exId)}
           onComment={dayId ? (exId) => setCommentForId(exId) : null}
           onHistory={(exId) => setHistoryForId(exId)} /> :
@@ -498,44 +532,11 @@ export function ActiveLog({ go, dayId, userId, resume }) {
         onAddSet={(kind) => addSet(it.ex.id, kind)}
         onDelSet={() => delSet(it.ex.id)}
         onAddExercise={() => setAddingEx(true)}
-        onDelExercise={() => delExercise(it.ex.id)}
+        onCompleteAll={() => completeAllSets(it.ex.id)}
         onComment={dayId ? () => setCommentForId(it.ex.id) : null}
         onHistory={() => setHistoryForId(it.ex.id)} />
 
         )}
-      </div>
-
-      {/* Pagination dots / counter */}
-      <div style={{
-        position: 'absolute', left: 0, right: 0, bottom: 110, zIndex: 9,
-        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4
-      }}>
-        <button onClick={() => activeIdx > 0 && setActiveIdx(activeIdx - 1)}
-        style={{
-          all: 'unset', cursor: activeIdx > 0 ? 'pointer' : 'default',
-          opacity: activeIdx > 0 ? 1 : 0.3,
-          color: 'var(--text-2)', padding: 6
-        }}>
-          <IconChevronLeft size={14} />
-        </button>
-        <div style={{ display: 'flex', gap: 4, padding: '4px 10px', background: 'rgba(0,0,0,0.4)', borderRadius: 999, border: '1px solid var(--line)' }}>
-          {railItems.map((it, i) =>
-          <span key={i} style={{
-            width: i === activeIdx ? 14 : 4, height: 4, borderRadius: 2,
-            background: i === activeIdx ? 'var(--accent)' : it.type === 'divider' ? 'color-mix(in srgb, var(--accent) 35%, var(--line-strong))' : 'var(--line-strong)',
-            transition: 'all .25s',
-            boxShadow: i === activeIdx ? '0 0 calc(6px * var(--glow)) var(--accent-glow)' : 'none'
-          }} />
-          )}
-        </div>
-        <button onClick={() => activeIdx < lastIdx && setActiveIdx(activeIdx + 1)}
-        style={{
-          all: 'unset', cursor: activeIdx < lastIdx ? 'pointer' : 'default',
-          opacity: activeIdx < lastIdx ? 1 : 0.3,
-          color: 'var(--text-2)', padding: 6
-        }}>
-          <IconChevronRight size={14} />
-        </button>
       </div>
 
       {/* Bottom action bar */}
@@ -547,14 +548,15 @@ export function ActiveLog({ go, dayId, userId, resume }) {
         {resting &&
         <div className="card" style={{ padding: 10, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12,
           borderColor: 'color-mix(in srgb, var(--accent-2) 50%, transparent)',
-          background: 'color-mix(in srgb, var(--accent-2) 8%, transparent)'
+          background: 'color-mix(in srgb, var(--accent-2) 8%, transparent)',
+          animation: restLeaving ? 'sheetDown .2s ease forwards' : 'sheetUp .28s cubic-bezier(.22,.61,.36,1)'
         }}>
             <RestRing seconds={restTime} total={ex.rest} />
             <div style={{ flex: 1 }}>
               <div className="label" style={{ color: 'var(--accent-2)' }}>// RESTING</div>
               <div className="h-bold" style={{ fontSize: 20, color: 'var(--accent-2)' }}>{fmt(restTime)}</div>
             </div>
-            <button className="btn-ghost" onClick={() => {setResting(false);setRestTime(0);}}>SKIP</button>
+            <button className="btn-ghost" onClick={() => endRest()}>SKIP</button>
             <button className="btn-ghost" onClick={() => setRestTime((s) => s + 30)}>+30s</button>
           </div>
         }
@@ -582,13 +584,45 @@ export function ActiveLog({ go, dayId, userId, resume }) {
           <IconX2 size={15} style={{ color: 'var(--text-3)' }} />
         </button>
         }
-        {activeItem.type !== 'finish' &&
-        <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-        onClick={() => { if (activeIdx < lastIdx) { setActiveIdx(activeIdx + 1); } else { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} setComplete(true); } }}>
-          {activeItem.type === 'divider' ? <>CONTINUE <IconChevronRight size={14} /></> :
-           <>NEXT EXERCISE <IconChevronRight size={14} /></>}
-        </button>
-        }
+        {activeItem.type !== 'finish' && (() => {
+          const goNext = () => { if (activeIdx < lastIdx) { setActiveIdx(activeIdx + 1); } else { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} setComplete(true); } };
+          const goPrev = () => activeIdx > 0 && setActiveIdx(activeIdx - 1);
+          // The card right before the finish slide is the last piece of work —
+          // its forward action reads CONTINUE. With several cards to move
+          // between, navigation is a pair of arrows instead of one wide button.
+          const isFinal = activeIdx >= lastIdx - 1;
+          const multi = railItems.length > 2; // more than one card + finish slide
+          if (!multi || isFinal) return (
+            <div style={{ display: 'flex', gap: 8 }}>
+              {multi && (
+                <button onClick={goPrev} aria-label="Previous" className="btn-ghost" style={{
+                  width: 58, display: 'grid', placeItems: 'center', flexShrink: 0,
+                  opacity: activeIdx > 0 ? 1 : 0.35, pointerEvents: activeIdx > 0 ? 'auto' : 'none',
+                }}>
+                  <IconChevronLeft size={16} />
+                </button>
+              )}
+              <button className="btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={goNext}>
+                CONTINUE <IconChevronRight size={14} />
+              </button>
+            </div>
+          );
+          return (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={goPrev} aria-label="Previous exercise" className="btn-ghost" style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                opacity: activeIdx > 0 ? 1 : 0.35, pointerEvents: activeIdx > 0 ? 'auto' : 'none',
+              }}>
+                <IconChevronLeft size={18} />
+              </button>
+              <button onClick={goNext} aria-label="Next exercise" className="btn-primary" style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <IconChevronRight size={18} />
+              </button>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Alternatives sheet */}
@@ -597,7 +631,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
       {altsFor && <AlternativesSheet ex={altsFor} onClose={() => setAltsForId(null)} onPick={swapExercise} />}
 
       {/* Prior progress sheet */}
-      {historyFor && <PriorProgressSheet ex={historyFor} onClose={() => setHistoryForId(null)} />}
+      {historyFor && <PriorProgressSheet ex={historyFor} userId={userId} onClose={() => setHistoryForId(null)} />}
 
       {/* Exercise comments */}
       {commentForId && (
@@ -621,8 +655,8 @@ export function ActiveLog({ go, dayId, userId, resume }) {
       }}>
           <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
           <div style={{ textAlign: 'center', width: '100%', maxWidth: 300 }}>
-            <img src="assets/logomark.svg" alt="HS" style={{
-              width: 64, height: 64, display: 'block', margin: '0 auto 18px',
+            <img src="/logo-mark.png" alt="HS" style={{
+              width: 64, height: 'auto', display: 'block', margin: '0 auto 18px',
               filter: 'drop-shadow(0 0 calc(16px * var(--glow)) var(--accent-glow))'
             }} />
             <div className="label" style={{ color: 'var(--accent)', marginBottom: 6 }}>// SESSION PAUSED</div>
@@ -687,7 +721,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
 }
 
 // ── EXERCISE CARD (one per swipe page) ───────────────────────────
-function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onDelExercise, onHistory, onComment, intro }) {
+function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onCompleteAll, onHistory, onComment, intro }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   return (
@@ -705,28 +739,29 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
             <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{intro}</div>
           </div>
         )}
-        {/* Exercise video — YouTube embed slot */}
+        {/* Exercise video — YouTube embed slot (height-capped so the whole
+            card fits one viewport without scrolling) */}
         <div style={{
           position: 'relative', borderRadius: 'var(--radius-lg)', overflow: 'hidden',
-          marginBottom: 12, border: '1px solid var(--line-strong)',
-          aspectRatio: '16 / 9',
+          marginBottom: 10, border: '1px solid var(--line-strong)',
+          height: 'min(22vh, 170px)',
           background: `linear-gradient(180deg, rgba(7,7,12,0.35) 0%, rgba(7,7,12,0.65) 100%), url('${ex.img}') center/cover`
         }}>
           {/* YouTube play glyph — embed mounts here */}
           <div style={{
             position: 'absolute', inset: 0, margin: 'auto',
-            width: 58, height: 40, borderRadius: 10,
+            width: 52, height: 36, borderRadius: 9,
             background: '#FF0000',
             display: 'grid', placeItems: 'center',
             boxShadow: '0 2px 12px rgba(0,0,0,0.45)'
           }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg>
           </div>
         </div>
 
         {/* Title + actions */}
-        <div style={{ marginTop: 4, marginBottom: 18 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+        <div style={{ marginTop: 2, marginBottom: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
             {ex.ss != null && (
               <span className="mono" style={{ display: 'inline-block', fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--accent-2)', background: 'color-mix(in srgb, var(--accent-2) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-2) 40%, transparent)', borderRadius: 6, padding: '3px 8px' }}>
                 ⛓ SUPERSET
@@ -738,24 +773,24 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
               </span>
             )}
           </div>
-          <div className="h-bold" style={{ fontSize: 23, fontWeight: 900, letterSpacing: '0.01em', lineHeight: 1.05, marginBottom: 14 }}>
+          <div className="h-bold" style={{ fontSize: 18, fontWeight: 900, letterSpacing: '0.01em', lineHeight: 1.05, marginBottom: 8 }}>
             {ex.name.toUpperCase()}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={onTitle} aria-label="Swap exercise" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
-              <Hex size={32} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
-                <IconSwap size={15} />
+              <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
+                <IconSwap size={14} />
               </Hex>
             </button>
             <button onClick={onHistory} aria-label="Prior progress" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
-              <Hex size={32} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
-                <IconTrend size={15} />
+              <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
+                <IconTrend size={14} />
               </Hex>
             </button>
             {onComment &&
             <button onClick={onComment} aria-label="Comments" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
-              <Hex size={32} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
-                <IconClipboard size={15} />
+              <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
+                <IconClipboard size={14} />
               </Hex>
             </button>}
             {ex.tempo &&
@@ -776,14 +811,27 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
 
         {/* Performance log */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)' }}>
+          <div style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--line)' }}>
             <span className="label">// PERFORMANCE LOG</span>
-            <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em' }}>
-              {ex.rest > 0 ? `REST ${ex.rest}S` : 'NO REST'}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em' }}>
+                {ex.rest > 0 ? `REST ${ex.rest}S` : 'NO REST'}
+              </span>
+              {onCompleteAll && !ex.sets.every((s) => s.done) && (
+                <button onClick={onCompleteAll} className="mono" style={{
+                  all: 'unset', cursor: 'pointer', padding: '4px 8px', borderRadius: 6,
+                  background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+                  color: 'var(--accent)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                  <IconCheck size={9} sw={3} /> ALL SETS
+                </button>
+              )}
+            </div>
           </div>
           {/* header row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 56px 36px', gap: 8, padding: '8px 14px', fontSize: 9, color: 'var(--text-3)' }} className="mono">
+          <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 56px 36px', gap: 8, padding: '6px 12px', fontSize: 9, color: 'var(--text-3)' }} className="mono">
             <span style={{ letterSpacing: '0.1em' }}>SET</span>
             <span style={{ letterSpacing: '0.1em' }}>{ex.banded ? 'BAND' : ex.sets[0]?.kg != null ? 'KG' : 'TYPE'}</span>
             <span style={{ letterSpacing: '0.1em' }}>{ex.sets[0]?.time ? 'TIME' : 'REPS'}{ex.unilateral ? '/SIDE' : ''}</span>
@@ -808,18 +856,12 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
           <AddSetControl onAdd={onAddSet} onRemove={ex.sets.length > 1 ? onDelSet : null} />
         </div>
 
-        {/* Add / remove exercise */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          {onAddExercise && (
+        {/* Add exercise (removal is coach-only, from the programme builder) */}
+        {onAddExercise && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button onClick={onAddExercise} className="btn-ghost" style={{ flex: 1, fontSize: 11 }}>+ ADD EXERCISE</button>
-          )}
-          {onDelExercise && (
-            <button onClick={() => { if (confirm(`Remove "${ex.name}" from today's workout?`)) onDelExercise(); }}
-              className="btn-ghost" style={{ flex: 1, fontSize: 11, color: 'var(--c-coral)', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))' }}>
-              ✕ REMOVE EXERCISE
-            </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Coach note */}
         {ex.coach &&
@@ -928,8 +970,8 @@ function FinishSlide({ phaseId, onFinish }) {
           })}
         </div>
 
-        <img src="assets/logomark.svg" alt="HS" style={{
-          width: 96, height: 96, display: 'block', marginBottom: 24,
+        <img src="/logo-mark.png" alt="HS" style={{
+          width: 96, height: 'auto', display: 'block', marginBottom: 24,
           filter: 'drop-shadow(0 0 calc(34px * var(--glow)) var(--accent-glow))'
         }} />
 
@@ -954,7 +996,7 @@ function FinishSlide({ phaseId, onFinish }) {
 // ── SUPERSET CARD (interleaved, round-based) ─────────────────────
 // Renders a superset group as rounds: round 1 = one set of each exercise,
 // round 2 = the next set of each, etc., so the client alternates A1→A2→A1…
-function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onRemoveRound, onAddExercise, onDelGroup, onComment, onHistory, intro }) {
+function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onRemoveRound, onAddExercise, onCompleteAll, onComment, onHistory, intro }) {
   const phase = PHASES.find((p) => p.id === group[0].phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   const maxRounds = Math.max(...group.map((e) => e.sets.length));
@@ -991,8 +1033,19 @@ function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onRemo
 
         {/* Rounds */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)' }}>
+          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <span className="label">// SUPERSET ROUNDS</span>
+            {onCompleteAll && !group.every((e) => e.sets.every((s) => s.done)) && (
+              <button onClick={onCompleteAll} className="mono" style={{
+                all: 'unset', cursor: 'pointer', padding: '4px 8px', borderRadius: 6,
+                background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+                color: 'var(--accent)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}>
+                <IconCheck size={9} sw={3} /> ALL SETS
+              </button>
+            )}
           </div>
           {Array.from({ length: maxRounds }).map((_, r) => (
             <div key={r} style={{ borderBottom: '1px solid var(--line)' }}>
@@ -1024,16 +1077,12 @@ function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onRemo
           </div>
         </div>
 
-        {/* Add / remove exercise */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          {onAddExercise && <button onClick={onAddExercise} className="btn-ghost" style={{ flex: 1, fontSize: 11 }}>+ ADD EXERCISE</button>}
-          {onDelGroup && (
-            <button onClick={() => { if (confirm('Remove this superset from today\'s workout?')) onDelGroup(); }}
-              className="btn-ghost" style={{ flex: 1, fontSize: 11, color: 'var(--c-coral)', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))' }}>
-              ✕ REMOVE SUPERSET
-            </button>
-          )}
-        </div>
+        {/* Add exercise (removal is coach-only, from the programme builder) */}
+        {onAddExercise && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button onClick={onAddExercise} className="btn-ghost" style={{ flex: 1, fontSize: 11 }}>+ ADD EXERCISE</button>
+          </div>
+        )}
 
         {group.some((e) => e.coach) && (
           <div className="card" style={{ marginTop: 12, padding: 12, display: 'grid', gap: 8 }}>
@@ -1052,12 +1101,14 @@ function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onRemo
 
 // ── SECTION-END DIVIDER (between phases) ─────────────────────────
 // Celebratory interstitial shown when one phase ends and the next begins.
-function SectionDivider({ phaseId, nextPhaseId, exercises, onContinue }) {
+// The coach's per-section slide text (set in the programme builder) wins;
+// the stock blurbs are only a fallback.
+function SectionDivider({ phaseId, nextPhaseId, exercises, slideText, onContinue }) {
   const phase = PHASES.find((p) => p.id === phaseId) || {};
   const next = PHASES.find((p) => p.id === nextPhaseId) || {};
   const color = phase.accent || 'var(--accent)';
   const count = exercises.filter((e) => e.phase === phaseId).length;
-  const blurb = SECTION_BLURB[nextPhaseId] || 'Take a breath and reset before the next block.';
+  const blurb = slideText || SECTION_BLURB[nextPhaseId] || 'Take a breath and reset before the next block.';
   const confetti = ['var(--c-amber)', 'var(--c-blue)', 'var(--c-coral)', 'var(--accent)', 'var(--c-pink)'];
   return (
     <div style={{
@@ -1374,7 +1425,7 @@ function AlternativesSheet({ ex, onClose, onPick }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>{ex.name}</div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em', marginTop: 2 }}>
-              CURRENT · {ex.target.toUpperCase()}
+              CURRENT{ex.target ? ` · ${ex.target.toUpperCase()}` : ''}
             </div>
           </div>
           <span className="chip chip-accent">● SELECTED</span>
@@ -1447,9 +1498,9 @@ function addSetBtnStyle(c) {
 // number/letter badge in the row.
 function AddSetControl({ onAdd, onRemove }) {
   return (
-    <div style={{ padding: '10px 12px', borderTop: '1px dashed var(--line-strong)', display: 'flex', gap: 8 }}>
+    <div style={{ padding: '8px 10px', borderTop: '1px dashed var(--line-strong)', display: 'flex', gap: 8 }}>
       <button onClick={() => onAdd()} style={{
-        flex: 1, padding: '10px 12px', borderRadius: 8,
+        flex: 1, padding: '8px 12px', borderRadius: 8,
         background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
         border: '1px solid color-mix(in srgb, var(--accent) 38%, transparent)',
         color: 'var(--accent)', cursor: 'pointer',
@@ -1538,7 +1589,7 @@ function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, onComplete
   return (
     <div style={{
       display: 'grid', gridTemplateColumns: '32px 1fr 1fr 56px 36px', gap: 8,
-      padding: '10px 14px', alignItems: 'center',
+      padding: '7px 12px', alignItems: 'center',
       background: set.active ? 'rgba(70,187,192,0.05)' : type ? `color-mix(in srgb, ${type.color} 6%, transparent)` : 'transparent',
       borderTop: '1px solid var(--line)',
       position: 'relative'
@@ -1801,14 +1852,58 @@ function actionBtnStyle() {
 }
 
 // ── PRIOR PROGRESS SHEET ──────────────────────────────────────────
-// Shows past sessions for this exercise (all sets), like the exercise
-// breakdown in Progress. Prior data is synthesised from the current
-// set scheme with a gentle downward ramp into the past.
-function PriorProgressSheet({ ex, onClose }) {
-  const sessions = React.useMemo(() => buildPriorSessions(ex), [ex.id, ex.name]);
-  const isWeighted = ex.sets.some((s) => s.kg != null);
-  // Best top-set per session for the mini trend
-  const trend = sessions.map((s) => s.top).reverse();
+// Shows this client's real past sessions for the exercise, loaded from
+// logged_sets (matched by exercise name so history carries across weeks).
+function PriorProgressSheet({ ex, userId, onClose }) {
+  const [sessions, setSessions] = React.useState(null); // null = loading
+
+  React.useEffect(() => {
+    let alive = true;
+    if (!userId) { setSessions([]); return; }
+    supabase
+      .from('logged_sets')
+      .select('set_index, actual_reps, actual_weight_kg, actual_band, actual_time_secs, exercise_name, section_exercises(name), workout_sessions!inner(id, client_id, completed_at)')
+      .eq('workout_sessions.client_id', userId)
+      .not('workout_sessions.completed_at', 'is', null)
+      .limit(600)
+      .then(({ data }) => {
+        if (!alive) return;
+        const name = ex.name.trim().toLowerCase();
+        const bySession = new Map();
+        (data || []).forEach((ls) => {
+          const lsName = (ls.exercise_name || ls.section_exercises?.name || '').trim().toLowerCase();
+          if (lsName !== name) return;
+          const sess = ls.workout_sessions;
+          if (!bySession.has(sess.id)) bySession.set(sess.id, { completedAt: sess.completed_at, rows: [] });
+          bySession.get(sess.id).rows.push(ls);
+        });
+        const out = [...bySession.values()]
+          .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+          .slice(0, 5)
+          .map((s) => {
+            const rows = s.rows.sort((a, b) => a.set_index - b.set_index);
+            const sets = rows.map((r) => {
+              if (r.actual_time_secs) return { warmup: false, label: formatMMSS(r.actual_time_secs) };
+              const kg = r.actual_weight_kg ? parseFloat(r.actual_weight_kg) : null;
+              const band = bandOf(r.actual_band);
+              if (band) return { warmup: false, label: `${band.short} × ${r.actual_reps ?? '—'}` };
+              if (kg != null) return { warmup: false, label: `${kg}kg × ${r.actual_reps ?? '—'}` };
+              return { warmup: false, label: `${r.actual_reps ?? '—'} reps` };
+            });
+            const kgs = rows.map((r) => parseFloat(r.actual_weight_kg)).filter((v) => !isNaN(v));
+            return {
+              date: new Date(s.completedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+              sets,
+              top: kgs.length ? Math.max(...kgs) : null,
+            };
+          });
+        setSessions(out);
+      });
+    return () => { alive = false; };
+  }, [ex.name, userId]);
+
+  const trend = (sessions || []).map((s) => s.top).filter((v) => v != null).reverse();
+  const isWeighted = trend.length >= 2;
 
   return (
     <div onClick={onClose} style={{
@@ -1831,8 +1926,16 @@ function PriorProgressSheet({ ex, onClose }) {
           {ex.name.toUpperCase()}
         </div>
         <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 14 }}>
-          LAST {sessions.length} SESSIONS
+          {sessions === null ? 'LOADING…' : sessions.length ? `LAST ${sessions.length} SESSION${sessions.length === 1 ? '' : 'S'}` : 'NO HISTORY YET'}
         </div>
+
+        {sessions !== null && sessions.length === 0 && (
+          <div className="card" style={{ padding: 16, textAlign: 'center', marginBottom: 4 }}>
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.06em', lineHeight: 1.7 }}>
+              No logged sessions for this exercise yet.<br/>Your history will appear here after your first workout.
+            </div>
+          </div>
+        )}
 
         {/* Trend line */}
         {isWeighted &&
@@ -1840,7 +1943,7 @@ function PriorProgressSheet({ ex, onClose }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
             <span className="label">// TOP SET (KG)</span>
             <span className="mono" style={{ fontSize: 11, color: '#189CAA', fontWeight: 600 }}>
-              ▲ {trend[trend.length - 1] - trend[0]}kg
+              {trend[trend.length - 1] >= trend[0] ? '▲' : '▼'} {Math.abs(trend[trend.length - 1] - trend[0])}kg
             </span>
           </div>
           <MiniLine data={trend} color="var(--accent)" />
@@ -1849,7 +1952,7 @@ function PriorProgressSheet({ ex, onClose }) {
 
         {/* Sessions */}
         <div style={{ display: 'grid', gap: 8 }}>
-          {sessions.map((sess, i) =>
+          {(sessions || []).map((sess, i) =>
           <div key={i} className="card" style={{ padding: 12,
             borderColor: i === 0 ? 'color-mix(in srgb, var(--accent) 40%, var(--line))' : 'var(--line)'
           }}>
@@ -1890,35 +1993,6 @@ function PriorProgressSheet({ ex, onClose }) {
       </div>
     </div>);
 
-}
-
-// Build believable past sessions for an exercise from its current set scheme.
-function buildPriorSessions(ex) {
-  const dates = ['4 days ago', '8 days ago', '12 days ago'];
-  const baseKg = (() => {
-    const w = ex.sets.find((s) => s.kg != null);
-    return w ? w.kg : null;
-  })();
-  const baseReps = (() => {
-    const r = ex.sets.find((s) => typeof s.reps === 'number');
-    return r ? r.reps : null;
-  })();
-  const round = (x) => Math.round(x / 2.5) * 2.5;
-  return dates.map((date, di) => {
-    const drop = (di + 1) * 0.05; // ~5% lighter each session back
-    const sets = ex.sets.map((s) => {
-      if (s.kg != null) {
-        const kg = round(s.kg * (1 - drop));
-        const reps = typeof s.reps === 'number' ? s.reps : s.reps;
-        return { warmup: s.kind === 'WARMUP', label: `${kg}kg × ${reps}` };
-      }
-      if (s.time) return { warmup: false, label: formatMMSS(parseTimeToSeconds(s.reps)) };
-      const reps = typeof s.reps === 'number' ? Math.max(1, s.reps - di) : s.reps;
-      return { warmup: false, label: `${reps}${s.perSide ? '/side' : ' reps'}` };
-    });
-    const top = baseKg != null ? round(baseKg * (1 - drop)) : baseReps != null ? Math.max(1, baseReps - di) : 0;
-    return { date, sets, top };
-  });
 }
 
 // ── SESSION RESULTS (standalone) ─────────────────────────────────

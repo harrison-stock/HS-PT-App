@@ -992,7 +992,7 @@ function PRStat({ label, value, sub, delta, accent }) {
 
 }
 
-function MiniLine({ data, color }) {
+export function MiniLine({ data, color }) {
   if (data.length < 2) return null;
   const max = Math.max(...data);const min = Math.min(...data);
   const range = max - min || 1;

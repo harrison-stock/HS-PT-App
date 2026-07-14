@@ -98,10 +98,17 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
 
     for (let sOrd = 0; sOrd < content.sections.length; sOrd++) {
       const s = content.sections[sOrd];
-      const { data: sec } = await supabase
+      let { data: sec } = await supabase
         .from('workout_sections')
-        .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, sort_order: sOrd })
+        .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, intro: s.intro || '', sort_order: sOrd })
         .select('id').single();
+      // Fallback if migration 036 (per-section slide text) isn't applied yet.
+      if (!sec) {
+        ({ data: sec } = await supabase
+          .from('workout_sections')
+          .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, sort_order: sOrd })
+          .select('id').single());
+      }
       if (!sec) continue;
 
       for (let eOrd = 0; eOrd < s.items.length; eOrd++) {
@@ -201,6 +208,9 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
       return { error: e.message || 'Copy failed' };
     }
   };
+
+  // ── Section edits ─────────────────────────────────────────────
+  const updateSection = (sIdx, patch) => { setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({ ...s, ...patch })) })); setDirty(true); };
 
   // ── Exercise edits ────────────────────────────────────────────
   const updateEx = (sIdx, eIdx, patch) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, ...patch }))); setDirty(true); };
@@ -461,6 +471,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
             <div className="pb-sections">
             {day.sections.map((s, sIdx) => (
               <Section key={s.kind + sIdx} s={s} sIdx={sIdx}
+                onIntro={(v) => updateSection(sIdx, { intro: v })}
                 expandedExId={expandedExId} expandedSetId={expandedSetId}
                 onExpandEx={(id) => { setExpandedExId(expandedExId === id ? null : id); setExpandedSetId(null); }}
                 onExpandSet={(id) => setExpandedSetId(expandedSetId === id ? null : id)}
@@ -903,8 +914,10 @@ function RestDay({ onAdd }) {
 }
 
 // ── SECTION ───────────────────────────────────────────────────────
-function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function Section({ s, sIdx, onIntro, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const color = sectionColor(s.kind);
+  const [slideOpen, setSlideOpen] = React.useState(false);
+  const showSlide = slideOpen || !!s.intro;
   // Superset labels: A1/A2, B1/B2… per consecutive grouped run.
   const seen = {}; let li = 0; const cnt = {};
   const ssLabels = s.items.map(it => {
@@ -920,8 +933,32 @@ function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet
           <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', color, background: `color-mix(in srgb, ${color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`, fontFamily: 'Orbitron', fontWeight: 800, fontSize: 11 }}>{sIdx+1}</span>
           <div className="label" style={{ color, letterSpacing: '0.14em', fontSize: 11 }}>// {s.title.toUpperCase()}</div>
         </div>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.1em' }}>{s.items.length} EX</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {onIntro && (
+            <button onClick={() => setSlideOpen(o => !o)} className="mono" style={{
+              all: 'unset', cursor: 'pointer', padding: '3px 8px', borderRadius: 6, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em',
+              color: showSlide ? color : 'var(--text-3)',
+              border: `1px solid ${showSlide ? `color-mix(in srgb, ${color} 45%, transparent)` : 'var(--line)'}`,
+              background: showSlide ? `color-mix(in srgb, ${color} 10%, transparent)` : 'transparent',
+            }}>✎ SLIDE TEXT</button>
+          )}
+          <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.1em' }}>{s.items.length} EX</span>
+        </div>
       </div>
+      {onIntro && showSlide && (
+        <textarea
+          value={s.intro || ''}
+          onChange={e => onIntro(e.target.value)}
+          placeholder={`Shown to the client on the "next up: ${s.title}" slide between blocks — cues, focus, or encouragement…`}
+          rows={2}
+          style={{
+            width: '100%', boxSizing: 'border-box', marginBottom: 10,
+            background: 'var(--bg-2)', border: `1px solid color-mix(in srgb, ${color} 30%, var(--line-strong))`, borderRadius: 8,
+            color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 11, lineHeight: 1.6,
+            padding: '9px 11px', outline: 'none', resize: 'vertical',
+          }}
+        />
+      )}
       <div style={{ display: 'grid', gap: 9 }}>
         {s.items.map((e, eIdx) => (
           <ExerciseEditor key={e.id} e={e} color={color}
@@ -1424,6 +1461,7 @@ export function ExercisePicker({ onClose, onPick }) {
         background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20,
         border: '1px solid var(--line-strong)', borderBottom: 0,
         maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+        animation: 'sheetUp .28s cubic-bezier(.22,.61,.36,1)',
       }}>
         <div style={{ padding: '12px 16px 10px', flexShrink: 0 }}>
           <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
@@ -1478,7 +1516,7 @@ function mapDay(day, sIdx, eIdx, mapEx) {
 
 function dbToSections(sections) {
   return sections.map(s => ({
-    kind: s.kind, title: s.title,
+    kind: s.kind, title: s.title, intro: s.intro || '',
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
       id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, banded: !!ex.banded, unilateral: !!ex.unilateral, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
