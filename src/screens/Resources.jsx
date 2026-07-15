@@ -72,7 +72,7 @@ export function Resources({ go, userId, isTrainer }) {
   }
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 120px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)', maxWidth: isTrainer ? 820 : undefined, margin: isTrainer ? '0 auto' : undefined, boxSizing: 'border-box' }}>
+    <div className="scroller" style={{ padding: '0 16px 28px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)', maxWidth: isTrainer ? 820 : undefined, margin: isTrainer ? '0 auto' : undefined, boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
         <div>
           <div className="label">// LIBRARY</div>
@@ -178,6 +178,8 @@ export function Resources({ go, userId, isTrainer }) {
             .map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={true} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {guideList.filter((g) => favs.has(g.id) && g.title.toLowerCase().includes(query.toLowerCase()))
             .map((g) => <GuideCard key={g.id} g={g} isFav={true} onToggleFav={() => toggleFav(g.id, 'guide')} onEdit={isTrainer ? () => setBuilderGuide(g) : null} onOpen={() => openGuide(g)} />)}
+          {(exercises || []).filter((e) => favs.has(e.id) && exerciseMatches(e.name, query, e.muscle_group || ''))
+            .map((e) => <ExerciseGlossaryCard key={e.id} e={e} onOpen={() => setOpenExercise(e)} isFav={true} onToggleFav={() => toggleFav(e.id, 'exercise')} />)}
         </div>
       }
 
@@ -186,7 +188,7 @@ export function Resources({ go, userId, isTrainer }) {
           <IconHeart size={26} style={{ color: 'var(--text-3)', margin: '0 auto 10px' }} />
           <div style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>No favourites yet</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 6, lineHeight: 1.5 }}>
-            TAP THE ♥ ON ANY RECIPE<br />OR GUIDE TO SAVE IT HERE
+            TAP THE ♥ ON ANY RECIPE,<br />GUIDE OR EXERCISE TO SAVE IT HERE
           </div>
         </div>
       }
@@ -209,7 +211,7 @@ export function Resources({ go, userId, isTrainer }) {
           );
           return (
             <div style={{ display: 'grid', gap: 10 }}>
-              {exFiltered.map((e) => <ExerciseGlossaryCard key={e.id} e={e} onOpen={() => setOpenExercise(e)} />)}
+              {exFiltered.map((e) => <ExerciseGlossaryCard key={e.id} e={e} onOpen={() => setOpenExercise(e)} isFav={favs.has(e.id)} onToggleFav={() => toggleFav(e.id, 'exercise')} />)}
             </div>
           );
         })()
@@ -225,20 +227,32 @@ export function Resources({ go, userId, isTrainer }) {
       isFav={favs.has(openRecipe.id)} onToggleFav={() => toggleFav(openRecipe.id, 'recipe')}
       onEdit={isTrainer ? () => { setOpenRecipe(null); setBuilderRecipe(openRecipe); } : null} />}
 
-      {openExercise && <ExerciseGlossaryDetail e={openExercise} onClose={() => setOpenExercise(null)} />}
+      {openExercise && <ExerciseGlossaryDetail e={openExercise} onClose={() => setOpenExercise(null)}
+      isFav={favs.has(openExercise.id)} onToggleFav={() => toggleFav(openExercise.id, 'exercise')} />}
     </div>);
 
 }
 
 // ── EXERCISE GLOSSARY (read-only) ────────────────────────────────
-function ExerciseGlossaryCard({ e, onOpen }) {
+function ExerciseGlossaryCard({ e, onOpen, isFav, onToggleFav }) {
   const thumb = e.thumbnail_url || videoThumb(e.video_url) || (e.photos && e.photos[0]) || '';
   return (
     <div className="card" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: 'pointer', position: 'relative' }}>
       <div style={{ width: 88, flexShrink: 0, background: `url('${thumb}') center/cover, var(--bg-3)`, position: 'relative' }}>
         {e.video_url && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#eceff4' }}><IconPlay size={18}/></div>}
       </div>
-      <div style={{ padding: 12, flex: 1, minWidth: 0 }}>
+      {onToggleFav &&
+      <button onClick={(ev) => { ev.stopPropagation(); onToggleFav(); }} aria-label="Favourite exercise"
+      style={{ all: 'unset', cursor: 'pointer', position: 'absolute', top: 8, right: 8, zIndex: 2, width: 28 * HEX_RATIO, height: 28, display: 'grid', placeItems: 'center' }}>
+        <HexShape size={28}
+        fill={isFav ? 'var(--c-coral)' : 'var(--bg-2)'}
+        stroke={isFav ? 'var(--c-coral)' : 'var(--line-strong)'}
+        strokeWidth={isFav ? 0 : 12}
+        style={{ position: 'absolute', inset: 0, filter: isFav ? 'drop-shadow(0 0 calc(8px * var(--glow)) color-mix(in srgb, var(--c-coral) 60%, transparent))' : 'none' }} />
+        <IconHeart size={13} fill={isFav ? '#fff' : 'none'} style={{ position: 'relative', color: isFav ? '#fff' : 'var(--text-3)' }} />
+      </button>
+      }
+      <div style={{ padding: 12, flex: 1, minWidth: 0, marginRight: onToggleFav ? 30 : 0 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
           {e.muscle_group && <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, padding: '2px 7px', borderRadius: 999, color: 'var(--accent)', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)' }}>{e.muscle_group.toUpperCase()}</span>}
           {e.category && <span className="mono" style={{ fontSize: 8.5, fontWeight: 600, padding: '2px 7px', borderRadius: 999, color: 'var(--text-2)', border: '1px solid var(--line-strong)' }}>{e.category.toUpperCase()}</span>}
@@ -252,7 +266,7 @@ function ExerciseGlossaryCard({ e, onOpen }) {
   );
 }
 
-function ExerciseGlossaryDetail({ e, onClose }) {
+function ExerciseGlossaryDetail({ e, onClose, isFav, onToggleFav }) {
   const thumb = e.thumbnail_url || videoThumb(e.video_url) || (e.photos && e.photos[0]) || '';
   const steps = (e.instructions || '').split('\n').map(s => s.trim()).filter(Boolean);
   const muscles = (e.muscles_worked || []).map(k => MUSCLE_LABEL[k] || k);
@@ -263,6 +277,18 @@ function ExerciseGlossaryDetail({ e, onClose }) {
         {/* Hero */}
         <div style={{ height: 220, position: 'relative', flexShrink: 0, background: `linear-gradient(180deg, rgba(7,7,12,0.35) 0%, transparent 30%, var(--bg-0) 100%), url('${thumb}') center/cover, var(--bg-3)` }}>
           <HexBackButton onClick={onClose} variant="overlay" size={38} style={{ position: 'absolute', top: 14, left: 14, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}/>
+          {onToggleFav &&
+          <button onClick={onToggleFav} aria-label="Favourite exercise" style={{ position: 'absolute', top: 14, right: 14, zIndex: 2, all: 'unset', cursor: 'pointer' }}>
+            <Hex size={38} square style={{
+              background: isFav ? 'var(--c-coral)' : 'rgba(10,15,20,0.82)',
+              border: '1.5px solid ' + (isFav ? 'var(--c-coral)' : 'rgba(255,255,255,0.45)'),
+              backdropFilter: 'blur(8px)', color: '#eceff4',
+              boxShadow: isFav ? '0 0 calc(12px * var(--glow)) color-mix(in srgb, var(--c-coral) 65%, transparent)' : '0 2px 10px rgba(0,0,0,0.5)',
+            }}>
+              <IconHeart size={15} fill={isFav ? '#fff' : 'none'} />
+            </Hex>
+          </button>
+          }
           {e.video_url && (
             <button onClick={openVideo} aria-label="Play video" style={{ all: 'unset', cursor: 'pointer', position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
               <Hex size={58} square style={{ background: 'rgba(0,0,0,0.55)', color: '#eceff4' }}><IconPlay size={22}/></Hex>
