@@ -618,7 +618,11 @@ function PreviewBody({ w, sections, expanded, onToggle, onOpenSection, onClose, 
 function SectionAccordion({ s, index, expanded, onToggle, onOpen }) {
   const color = sectionColor(s.kind);
   return (
-    <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 14, overflow: 'hidden' }}>
+    <div style={{
+      background: 'var(--bg-2)', borderRadius: 14, overflow: 'hidden',
+      border: `1px solid color-mix(in srgb, ${color} 55%, var(--line))`,
+      boxShadow: `0 0 calc(14px * var(--glow)) color-mix(in srgb, ${color} 32%, transparent), inset 0 0 0 1px color-mix(in srgb, ${color} 14%, transparent)`,
+    }}>
       <button onClick={onToggle} style={{
         all: 'unset', cursor: 'pointer', width: '100%',
         padding: '14px 16px',
@@ -628,9 +632,10 @@ function SectionAccordion({ s, index, expanded, onToggle, onOpen }) {
           background: `color-mix(in srgb, ${color} 16%, transparent)`,
           border: `1px solid color-mix(in srgb, ${color} 38%, transparent)`,
           color,
+          filter: `drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, ${color} 55%, transparent))`,
         }}>{(sectionIcon(s.kind))(15)}</Hex>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.2, fontFamily: '"JetBrains Mono"' }}>{s.title}</div>
+          <div className="h-bold" style={{ fontSize: 15, lineHeight: 1.2, color: color }}>{s.title}</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 3 }}>
             {s.items.length} EXERCISES · {s.minutes} MIN
           </div>
@@ -772,7 +777,7 @@ function SectionDetail({ s, onBack }) {
 function sectionColor(kind) {
   return kind === 'PULSE_RAISER' ? 'var(--c-coral)'
     : kind === 'BANDED'   ? 'var(--c-amber)'
-    : kind === 'COOLDOWN' ? 'var(--accent-2)'
+    : kind === 'COOLDOWN' ? 'var(--c-blue)'
     : 'var(--accent)';
 }
 
