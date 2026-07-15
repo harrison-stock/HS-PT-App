@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { HEX_RATIO, Hex, HexBackButton } from '../components/hex'
 import { IconBand, IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconClock, IconDumbbell, IconFlame, IconLeaf, IconTarget } from '../components/icons'
 import { bandOf } from '../components/bands'
+import { SectionGlyph } from '../lib/svgIcon'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -57,6 +58,7 @@ function shapeWorkout(row) {
       return {
         kind: s.kind,
         title: s.title,
+        icon: s.icon || '',
         minutes, _secs: fromClock,
         intro: '',
         items: (s.section_exercises || [])
@@ -120,7 +122,7 @@ export function Workouts({ go, openPreview, userId }) {
   React.useEffect(() => {
     if (!userId) return;
     setLoading(true);
-    supabase
+    const query = (sectionFields) => supabase
       .from('client_workouts')
       .select(`
         id, scheduled_date, status,
@@ -131,7 +133,7 @@ export function Workouts({ go, openPreview, userId }) {
             programmes ( id, name, tag )
           ),
           workout_sections (
-            id, kind, title, sort_order,
+            ${sectionFields},
             section_exercises (
               id, name, img_url, tempo, timed, banded, unilateral, superset_group, sort_order,
               exercise_sets ( set_index, reps, weight_kg, band, rest_secs, time_secs )
@@ -140,11 +142,15 @@ export function Workouts({ go, openPreview, userId }) {
         )
       `)
       .eq('client_id', userId)
-      .order('scheduled_date')
-      .then(({ data }) => {
-        if (data) setWorkouts(data.map(shapeWorkout).filter(Boolean));
-        setLoading(false);
-      });
+      .order('scheduled_date');
+
+    (async () => {
+      let { data, error } = await query('id, kind, title, sort_order, icon');
+      // Fallback if migration 037 (per-section icon) isn't applied yet.
+      if (error) ({ data } = await query('id, kind, title, sort_order'));
+      if (data) setWorkouts(data.map(shapeWorkout).filter(Boolean));
+      setLoading(false);
+    })();
   }, [userId]);
 
   const weekStart = React.useMemo(() => {
@@ -633,7 +639,7 @@ function SectionAccordion({ s, index, expanded, onToggle, onOpen }) {
           border: `1px solid color-mix(in srgb, ${color} 38%, transparent)`,
           color,
           filter: `drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, ${color} 55%, transparent))`,
-        }}>{(sectionIcon(s.kind))(15)}</Hex>
+        }}><SectionGlyph icon={s.icon} kind={s.kind} size={15} color={color} /></Hex>
         <div style={{ minWidth: 0 }}>
           <div className="h-bold" style={{ fontSize: 15, lineHeight: 1.2, color: color }}>{s.title}</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 3 }}>

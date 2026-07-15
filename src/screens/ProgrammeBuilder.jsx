@@ -6,6 +6,7 @@ import { loadExercises, videoThumb } from '../lib/exercises'
 import { MasterPlanner } from './MasterPlanner'
 import { BandPicker, BandChip, bandOf } from '../components/bands'
 import { exerciseMatches } from '../lib/exerciseSearch'
+import { ICON_LIBRARY, SectionGlyph, sanitizeSvg } from '../lib/svgIcon'
 
 const IMG_FALLBACK = 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70';
 const TAGS = ['STRENGTH','ONBOARD','REHAB','ENDURANCE','HYBRID','SPORT'];
@@ -100,9 +101,9 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
       const s = content.sections[sOrd];
       let { data: sec } = await supabase
         .from('workout_sections')
-        .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, intro: s.intro || '', sort_order: sOrd })
+        .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '', sort_order: sOrd })
         .select('id').single();
-      // Fallback if migration 036 (per-section slide text) isn't applied yet.
+      // Fallback if migrations 036 (slide text) / 037 (icon) aren't applied yet.
       if (!sec) {
         ({ data: sec } = await supabase
           .from('workout_sections')
@@ -472,6 +473,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
             {day.sections.map((s, sIdx) => (
               <Section key={s.kind + sIdx} s={s} sIdx={sIdx}
                 onIntro={(v) => updateSection(sIdx, { intro: v })}
+                onIcon={(v) => updateSection(sIdx, { icon: v })}
                 expandedExId={expandedExId} expandedSetId={expandedSetId}
                 onExpandEx={(id) => { setExpandedExId(expandedExId === id ? null : id); setExpandedSetId(null); }}
                 onExpandSet={(id) => setExpandedSetId(expandedSetId === id ? null : id)}
@@ -914,9 +916,10 @@ function RestDay({ onAdd }) {
 }
 
 // ── SECTION ───────────────────────────────────────────────────────
-function Section({ s, sIdx, onIntro, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function Section({ s, sIdx, onIntro, onIcon, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const color = sectionColor(s.kind);
   const [slideOpen, setSlideOpen] = React.useState(false);
+  const [iconOpen, setIconOpen] = React.useState(false);
   const showSlide = slideOpen || !!s.intro;
   // Superset labels: A1/A2, B1/B2… per consecutive grouped run.
   const seen = {}; let li = 0; const cnt = {};
@@ -930,9 +933,25 @@ function Section({ s, sIdx, onIntro, expandedExId, expandedSetId, onExpandEx, on
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', color, background: `color-mix(in srgb, ${color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`, fontFamily: 'Orbitron', fontWeight: 800, fontSize: 11 }}>{sIdx+1}</span>
+          {onIcon ? (
+            <button onClick={() => setIconOpen(true)} title="Change section icon" style={{
+              all: 'unset', cursor: 'pointer', position: 'relative',
+              width: 26, height: 26, borderRadius: 7, display: 'grid', placeItems: 'center',
+              background: `color-mix(in srgb, ${color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
+            }}>
+              <SectionGlyph icon={s.icon} kind={s.kind} size={15} color={color} glow />
+              <span style={{ position: 'absolute', right: -3, bottom: -3, width: 8, height: 8, borderRadius: '50%', background: color, border: '1.5px solid var(--bg-0)' }}/>
+            </button>
+          ) : (
+            <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', color, background: `color-mix(in srgb, ${color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`, fontFamily: 'Orbitron', fontWeight: 800, fontSize: 11 }}>{sIdx+1}</span>
+          )}
           <div className="label" style={{ color, letterSpacing: '0.14em', fontSize: 11 }}>// {s.title.toUpperCase()}</div>
         </div>
+        {iconOpen && onIcon && (
+          <IconPickerSheet current={s.icon} kind={s.kind} color={color}
+            onPick={(v) => { onIcon(v); setIconOpen(false); }}
+            onClose={() => setIconOpen(false)} />
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {onIntro && (
             <button onClick={() => setSlideOpen(o => !o)} className="mono" style={{
@@ -985,6 +1004,110 @@ function Section({ s, sIdx, onIntro, expandedExId, expandedSetId, onExpandEx, on
         marginTop: 6, padding: '8px 0', border: '1px dashed var(--line-strong)', borderRadius: 8,
         color, fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.14em', fontWeight: 600,
       }}>+ ADD EXERCISE</button>
+    </div>
+  );
+}
+
+// ── SECTION ICON PICKER ───────────────────────────────────────────
+// Pick a curated glyph or paste a custom SVG for this section. Custom SVG is
+// sanitised (geometry only) and recoloured to the zone colour on save.
+function ToggleBtn({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} className="mono" style={{
+      all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '8px 10px', borderRadius: 8,
+      fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
+      background: active ? 'var(--accent-soft)' : 'var(--bg-2)',
+      border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+      color: active ? 'var(--accent)' : 'var(--text-3)',
+    }}>{children}</button>
+  );
+}
+
+function IconPickerSheet({ current, kind, color, onPick, onClose }) {
+  const [mode, setMode] = React.useState((current || '').trim().startsWith('<svg') ? 'custom' : 'library');
+  const [raw, setRaw]   = React.useState((current || '').trim().startsWith('<svg') ? current : '');
+  const fileRef = React.useRef(null);
+  const safe = React.useMemo(() => sanitizeSvg(raw), [raw]);
+
+  const loadFile = (e) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => setRaw(String(r.result || ''));
+    r.readAsText(f);
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 220, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, maxHeight: '86vh', display: 'flex', flexDirection: 'column', animation: 'sheetUp .28s cubic-bezier(.22,.61,.36,1)' }}>
+        <div style={{ padding: '12px 18px 8px' }}>
+          <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="label" style={{ color }}>// SECTION ICON</div>
+            <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+            <ToggleBtn active={mode === 'library'} onClick={() => setMode('library')}>LIBRARY</ToggleBtn>
+            <ToggleBtn active={mode === 'custom'} onClick={() => setMode('custom')}>CUSTOM SVG</ToggleBtn>
+          </div>
+        </div>
+
+        <div className="scroller" style={{ padding: '8px 18px 20px', overflowY: 'auto' }}>
+          {mode === 'library' ? (
+            <>
+              <button onClick={() => onPick('')} style={{
+                all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, width: '100%', boxSizing: 'border-box',
+                padding: '10px 12px', borderRadius: 10, marginBottom: 10,
+                background: !current ? `color-mix(in srgb, ${color} 12%, transparent)` : 'var(--bg-2)',
+                border: `1px solid ${!current ? color : 'var(--line)'}`,
+              }}>
+                <SectionGlyph icon="" kind={kind} size={18} color={color} glow />
+                <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>DEFAULT ({kind.replace('_', ' ')})</span>
+              </button>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+                {ICON_LIBRARY.map(it => {
+                  const val = `lib:${it.key}`;
+                  const sel = current === val;
+                  return (
+                    <button key={it.key} onClick={() => onPick(val)} title={it.label} style={{
+                      all: 'unset', cursor: 'pointer', aspectRatio: '1', display: 'grid', placeItems: 'center', borderRadius: 10,
+                      background: sel ? `color-mix(in srgb, ${color} 16%, transparent)` : 'var(--bg-2)',
+                      border: `1px solid ${sel ? color : 'var(--line)'}`,
+                      color: sel ? color : 'var(--text-2)',
+                      boxShadow: sel ? `0 0 calc(8px * var(--glow)) color-mix(in srgb, ${color} 40%, transparent)` : 'none',
+                    }}>
+                      <SectionGlyph icon={val} kind={kind} size={20} color={sel ? color : 'var(--text-2)'} glow={sel} />
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 10 }}>
+                Paste SVG markup (or load a .svg file). Scripts and links are stripped; the icon adopts this section's colour and glow.
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ width: 56, height: 56, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--bg-2)', border: `1px solid color-mix(in srgb, ${color} 40%, var(--line))` }}>
+                  {safe ? <SectionGlyph icon={raw} kind={kind} size={30} color={color} glow /> : <span className="mono" style={{ fontSize: 8, color: 'var(--text-3)' }}>PREVIEW</span>}
+                </div>
+                <button onClick={() => fileRef.current?.click()} className="btn-ghost" style={{ fontSize: 10, padding: '8px 12px' }}>LOAD .SVG FILE</button>
+                <input ref={fileRef} type="file" accept=".svg,image/svg+xml" onChange={loadFile} style={{ display: 'none' }} />
+              </div>
+              <textarea value={raw} onChange={e => setRaw(e.target.value)} rows={6} spellCheck={false}
+                placeholder={'<svg viewBox="0 0 24 24">\n  <path d="…" />\n</svg>'}
+                style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 8, color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 11, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'vertical' }} />
+              {raw.trim() && !safe && (
+                <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)', marginTop: 6 }}>Not a valid SVG — check the markup.</div>
+              )}
+              <button onClick={() => safe && onPick(raw)} disabled={!safe} className="btn-primary"
+                style={{ width: '100%', marginTop: 12, opacity: safe ? 1 : 0.4, pointerEvents: safe ? 'auto' : 'none' }}>
+                USE THIS ICON →
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1516,7 +1639,7 @@ function mapDay(day, sIdx, eIdx, mapEx) {
 
 function dbToSections(sections) {
   return sections.map(s => ({
-    kind: s.kind, title: s.title, intro: s.intro || '',
+    kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '',
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
       id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, banded: !!ex.banded, unilateral: !!ex.unilateral, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
