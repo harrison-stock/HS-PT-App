@@ -12,6 +12,7 @@ import { loadForms } from '../lib/forms'
 import { IconPlus, IconCheck, IconX2, IconChevronRight } from '../components/icons'
 import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
+import { toast } from '../lib/toast'
 
 // ── Constants ────────────────────────────────────────────────────
 const SEV_COLOR  = { mild: 'var(--c-amber)', moderate: 'var(--c-coral)', severe: '#d93434' };
@@ -94,10 +95,9 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go 
         {tab === 'data'     && <DataTab      c={c} trainerId={trainerId} />}
         {tab === 'tasks'    && <TasksTab     c={c} trainerId={trainerId} />}
         {tab === 'goals'    && <GoalsTab     c={c} trainerId={trainerId} />}
+        {tab === 'report'   && <ProgrammeReport clientId={c.id} clientName={c.name} embedded onClose={() => setTab('overview')} />}
         {tab === 'settings' && <SettingsTab  c={c} trainerId={trainerId} onSaved={onChanged} onArchived={() => { onChanged?.(); onClose(); }} />}
       </div>
-
-      {tab === 'report' && <ProgrammeReport clientId={c.id} clientName={c.name} onClose={() => setTab('overview')} />}
     </div>
   );
 }
@@ -1243,6 +1243,7 @@ function GoalsTab({ c, trainerId }) {
       setGoal(data);
     }
     setSaving(false); setDirty(false);
+    toast(goal ? 'Goal updated' : 'Goal set');
   };
 
   const onChange = (fn) => { fn(); setDirty(true); };

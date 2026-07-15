@@ -39,6 +39,7 @@ export function Coach({ go, trainerId, unread = 0, only }) {
   const [loadingClients, setLoadingClients] = React.useState(true);
   const [inviteOpen, setInviteOpen]         = React.useState(false);
   const [todaySchedule, setTodaySchedule]   = React.useState(null);
+  const [hubQuery, setHubQuery]             = React.useState('');
 
   React.useEffect(() => {
     fetchProgrammes();
@@ -274,8 +275,10 @@ export function Coach({ go, trainerId, unread = 0, only }) {
   // Dedicated Programmes hub (its own bottom-nav tab) — programmes, ad-hoc
   // workouts and reusable task templates.
   if (only === 'programmes') {
-    const fullProgrammes = programmes.filter(p => !p.is_adhoc);
-    const adhocWorkouts  = programmes.filter(p => p.is_adhoc);
+    const q = hubQuery.trim().toLowerCase();
+    const matchQ = (p) => !q || (p.name || '').toLowerCase().includes(q) || (p.tag || '').toLowerCase().includes(q);
+    const fullProgrammes = programmes.filter(p => !p.is_adhoc && matchQ(p));
+    const adhocWorkouts  = programmes.filter(p => p.is_adhoc && matchQ(p));
     const hubTabs = [
       { id: 'programmes', label: 'Programmes', count: loadingProgs ? null : fullProgrammes.length },
       { id: 'adhoc',      label: 'Ad-hoc',     count: loadingProgs ? null : adhocWorkouts.length },
@@ -289,6 +292,24 @@ export function Coach({ go, trainerId, unread = 0, only }) {
             <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>BUILD HUB</div>
           </div>
         </div>
+
+        {hubTab !== 'templates' && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10,
+            padding: '8px 12px', marginBottom: 12,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+            <input value={hubQuery} onChange={e => setHubQuery(e.target.value)}
+              placeholder={hubTab === 'adhoc' ? 'Search workouts…' : 'Search programmes…'}
+              style={{ flex: 1, background: 'transparent', border: 0, outline: 'none', color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 12, letterSpacing: '0.04em' }} />
+            {hubQuery && (
+              <button onClick={() => setHubQuery('')} aria-label="Clear search" style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)', display: 'grid', placeItems: 'center' }}>
+                <IconX2 size={13} />
+              </button>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
           {hubTabs.map(t => (

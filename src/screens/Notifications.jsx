@@ -29,7 +29,7 @@ export function Notifications({ go, userId, home = 'dashboard' }) {
   const earlier = (items || []).filter(n => new Date(n.created_at).toDateString() !== new Date().toDateString());
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 110px', paddingTop: 64 }}>
+    <div className="scroller" style={{ padding: '0 16px 120px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <HexBackButton onClick={() => go(home)} size={36} />

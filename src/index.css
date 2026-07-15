@@ -116,8 +116,8 @@ body:has([data-role="trainer"]) {
 .coach-wrap {
   max-width: 820px;
   margin: 0 auto;
-  padding: 0 24px 110px;
-  padding-top: 64px;
+  padding: 0 24px 120px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 18px);
 }
 
 /* ── Desktop expansion (coach side only) ─────────────────────────────
@@ -277,11 +277,13 @@ body:has([data-role="trainer"]) {
   box-shadow: 0 0 calc(8px * var(--glow)) var(--accent-glow);
 }
 
-/* Bottom nav */
+/* Bottom nav — sits above full-screen result/notification overlays (z-index)
+   so the menu stays reachable everywhere except the workout logger. */
 .bnav {
   position: absolute; left: 0; right: 0; bottom: 0;
+  z-index: 90;
   display: grid; grid-template-columns: repeat(5, 1fr);
-  padding: 10px 8px 28px;
+  padding: 10px 8px calc(env(safe-area-inset-bottom, 0px) + 20px);
   background: linear-gradient(180deg, var(--nav-from), var(--nav-to) 60%);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--line);

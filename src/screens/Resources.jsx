@@ -72,7 +72,7 @@ export function Resources({ go, userId, isTrainer }) {
   }
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 110px', paddingTop: 64, maxWidth: isTrainer ? 820 : undefined, margin: isTrainer ? '0 auto' : undefined, boxSizing: 'border-box' }}>
+    <div className="scroller" style={{ padding: '0 16px 120px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)', maxWidth: isTrainer ? 820 : undefined, margin: isTrainer ? '0 auto' : undefined, boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
         <div>
           <div className="label">// LIBRARY</div>
@@ -323,16 +323,19 @@ function ExerciseGlossaryDetail({ e, onClose }) {
 function ResTab({ active, onClick, icon, label }) {
   return (
     <button onClick={onClick} style={{
-      flex: 1, padding: '10px 12px',
+      flex: 1, minWidth: 0, padding: '10px 6px',
       background: active ? 'var(--accent-soft)' : 'var(--bg-2)',
       border: '1px solid ' + (active ? 'var(--accent)' : 'var(--line)'),
       borderRadius: 10, cursor: 'pointer',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
       color: active ? 'var(--accent)' : 'var(--text-2)',
-      fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 600, letterSpacing: '0.1em',
-      textTransform: 'uppercase', whiteSpace: 'nowrap',
+      fontFamily: 'JetBrains Mono', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em',
+      textTransform: 'uppercase',
       boxShadow: active ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none'
-    }}><span style={{ display: 'inline-flex', flexShrink: 0 }}>{icon}</span>{label}</button>);
+    }}>
+      <span style={{ display: 'inline-flex', flexShrink: 0 }}>{icon}</span>
+      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+    </button>);
 
 }
 

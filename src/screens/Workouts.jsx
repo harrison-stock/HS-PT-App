@@ -182,7 +182,7 @@ export function Workouts({ go, openPreview, userId }) {
   const dayName = dt => dt.toLocaleDateString('en-GB', { weekday: 'short' }).toUpperCase();
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 110px', paddingTop: 64 }}>
+    <div className="scroller" style={{ padding: '0 16px 120px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
         <div>
           <div className="label">// PROGRAMME</div>
