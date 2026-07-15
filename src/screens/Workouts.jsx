@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { HEX_RATIO, Hex, HexBackButton } from '../components/hex'
 import { IconBand, IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconClock, IconDumbbell, IconFlame, IconLeaf, IconTarget } from '../components/icons'
 import { bandOf } from '../components/bands'
+import { SectionGlyph } from '../lib/svgIcon'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -57,6 +58,7 @@ function shapeWorkout(row) {
       return {
         kind: s.kind,
         title: s.title,
+        icon: s.icon || '',
         minutes, _secs: fromClock,
         intro: '',
         items: (s.section_exercises || [])
@@ -120,7 +122,7 @@ export function Workouts({ go, openPreview, userId }) {
   React.useEffect(() => {
     if (!userId) return;
     setLoading(true);
-    supabase
+    const query = (sectionFields) => supabase
       .from('client_workouts')
       .select(`
         id, scheduled_date, status,
@@ -131,7 +133,7 @@ export function Workouts({ go, openPreview, userId }) {
             programmes ( id, name, tag )
           ),
           workout_sections (
-            id, kind, title, sort_order,
+            ${sectionFields},
             section_exercises (
               id, name, img_url, tempo, timed, banded, unilateral, superset_group, sort_order,
               exercise_sets ( set_index, reps, weight_kg, band, rest_secs, time_secs )
@@ -140,11 +142,15 @@ export function Workouts({ go, openPreview, userId }) {
         )
       `)
       .eq('client_id', userId)
-      .order('scheduled_date')
-      .then(({ data }) => {
-        if (data) setWorkouts(data.map(shapeWorkout).filter(Boolean));
-        setLoading(false);
-      });
+      .order('scheduled_date');
+
+    (async () => {
+      let { data, error } = await query('id, kind, title, sort_order, icon');
+      // Fallback if migration 037 (per-section icon) isn't applied yet.
+      if (error) ({ data } = await query('id, kind, title, sort_order'));
+      if (data) setWorkouts(data.map(shapeWorkout).filter(Boolean));
+      setLoading(false);
+    })();
   }, [userId]);
 
   const weekStart = React.useMemo(() => {
@@ -182,7 +188,7 @@ export function Workouts({ go, openPreview, userId }) {
   const dayName = dt => dt.toLocaleDateString('en-GB', { weekday: 'short' }).toUpperCase();
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 110px', paddingTop: 64 }}>
+    <div className="scroller" style={{ padding: '0 16px 120px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
         <div>
           <div className="label">// PROGRAMME</div>
@@ -618,7 +624,11 @@ function PreviewBody({ w, sections, expanded, onToggle, onOpenSection, onClose, 
 function SectionAccordion({ s, index, expanded, onToggle, onOpen }) {
   const color = sectionColor(s.kind);
   return (
-    <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 14, overflow: 'hidden' }}>
+    <div style={{
+      background: 'var(--bg-2)', borderRadius: 14, overflow: 'hidden',
+      border: `1px solid color-mix(in srgb, ${color} 55%, var(--line))`,
+      boxShadow: `0 0 calc(14px * var(--glow)) color-mix(in srgb, ${color} 32%, transparent), inset 0 0 0 1px color-mix(in srgb, ${color} 14%, transparent)`,
+    }}>
       <button onClick={onToggle} style={{
         all: 'unset', cursor: 'pointer', width: '100%',
         padding: '14px 16px',
@@ -628,9 +638,10 @@ function SectionAccordion({ s, index, expanded, onToggle, onOpen }) {
           background: `color-mix(in srgb, ${color} 16%, transparent)`,
           border: `1px solid color-mix(in srgb, ${color} 38%, transparent)`,
           color,
-        }}>{(sectionIcon(s.kind))(15)}</Hex>
+          filter: `drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, ${color} 55%, transparent))`,
+        }}><SectionGlyph icon={s.icon} kind={s.kind} size={15} color={color} /></Hex>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.2, fontFamily: '"JetBrains Mono"' }}>{s.title}</div>
+          <div className="h-bold" style={{ fontSize: 15, lineHeight: 1.2, color: color }}>{s.title}</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 3 }}>
             {s.items.length} EXERCISES · {s.minutes} MIN
           </div>
@@ -772,7 +783,7 @@ function SectionDetail({ s, onBack }) {
 function sectionColor(kind) {
   return kind === 'PULSE_RAISER' ? 'var(--c-coral)'
     : kind === 'BANDED'   ? 'var(--c-amber)'
-    : kind === 'COOLDOWN' ? 'var(--accent-2)'
+    : kind === 'COOLDOWN' ? 'var(--c-blue)'
     : 'var(--accent)';
 }
 

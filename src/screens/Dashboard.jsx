@@ -149,9 +149,9 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
   }, [userId, today]);
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 110px', paddingTop: 64 }}>
+    <div className="scroller" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 16px 120px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
       {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div className="label" style={{ marginBottom: 4 }}>// SYSTEM_STATUS
 </div>
@@ -182,7 +182,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
       </div>
 
       {/* Greeting */}
-      <div style={{ marginBottom: 14 }}>
+      <div>
         <div className="h-bold" style={{ fontSize: 28, lineHeight: 1.1, color: "var(--heading-deep)" }}>
           {greeting(now.getHours())},<br /><span style={{ color: 'var(--accent)' }} className="text-glow">{firstName.toUpperCase()}.</span>
         </div>
@@ -190,7 +190,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
 
       {/* Today's workout hero */}
       <div className="card" style={{
-        padding: 0, marginBottom: 14, overflow: 'hidden', position: 'relative',
+        padding: 0, overflow: 'hidden', position: 'relative',
         background: 'linear-gradient(180deg, rgba(0,245,255,0.06), rgba(176,114,255,0.04)) , var(--bg-2)',
         borderColor: 'color-mix(in srgb, var(--accent) 25%, var(--line))'
       }}>
@@ -299,7 +299,7 @@ function TrainingStrip({ userId }) {
     </div>
   );
   return (
-    <div className="card" style={{ padding: 0, display: 'flex', marginBottom: 14 }}>
+    <div className="card" style={{ padding: 0, display: 'flex' }}>
       <Cell label="LAST 7 DAYS"  value={s?.w7} />
       <div style={{ width: 1, background: 'var(--line)' }}/>
       <Cell label="LAST 30 DAYS" value={s?.w30} />
@@ -329,7 +329,7 @@ function GoalCard({ userId }) {
 
   return (
     <div className="card" style={{
-      padding: 16, marginTop: 14,
+      padding: 16,
       background: 'linear-gradient(135deg, rgba(243,158,31,0.08), rgba(243,158,31,0.02)), var(--bg-2)',
       borderColor: 'color-mix(in srgb, var(--c-amber) 28%, var(--line))',
     }}>
@@ -373,7 +373,7 @@ function TasksSection({ tasks, onToggle }) {
   const open = tasks.filter((t) => !t.done);
   const doneCount = tasks.length - open.length;
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 2px 8px' }}>
         <div className="label">// TASKS</div>
         <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em' }}>
@@ -493,10 +493,27 @@ async function loadRoadmap(userId) {
 
   const totalSessions = phases.reduce((n, p) => n + p.total, 0);
   const doneSessions  = phases.reduce((n, p) => n + p.done,  0);
+
+  // Line fill aligned to the phase nodes: every finished phase reaches its node,
+  // and the current phase fills toward the next node by how much of it is done
+  // (sessions complete ≈ weeks elapsed, so a 4-week phase advances ~25%/week).
+  const n = phases.length;
+  const curIdx = phases.findIndex(p => p.status === 'current');
+  let lineFraction;
+  if (curIdx === -1) {
+    lineFraction = phases.some(p => p.status === 'done') ? 1 : 0; // all done, or nothing started
+  } else {
+    const cur = phases[curIdx];
+    const frac = cur.total > 0 ? cur.done / cur.total : 0;
+    lineFraction = n > 1 ? (curIdx + frac) / (n - 1) : frac;
+  }
+  lineFraction = Math.max(0, Math.min(1, lineFraction));
+
   return {
     name: main.prog.name,
     phases,
     pct: totalSessions > 0 ? doneSessions / totalSessions : 0,
+    lineFraction,
     doneSessions, totalSessions,
   };
 }
@@ -511,8 +528,8 @@ function ProgrammeRoadmap({ userId }) {
   if (roadmap === undefined) return null;
   if (!roadmap) return null;
 
-  const { name, phases, pct, doneSessions, totalSessions } = roadmap;
-  const overallPct = pct;
+  const { name, phases, pct, lineFraction, doneSessions, totalSessions } = roadmap;
+  const overallPct = lineFraction ?? pct;
 
   return (
     <div className="card" style={{

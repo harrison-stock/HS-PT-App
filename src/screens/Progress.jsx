@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { loadMuscleVolume } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { loadPhotoHistory, uploadProgressPhoto, deleteProgressPhoto } from '../lib/progressPhotos'
+import { toast } from '../lib/toast'
 import { loadHealthDaily } from '../lib/health'
 import { ZoomPan } from '../components/ZoomPan'
 import { MUSCLE_LABELS } from '../data/index'
@@ -86,7 +87,7 @@ export function Progress({ go, userId, embedded }) {
   const [range, setRange] = React.useState('7d');
 
   return (
-    <div className={embedded ? '' : 'scroller'} style={{ padding: embedded ? '0 0 24px' : '0 16px 110px', paddingTop: embedded ? 0 : 64 }} data-comment-anchor="2e58f3c1e8-div-7-5">
+    <div className={embedded ? '' : 'scroller'} style={{ padding: embedded ? '0 0 24px' : '0 16px 120px', paddingTop: embedded ? 0 : 'calc(env(safe-area-inset-top, 0px) + 18px)' }} data-comment-anchor="2e58f3c1e8-div-7-5">
       <div style={{ display: 'flex', justifyContent: tab === 'photos' ? 'flex-end' : 'flex-end', alignItems: 'flex-end', marginBottom: 14 }}>
         {!embedded && (
           <div style={{ marginRight: 'auto' }}>
@@ -210,6 +211,7 @@ function PhotosTab({ userId }) {
     }
     setShots({ front: null, side: null, back: null });
     setUploading(false);
+    toast(taken === 1 ? 'Photo uploaded' : 'Photos uploaded');
     reload();
   };
 
@@ -552,6 +554,7 @@ function LogMeasurementSheet({ userId, metrics, onClose, onSaved }) {
     await supabase.from('body_metrics').insert(payload);
     setSaving(false);
     setSaved(true);
+    toast('Measurements logged');
     onSaved?.();
     setTimeout(onClose, 900);
   };
@@ -992,7 +995,7 @@ function PRStat({ label, value, sub, delta, accent }) {
 
 }
 
-function MiniLine({ data, color }) {
+export function MiniLine({ data, color }) {
   if (data.length < 2) return null;
   const max = Math.max(...data);const min = Math.min(...data);
   const range = max - min || 1;

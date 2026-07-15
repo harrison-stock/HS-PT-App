@@ -19,6 +19,7 @@ import { unreadCount, subscribeNotifications, maybeBrowserNotify, requestNotifyP
 import { loadActiveWorkout, clearActiveWorkout } from './lib/activeWorkout'
 import { InstallPrompt } from './screens/InstallPrompt'
 import { isStandalone } from './lib/installPrompt'
+import { ToastHost } from './lib/toast'
 
 const ACCENTS = {
   sea:      { c: '#46BBC0', soft: 'rgba(70,187,192,0.16)',  glow: 'rgba(70,187,192,0.45)',  on: '#06262A' },
@@ -266,9 +267,9 @@ export default function App() {
   const impersonating = !!clientViewId;
   const navIsTrainer = isTrainer && !impersonating;
   const dashUser = impersonating ? { name: clientViewName || 'Client', email: '', dob: '' } : user;
-  // Coaches keep the bottom nav visible everywhere; clients lose it only in the
-  // immersive screens (workout player, notifications, results).
-  const showNav = navIsTrainer || !['log', 'notifications', 'sessionresults'].includes(screen);
+  // The bottom nav stays accessible everywhere except the immersive workout
+  // logger (where the session player owns the full screen).
+  const showNav = screen !== 'log';
 
   let ScreenEl;
   if (screen === 'workouts')        ScreenEl = <Workouts go={navigate} openPreview={previewWorkoutId} userId={activeUserId}/>;
@@ -347,6 +348,8 @@ export default function App() {
       )}
 
       {showInstall && !resumePrompt && screen !== 'log' && <InstallPrompt onClose={closeInstall}/>}
+
+      <ToastHost />
     </div>
   );
 }

@@ -11,7 +11,7 @@ const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numer
 
 // Full-screen programme performance report: first week vs final week strength
 // progression, body-metric trends and a muscle map of where they grew most.
-export function ProgrammeReport({ clientId, clientName, onClose }) {
+export function ProgrammeReport({ clientId, clientName, onClose, embedded = false }) {
   const [progs, setProgs]   = React.useState(null);
   const [progId, setProgId] = React.useState(null);
   const [report, setReport] = React.useState(null);   // null = loading, {} = data
@@ -43,18 +43,13 @@ export function ProgrammeReport({ clientId, clientName, onClose }) {
   const topGrowers = Object.entries(muscles).filter(([, m]) => m.delta > 0).sort((a, b) => b[1].delta - a[1].delta).slice(0, 6);
   const pickedM = picked ? muscles[picked] : null;
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 220, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: '1px solid var(--line)', background: 'var(--bg-1)', flexShrink: 0 }}>
-        <HexBackButton onClick={onClose} size={34} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="label">// PERFORMANCE REPORT</div>
-          <div className="h-bold" style={{ fontSize: 16, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clientName.toUpperCase()}</div>
-        </div>
-      </div>
-
-      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '14px 16px 48px', maxWidth: 820, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+  // Embedded mode renders inline (inside the client file's tab content) so the
+  // surrounding header + tab bar stay reachable. Standalone mode is a full
+  // overlay with its own back button.
+  const Body = (
+    <div className={embedded ? '' : 'scroller'} style={embedded
+      ? { width: '100%', boxSizing: 'border-box' }
+      : { flex: 1, minHeight: 0, padding: '14px 16px 48px', maxWidth: 820, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
         {progs === null && <Mono>LOADING…</Mono>}
         {progs && progs.length === 0 && (
           <div className="card" style={{ padding: 28, textAlign: 'center' }}>
@@ -156,7 +151,22 @@ export function ProgrammeReport({ clientId, clientName, onClose }) {
             )}
           </div>
         )}
+    </div>
+  );
+
+  if (embedded) return Body;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 220, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: '1px solid var(--line)', background: 'var(--bg-1)', flexShrink: 0 }}>
+        <HexBackButton onClick={onClose} size={34} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="label">// PERFORMANCE REPORT</div>
+          <div className="h-bold" style={{ fontSize: 16, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clientName.toUpperCase()}</div>
+        </div>
       </div>
+      {Body}
     </div>
   );
 }

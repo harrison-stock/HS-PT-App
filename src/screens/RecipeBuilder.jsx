@@ -2,6 +2,7 @@ import React from 'react'
 import { Hex, HexBackButton } from '../components/hex'
 import { IconPlus, IconX2, IconCheck } from '../components/icons'
 import { saveRecipe, deleteRecipe, kcalFromMacros, scaleQty, fmtQty } from '../lib/recipes'
+import { toast } from '../lib/toast'
 
 const TAGS = ['BREAKFAST', 'LUNCH', 'DINNER', 'POST-WORKOUT', 'SNACK'];
 const MACRO_C = { protein: '#F39E1F', carbs: '#46BBC0', fats: '#EE6A6A' };
@@ -40,12 +41,14 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
     setSaving(true);
     const res = await saveRecipe(trainerId, d);
     setSaving(false);
-    if (!res.error) onSaved();
+    if (!res.error) { toast(d.id ? 'Recipe updated' : 'Recipe added'); onSaved(); }
+    else toast('Could not save recipe', { kind: 'error' });
   };
 
   const remove = async () => {
     if (!confirmDel) { setConfirmDel(true); return; }
     if (d.id) await deleteRecipe(d.id);
+    toast('Recipe deleted');
     onSaved();
   };
 

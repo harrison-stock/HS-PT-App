@@ -18,7 +18,7 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
   const initials = (user?.name || 'U').replace(/[^a-zA-Z0-9\s]/g, ' ').trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase() || 'U';
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 120px', paddingTop: 64 }}>
+    <div className="scroller" style={{ padding: '0 16px 120px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0 18px' }}>
         <HexBackButton onClick={() => go(home)} size={36} />

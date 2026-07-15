@@ -11,6 +11,8 @@ import { notify } from '../lib/notifications'
 import { loadForms } from '../lib/forms'
 import { IconPlus, IconCheck, IconX2, IconChevronRight } from '../components/icons'
 import { ProgrammeReport } from './ProgrammeReport'
+import { ProgrammeBuilder } from './ProgrammeBuilder'
+import { toast } from '../lib/toast'
 
 // ── Constants ────────────────────────────────────────────────────
 const SEV_COLOR  = { mild: 'var(--c-amber)', moderate: 'var(--c-coral)', severe: '#d93434' };
@@ -93,10 +95,9 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go 
         {tab === 'data'     && <DataTab      c={c} trainerId={trainerId} />}
         {tab === 'tasks'    && <TasksTab     c={c} trainerId={trainerId} />}
         {tab === 'goals'    && <GoalsTab     c={c} trainerId={trainerId} />}
+        {tab === 'report'   && <ProgrammeReport clientId={c.id} clientName={c.name} embedded onClose={() => setTab('overview')} />}
         {tab === 'settings' && <SettingsTab  c={c} trainerId={trainerId} onSaved={onChanged} onArchived={() => { onChanged?.(); onClose(); }} />}
       </div>
-
-      {tab === 'report' && <ProgrammeReport clientId={c.id} clientName={c.name} onClose={() => setTab('overview')} />}
     </div>
   );
 }
@@ -477,7 +478,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
     const start = new Date(anchor);
     const end = new Date(anchor); end.setDate(end.getDate() + weeks * 7);
     supabase.from('client_workouts')
-      .select('id, scheduled_date, status, programme_days(day_of_week, programme_phases(name, phase_index, programmes(name)), workout_sections(title, kind, sort_order, section_exercises(id)))')
+      .select('id, scheduled_date, status, programme_days(id, day_of_week, week_index, programme_phases(id, name, phase_index, programme_id, programmes(id, name)), workout_sections(title, kind, sort_order, section_exercises(id)))')
       .eq('client_id', c.id).gte('scheduled_date', ymd(start)).lt('scheduled_date', ymd(end))
       .then(({ data }) => setWorkouts(data || []));
   }, [c.id, anchor, weeks]);
@@ -494,7 +495,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
 
   if (editing) return (
     <EditWorkout
-      w={editing}
+      w={editing} programmes={programmes} trainerId={trainerId}
       onClose={() => setEditing(null)}
       onSaved={() => { setEditing(null); loadWorkouts(); onChanged?.(); }}
     />
@@ -644,15 +645,28 @@ function WorkoutCell({ w, onClick }) {
   );
 }
 
-// Coach-side edit of a single scheduled workout — reschedule or remove it
-// straight from the calendar, without deleting the underlying programme.
-function EditWorkout({ w, onClose, onSaved }) {
+// Coach-side edit of a single scheduled workout — open it in the full
+// programme builder, reschedule it, or remove it, straight from the calendar.
+function EditWorkout({ w, programmes, trainerId, onClose, onSaved }) {
   const day = w.programme_days;
   const phase = day?.programme_phases;
   const [date, setDate]           = React.useState(w.scheduled_date);
   const [saving, setSaving]       = React.useState(false);
   const [removeConfirm, setRemoveConfirm] = React.useState(false);
+  const [builderOpen, setBuilderOpen] = React.useState(false);
   const sections = [...(day?.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
+
+  // The full shaped programme (with phaseList) this workout came from.
+  const prog = (programmes || []).find(p => p.id === phase?.programme_id);
+  const phaseIdx = Math.max(0, (prog?.phaseList || []).findIndex(ph => ph.id === phase?.id));
+
+  if (builderOpen && prog) return (
+    <ProgrammeBuilder
+      programme={prog} trainerId={trainerId}
+      startAt={{ phaseIdx, weekIdx: day?.week_index ?? 0, dayIdx: day?.day_of_week ?? 0 }}
+      onClose={() => onSaved()}
+    />
+  );
 
   const save = async () => {
     if (!date || date === w.scheduled_date || saving) return;
@@ -689,13 +703,31 @@ function EditWorkout({ w, onClose, onSaved }) {
         ))}
       </div>
 
+      <div>
+        <button onClick={() => setBuilderOpen(true)} disabled={!prog} className="btn-primary"
+          style={{ width: '100%', boxSizing: 'border-box', opacity: prog ? 1 : 0.4, pointerEvents: prog ? 'auto' : 'none' }}>
+          ✎ EDIT IN PROGRAMME BUILDER →
+        </button>
+        <Mono style={{ marginTop: 6 }}>
+          {prog
+            ? 'Edits the programme template — all clients assigned this workout see the changes.'
+            : 'Programme not found — it may have been deleted.'}
+        </Mono>
+      </div>
+
       <FieldLabel label="SCHEDULED DATE">
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={fieldSt}/>
       </FieldLabel>
 
-      <button onClick={save} disabled={saving || date === w.scheduled_date} className="btn-primary"
-        style={{ opacity: date !== w.scheduled_date ? 1 : 0.4 }}>
-        {saving ? 'SAVING…' : 'SAVE CHANGES →'}
+      <button onClick={save} disabled={saving || date === w.scheduled_date} className="mono" style={{
+        all: 'unset', cursor: date !== w.scheduled_date ? 'pointer' : 'default', textAlign: 'center', padding: 10, borderRadius: 8,
+        background: 'transparent',
+        border: `1px solid color-mix(in srgb, var(--accent) ${date !== w.scheduled_date ? 60 : 30}%, var(--line))`,
+        color: date !== w.scheduled_date ? 'var(--accent)' : 'var(--text-3)',
+        fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+        opacity: date !== w.scheduled_date ? 1 : 0.5,
+      }}>
+        {saving ? 'SAVING…' : 'SAVE NEW DATE'}
       </button>
 
       <button onClick={remove} disabled={saving} className="mono" style={{
@@ -1211,6 +1243,7 @@ function GoalsTab({ c, trainerId }) {
       setGoal(data);
     }
     setSaving(false); setDirty(false);
+    toast(goal ? 'Goal updated' : 'Goal set');
   };
 
   const onChange = (fn) => { fn(); setDirty(true); };

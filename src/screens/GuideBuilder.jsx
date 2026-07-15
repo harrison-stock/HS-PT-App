@@ -3,6 +3,7 @@ import { Hex, HexBackButton } from '../components/hex'
 import { IconCheck, IconPlay } from '../components/icons'
 import { GUIDE_KINDS, GUIDE_CATEGORIES, saveGuide, deleteGuide, uploadGuideImage } from '../lib/guides'
 import { videoThumb } from '../lib/exercises'
+import { toast } from '../lib/toast'
 
 const emptyDraft = () => ({ id: null, title: '', kind: 'ARTICLE', category: 'TECHNIQUE', minutes: '', img: '', video: '', link: '', body: '' });
 
@@ -23,12 +24,14 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
     setSaving(true);
     const res = await saveGuide(trainerId, d);
     setSaving(false);
-    if (res.error) return;
-    if (close) onSaved(); else { setD(prev => ({ ...prev, id: res.id })); onSaved(true); }
+    if (res.error) { toast('Could not save guide', { kind: 'error' }); return; }
+    if (close) { toast(d.id ? 'Guide updated' : 'Guide added'); onSaved(); }
+    else { setD(prev => ({ ...prev, id: res.id })); onSaved(true); }
   };
   const remove = async () => {
     if (!confirmDel) { setConfirmDel(true); return; }
     if (d.id) await deleteGuide(d.id);
+    toast('Guide deleted');
     onSaved();
   };
   const pickImg = async (e) => {

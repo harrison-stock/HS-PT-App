@@ -261,7 +261,7 @@ export const PHASES = [
   { id: 'pulse',    label: 'Pulse',    accent: 'var(--c-coral)' },
   { id: 'banded',   label: 'Stretches', accent: 'var(--c-amber)' },
   { id: 'main',     label: 'Main',     accent: 'var(--accent)' },
-  { id: 'cooldown', label: 'Cooldown', accent: 'var(--accent-2)' },
+  { id: 'cooldown', label: 'Cooldown', accent: 'var(--c-blue)' },
 ];
 
 export const VOLUME_DATA = [

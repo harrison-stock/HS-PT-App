@@ -6,6 +6,7 @@ import { loadExercises, videoThumb } from '../lib/exercises'
 import { MasterPlanner } from './MasterPlanner'
 import { BandPicker, BandChip, bandOf } from '../components/bands'
 import { exerciseMatches } from '../lib/exerciseSearch'
+import { ICON_LIBRARY, SectionGlyph, sanitizeSvg } from '../lib/svgIcon'
 
 const IMG_FALLBACK = 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70';
 const TAGS = ['STRENGTH','ONBOARD','REHAB','ENDURANCE','HYBRID','SPORT'];
@@ -14,15 +15,17 @@ const TAG_COLORS = {
   ENDURANCE: 'var(--accent-2)', HYBRID: 'var(--c-blue)', SPORT: 'var(--c-pink)',
 };
 
-export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trainerId }) {
+// `startAt` ({ phaseIdx, weekIdx, dayIdx }) deep-links straight to one day —
+// used by the coach's client calendar to jump to the exact assigned workout.
+export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trainerId, startAt }) {
   const isAdhoc = !!programme.is_adhoc;
   const [prog, setProg]             = React.useState(programme);
   const [roadmapMode, setRoadmapMode] = React.useState(openRoadmap && !isAdhoc);
   const [adhocName, setAdhocName]   = React.useState(programme.name);
   const [adhocTag, setAdhocTag]     = React.useState(programme.tag || 'STRENGTH');
-  const [phaseIdx, setPhaseIdx]     = React.useState(0);
-  const [weekIdx, setWeekIdx]       = React.useState(0);
-  const [dayIdx, setDayIdx]         = React.useState(0);
+  const [phaseIdx, setPhaseIdx]     = React.useState(() => clampIdx(startAt?.phaseIdx, programme.phaseList?.length));
+  const [weekIdx, setWeekIdx]       = React.useState(() => clampIdx(startAt?.weekIdx, programme.phaseList?.[clampIdx(startAt?.phaseIdx, programme.phaseList?.length)]?.weeks));
+  const [dayIdx, setDayIdx]         = React.useState(() => clampIdx(startAt?.dayIdx, 7));
   const [dirty, setDirty]           = React.useState(false);
   const [saving, setSaving]         = React.useState(false);
   const [day, setDay]               = React.useState(null);
@@ -96,10 +99,17 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
 
     for (let sOrd = 0; sOrd < content.sections.length; sOrd++) {
       const s = content.sections[sOrd];
-      const { data: sec } = await supabase
+      let { data: sec } = await supabase
         .from('workout_sections')
-        .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, sort_order: sOrd })
+        .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '', sort_order: sOrd })
         .select('id').single();
+      // Fallback if migrations 036 (slide text) / 037 (icon) aren't applied yet.
+      if (!sec) {
+        ({ data: sec } = await supabase
+          .from('workout_sections')
+          .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, sort_order: sOrd })
+          .select('id').single());
+      }
       if (!sec) continue;
 
       for (let eOrd = 0; eOrd < s.items.length; eOrd++) {
@@ -170,6 +180,18 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     }
   };
 
+  // Cmd/Ctrl+S saves the day instead of opening the browser's save dialog.
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (dirty && !saving) saveDay();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   // Copy the current day into other (week × weekday) slots, with optional
   // week-on-week progression baked into each target.
   const copyDayTo = async (targets, progression) => {
@@ -187,6 +209,9 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
       return { error: e.message || 'Copy failed' };
     }
   };
+
+  // ── Section edits ─────────────────────────────────────────────
+  const updateSection = (sIdx, patch) => { setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({ ...s, ...patch })) })); setDirty(true); };
 
   // ── Exercise edits ────────────────────────────────────────────
   const updateEx = (sIdx, eIdx, patch) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, ...patch }))); setDirty(true); };
@@ -281,7 +306,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     <div style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
 
       {/* Top bar */}
-      <div style={{ padding: '54px 14px 10px', background: 'linear-gradient(180deg, var(--bg-1) 70%, transparent)', borderBottom: '1px solid var(--line)' }}>
+      <div className="pb-topbar" style={{ background: 'linear-gradient(180deg, var(--bg-1) 70%, transparent)', borderBottom: '1px solid var(--line)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <HexBackButton onClick={async () => { await flush(); onClose(); }} size={36}/>
           <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
@@ -352,59 +377,65 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           </div>
         </div>
       ) : (
-      /* Phase / Week / Day pickers */
-      <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid var(--line)', background: 'var(--bg-1)' }}>
-        <div className="label" style={{ marginBottom: 6 }}>// PHASE</div>
-        <div style={{ display: 'flex', gap: 4, overflowX: 'auto', scrollbarWidth: 'none', marginBottom: 10 }}>
-          {prog.phaseList.map((ph, i) => (
-            <button key={i} onClick={() => move(() => setPhaseIdx(i))} style={{
-              all: 'unset', cursor: 'pointer', whiteSpace: 'nowrap',
-              padding: '6px 10px', borderRadius: 6,
-              border: '1px solid ' + (phaseIdx === i ? 'var(--accent)' : 'var(--line-strong)'),
-              background: phaseIdx === i ? 'var(--accent-soft)' : 'transparent',
-              color: phaseIdx === i ? 'var(--accent)' : 'var(--text-2)',
-              fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.08em', fontWeight: 600,
-            }}>P{i+1} · {ph.name.toUpperCase()}</button>
-          ))}
-        </div>
-
-        {phase && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div className="label">// WEEK · {phase.weeks} TOTAL</div>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em' }}>FOCUS: {phase.focus?.toUpperCase()}</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(phase.weeks, 8)}, 1fr)`, gap: 4, marginBottom: 10 }}>
-              {Array.from({ length: phase.weeks }, (_, i) => (
-                <button key={i} onClick={() => move(() => setWeekIdx(i))} style={{
-                  all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '7px 0', borderRadius: 6,
-                  border: '1px solid ' + (weekIdx === i ? 'var(--accent)' : 'var(--line)'),
-                  background: weekIdx === i ? 'var(--accent-soft)' : 'var(--bg-2)',
-                  color: weekIdx === i ? 'var(--accent)' : 'var(--text-2)',
-                  fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.05em', fontWeight: 600,
-                }}>W{i+1}</button>
+      /* Phase / Week / Day pickers — stacked on phones, one row on desktop */
+      <div className="pb-pickers" style={{ borderBottom: '1px solid var(--line)', background: 'var(--bg-1)' }}>
+        <div className="pb-picker-grid">
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>// PHASE</div>
+            <div style={{ display: 'flex', gap: 4, overflowX: 'auto', scrollbarWidth: 'none', flexWrap: 'wrap' }}>
+              {prog.phaseList.map((ph, i) => (
+                <button key={i} onClick={() => move(() => setPhaseIdx(i))} style={{
+                  all: 'unset', cursor: 'pointer', whiteSpace: 'nowrap',
+                  padding: '6px 10px', borderRadius: 6,
+                  border: '1px solid ' + (phaseIdx === i ? 'var(--accent)' : 'var(--line-strong)'),
+                  background: phaseIdx === i ? 'var(--accent-soft)' : 'transparent',
+                  color: phaseIdx === i ? 'var(--accent)' : 'var(--text-2)',
+                  fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.08em', fontWeight: 600,
+                }}>P{i+1} · {ph.name.toUpperCase()}</button>
               ))}
             </div>
-          </>
-        )}
+          </div>
 
-        <div className="label" style={{ marginBottom: 6 }}>// DAY</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-          {days.map((d, i) => (
-            <button key={i} onClick={() => move(() => setDayIdx(i))} style={{
-              all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '6px 0', borderRadius: 6,
-              border: '1px solid ' + (dayIdx === i ? 'var(--accent)' : 'var(--line)'),
-              background: dayIdx === i ? 'var(--accent-soft)' : 'var(--bg-2)',
-              color: dayIdx === i ? 'var(--accent)' : 'var(--text-2)',
-              fontFamily: 'JetBrains Mono', fontSize: 9, letterSpacing: '0.1em', fontWeight: 600,
-            }}>{d.toUpperCase()}</button>
-          ))}
+          {phase && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div className="label">// WEEK · {phase.weeks} TOTAL</div>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em' }}>FOCUS: {phase.focus?.toUpperCase()}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(phase.weeks, 8)}, 1fr)`, gap: 4 }}>
+                {Array.from({ length: phase.weeks }, (_, i) => (
+                  <button key={i} onClick={() => move(() => setWeekIdx(i))} style={{
+                    all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '7px 0', borderRadius: 6,
+                    border: '1px solid ' + (weekIdx === i ? 'var(--accent)' : 'var(--line)'),
+                    background: weekIdx === i ? 'var(--accent-soft)' : 'var(--bg-2)',
+                    color: weekIdx === i ? 'var(--accent)' : 'var(--text-2)',
+                    fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.05em', fontWeight: 600,
+                  }}>W{i+1}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>// DAY</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+              {days.map((d, i) => (
+                <button key={i} onClick={() => move(() => setDayIdx(i))} style={{
+                  all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '6px 0', borderRadius: 6,
+                  border: '1px solid ' + (dayIdx === i ? 'var(--accent)' : 'var(--line)'),
+                  background: dayIdx === i ? 'var(--accent-soft)' : 'var(--bg-2)',
+                  color: dayIdx === i ? 'var(--accent)' : 'var(--text-2)',
+                  fontFamily: 'JetBrains Mono', fontSize: 9, letterSpacing: '0.1em', fontWeight: 600,
+                }}>{d.toUpperCase()}</button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
       )}
 
       {/* Body */}
-      <div className="scroller" style={{ flex: 1, padding: '16px 16px 32px', minHeight: 0, width: '100%', maxWidth: 720, margin: '0 auto', boxSizing: 'border-box' }}>
+      <div className="scroller pb-body" style={{ flex: 1, padding: '16px 16px 32px', minHeight: 0, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
         {saveError && (
           <div className="mono" style={{
             marginBottom: 12, padding: '10px 12px', borderRadius: 8, fontSize: 10, lineHeight: 1.5,
@@ -438,8 +469,11 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               />
             </div>
 
+            <div className="pb-sections">
             {day.sections.map((s, sIdx) => (
               <Section key={s.kind + sIdx} s={s} sIdx={sIdx}
+                onIntro={(v) => updateSection(sIdx, { intro: v })}
+                onIcon={(v) => updateSection(sIdx, { icon: v })}
                 expandedExId={expandedExId} expandedSetId={expandedSetId}
                 onExpandEx={(id) => { setExpandedExId(expandedExId === id ? null : id); setExpandedSetId(null); }}
                 onExpandSet={(id) => setExpandedSetId(expandedSetId === id ? null : id)}
@@ -459,6 +493,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
                 onApplyToAll={(eIdx, i) => applyToAll(sIdx, eIdx, i)}
               />
             ))}
+            </div>
 
             {switchingEx !== null && (
               <ExercisePicker
@@ -564,7 +599,7 @@ function CopySheet({ weeks, curWeek, curDow, onClose, onCopy }) {
 
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 210, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '12px 18px 8px' }}>
           <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }}/>
           <div className="label">// COPY THIS DAY</div>
@@ -737,7 +772,7 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '54px 14px 10px', background: 'linear-gradient(180deg, var(--bg-1) 70%, transparent)', borderBottom: '1px solid var(--line)' }}>
+      <div className="pb-topbar" style={{ background: 'linear-gradient(180deg, var(--bg-1) 70%, transparent)', borderBottom: '1px solid var(--line)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <HexBackButton onClick={onBack} size={36}/>
           <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
@@ -881,8 +916,11 @@ function RestDay({ onAdd }) {
 }
 
 // ── SECTION ───────────────────────────────────────────────────────
-function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function Section({ s, sIdx, onIntro, onIcon, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const color = sectionColor(s.kind);
+  const [slideOpen, setSlideOpen] = React.useState(false);
+  const [iconOpen, setIconOpen] = React.useState(false);
+  const showSlide = slideOpen || !!s.intro;
   // Superset labels: A1/A2, B1/B2… per consecutive grouped run.
   const seen = {}; let li = 0; const cnt = {};
   const ssLabels = s.items.map(it => {
@@ -895,11 +933,51 @@ function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', color, background: `color-mix(in srgb, ${color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`, fontFamily: 'Orbitron', fontWeight: 800, fontSize: 11 }}>{sIdx+1}</span>
+          {onIcon ? (
+            <button onClick={() => setIconOpen(true)} title="Change section icon" style={{
+              all: 'unset', cursor: 'pointer', position: 'relative',
+              width: 26, height: 26, borderRadius: 7, display: 'grid', placeItems: 'center',
+              background: `color-mix(in srgb, ${color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
+            }}>
+              <SectionGlyph icon={s.icon} kind={s.kind} size={15} color={color} glow />
+              <span style={{ position: 'absolute', right: -3, bottom: -3, width: 8, height: 8, borderRadius: '50%', background: color, border: '1.5px solid var(--bg-0)' }}/>
+            </button>
+          ) : (
+            <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', color, background: `color-mix(in srgb, ${color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`, fontFamily: 'Orbitron', fontWeight: 800, fontSize: 11 }}>{sIdx+1}</span>
+          )}
           <div className="label" style={{ color, letterSpacing: '0.14em', fontSize: 11 }}>// {s.title.toUpperCase()}</div>
         </div>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.1em' }}>{s.items.length} EX</span>
+        {iconOpen && onIcon && (
+          <IconPickerSheet current={s.icon} kind={s.kind} color={color}
+            onPick={(v) => { onIcon(v); setIconOpen(false); }}
+            onClose={() => setIconOpen(false)} />
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {onIntro && (
+            <button onClick={() => setSlideOpen(o => !o)} className="mono" style={{
+              all: 'unset', cursor: 'pointer', padding: '3px 8px', borderRadius: 6, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em',
+              color: showSlide ? color : 'var(--text-3)',
+              border: `1px solid ${showSlide ? `color-mix(in srgb, ${color} 45%, transparent)` : 'var(--line)'}`,
+              background: showSlide ? `color-mix(in srgb, ${color} 10%, transparent)` : 'transparent',
+            }}>✎ SLIDE TEXT</button>
+          )}
+          <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.1em' }}>{s.items.length} EX</span>
+        </div>
       </div>
+      {onIntro && showSlide && (
+        <textarea
+          value={s.intro || ''}
+          onChange={e => onIntro(e.target.value)}
+          placeholder={`Shown to the client on the "next up: ${s.title}" slide between blocks — cues, focus, or encouragement…`}
+          rows={2}
+          style={{
+            width: '100%', boxSizing: 'border-box', marginBottom: 10,
+            background: 'var(--bg-2)', border: `1px solid color-mix(in srgb, ${color} 30%, var(--line-strong))`, borderRadius: 8,
+            color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 11, lineHeight: 1.6,
+            padding: '9px 11px', outline: 'none', resize: 'vertical',
+          }}
+        />
+      )}
       <div style={{ display: 'grid', gap: 9 }}>
         {s.items.map((e, eIdx) => (
           <ExerciseEditor key={e.id} e={e} color={color}
@@ -926,6 +1004,110 @@ function Section({ s, sIdx, expandedExId, expandedSetId, onExpandEx, onExpandSet
         marginTop: 6, padding: '8px 0', border: '1px dashed var(--line-strong)', borderRadius: 8,
         color, fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.14em', fontWeight: 600,
       }}>+ ADD EXERCISE</button>
+    </div>
+  );
+}
+
+// ── SECTION ICON PICKER ───────────────────────────────────────────
+// Pick a curated glyph or paste a custom SVG for this section. Custom SVG is
+// sanitised (geometry only) and recoloured to the zone colour on save.
+function ToggleBtn({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} className="mono" style={{
+      all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '8px 10px', borderRadius: 8,
+      fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
+      background: active ? 'var(--accent-soft)' : 'var(--bg-2)',
+      border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+      color: active ? 'var(--accent)' : 'var(--text-3)',
+    }}>{children}</button>
+  );
+}
+
+function IconPickerSheet({ current, kind, color, onPick, onClose }) {
+  const [mode, setMode] = React.useState((current || '').trim().startsWith('<svg') ? 'custom' : 'library');
+  const [raw, setRaw]   = React.useState((current || '').trim().startsWith('<svg') ? current : '');
+  const fileRef = React.useRef(null);
+  const safe = React.useMemo(() => sanitizeSvg(raw), [raw]);
+
+  const loadFile = (e) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => setRaw(String(r.result || ''));
+    r.readAsText(f);
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 220, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, maxHeight: '86vh', display: 'flex', flexDirection: 'column', animation: 'sheetUp .28s cubic-bezier(.22,.61,.36,1)' }}>
+        <div style={{ padding: '12px 18px 8px' }}>
+          <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="label" style={{ color }}>// SECTION ICON</div>
+            <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+            <ToggleBtn active={mode === 'library'} onClick={() => setMode('library')}>LIBRARY</ToggleBtn>
+            <ToggleBtn active={mode === 'custom'} onClick={() => setMode('custom')}>CUSTOM SVG</ToggleBtn>
+          </div>
+        </div>
+
+        <div className="scroller" style={{ padding: '8px 18px 20px', overflowY: 'auto' }}>
+          {mode === 'library' ? (
+            <>
+              <button onClick={() => onPick('')} style={{
+                all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, width: '100%', boxSizing: 'border-box',
+                padding: '10px 12px', borderRadius: 10, marginBottom: 10,
+                background: !current ? `color-mix(in srgb, ${color} 12%, transparent)` : 'var(--bg-2)',
+                border: `1px solid ${!current ? color : 'var(--line)'}`,
+              }}>
+                <SectionGlyph icon="" kind={kind} size={18} color={color} glow />
+                <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>DEFAULT ({kind.replace('_', ' ')})</span>
+              </button>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+                {ICON_LIBRARY.map(it => {
+                  const val = `lib:${it.key}`;
+                  const sel = current === val;
+                  return (
+                    <button key={it.key} onClick={() => onPick(val)} title={it.label} style={{
+                      all: 'unset', cursor: 'pointer', aspectRatio: '1', display: 'grid', placeItems: 'center', borderRadius: 10,
+                      background: sel ? `color-mix(in srgb, ${color} 16%, transparent)` : 'var(--bg-2)',
+                      border: `1px solid ${sel ? color : 'var(--line)'}`,
+                      color: sel ? color : 'var(--text-2)',
+                      boxShadow: sel ? `0 0 calc(8px * var(--glow)) color-mix(in srgb, ${color} 40%, transparent)` : 'none',
+                    }}>
+                      <SectionGlyph icon={val} kind={kind} size={20} color={sel ? color : 'var(--text-2)'} glow={sel} />
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 10 }}>
+                Paste SVG markup (or load a .svg file). Scripts and links are stripped; the icon adopts this section's colour and glow.
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ width: 56, height: 56, borderRadius: 12, display: 'grid', placeItems: 'center', background: 'var(--bg-2)', border: `1px solid color-mix(in srgb, ${color} 40%, var(--line))` }}>
+                  {safe ? <SectionGlyph icon={raw} kind={kind} size={30} color={color} glow /> : <span className="mono" style={{ fontSize: 8, color: 'var(--text-3)' }}>PREVIEW</span>}
+                </div>
+                <button onClick={() => fileRef.current?.click()} className="btn-ghost" style={{ fontSize: 10, padding: '8px 12px' }}>LOAD .SVG FILE</button>
+                <input ref={fileRef} type="file" accept=".svg,image/svg+xml" onChange={loadFile} style={{ display: 'none' }} />
+              </div>
+              <textarea value={raw} onChange={e => setRaw(e.target.value)} rows={6} spellCheck={false}
+                placeholder={'<svg viewBox="0 0 24 24">\n  <path d="…" />\n</svg>'}
+                style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 8, color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 11, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'vertical' }} />
+              {raw.trim() && !safe && (
+                <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)', marginTop: 6 }}>Not a valid SVG — check the markup.</div>
+              )}
+              <button onClick={() => safe && onPick(raw)} disabled={!safe} className="btn-primary"
+                style={{ width: '100%', marginTop: 12, opacity: safe ? 1 : 0.4, pointerEvents: safe ? 'auto' : 'none' }}>
+                USE THIS ICON →
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1398,10 +1580,11 @@ export function ExercisePicker({ onClose, onPick }) {
       background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
       display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
+      <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{
         background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20,
         border: '1px solid var(--line-strong)', borderBottom: 0,
         maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+        animation: 'sheetUp .28s cubic-bezier(.22,.61,.36,1)',
       }}>
         <div style={{ padding: '12px 16px 10px', flexShrink: 0 }}>
           <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
@@ -1445,13 +1628,18 @@ export function ExercisePicker({ onClose, onPick }) {
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────
+function clampIdx(v, len) {
+  const n = Number.isInteger(v) ? v : 0;
+  return Math.max(0, Math.min(n, (len || 1) - 1));
+}
+
 function mapDay(day, sIdx, eIdx, mapEx) {
   return { ...day, sections: day.sections.map((s, si) => si!==sIdx ? s : ({ ...s, items: s.items.map((e, ei) => ei!==eIdx ? e : mapEx(e)) })) };
 }
 
 function dbToSections(sections) {
   return sections.map(s => ({
-    kind: s.kind, title: s.title,
+    kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '',
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
       id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, banded: !!ex.banded, unilateral: !!ex.unilateral, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
