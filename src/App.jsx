@@ -20,6 +20,11 @@ import { loadActiveWorkout, clearActiveWorkout } from './lib/activeWorkout'
 import { InstallPrompt } from './screens/InstallPrompt'
 import { isStandalone } from './lib/installPrompt'
 import { ToastHost } from './lib/toast'
+import { ErrorBoundary } from './components/ErrorBoundary'
+
+// Screens safe to restore verbatim after a reload/app-switch (no required
+// params). Logger/results/client-view need context, so they fall back home.
+const RESTORABLE = new Set(['dashboard', 'workouts', 'progress', 'resources', 'body', 'coach', 'programmes', 'exercises', 'forms', 'profile']);
 
 const ACCENTS = {
   sea:      { c: '#46BBC0', soft: 'rgba(70,187,192,0.16)',  glow: 'rgba(70,187,192,0.45)',  on: '#06262A' },
@@ -51,7 +56,13 @@ export default function App() {
   const [typeIntensity] = React.useState(1);
   const [density] = React.useState('balanced');
   const [glow] = React.useState(1);
-  const [screen, setScreen] = React.useState('dashboard');
+  const [screen, setScreen] = React.useState(() => {
+    try { const s = localStorage.getItem('hs_screen'); return RESTORABLE.has(s) ? s : 'dashboard'; } catch (e) { return 'dashboard'; }
+  });
+  // Remember the last top-level screen so an app-switch/reload lands back here.
+  React.useEffect(() => {
+    try { if (RESTORABLE.has(screen)) localStorage.setItem('hs_screen', screen); } catch (e) {}
+  }, [screen]);
   const [previewWorkoutId, setPreviewWorkoutId] = React.useState(null);
   const [logDayId, setLogDayId] = React.useState(null);
   const [logResume, setLogResume] = React.useState(false);
@@ -336,7 +347,9 @@ export default function App() {
         </div>
       )}
       <div key={screen} className="screen-enter" style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', marginTop: clientViewId ? 48 : 0 }}>
-        {ScreenEl}
+        <ErrorBoundary key={screen} onHome={() => navigate(homeScreen)}>
+          {ScreenEl}
+        </ErrorBoundary>
       </div>
       {showNav && <BottomNav screen={screen} go={navigate} isTrainer={navIsTrainer}/>}
 

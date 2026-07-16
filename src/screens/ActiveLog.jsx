@@ -332,12 +332,20 @@ export function ActiveLog({ go, dayId, userId, resume }) {
 
   // Add an exercise mid-session — inserted at the end of the current phase.
   const activeExRef = React.useRef(null);
+  const addPosRef = React.useRef('after'); // 'before' | 'after' — relative to current exercise
   const addExercise = (ex) => {
     setExercises((prev) => {
-      const cur = prev.find((e) => e.id === activeExRef.current) || prev[prev.length - 1];
+      const curIdx = prev.findIndex((e) => e.id === activeExRef.current);
+      const cur = curIdx >= 0 ? prev[curIdx] : prev[prev.length - 1];
       const phaseId = cur?.phase || prev[0]?.phase || 'main';
-      let insertAt = prev.length;
-      for (let i = prev.length - 1; i >= 0; i--) { if (prev[i].phase === phaseId) { insertAt = i + 1; break; } }
+      let insertAt;
+      if (curIdx >= 0) {
+        // Drop it immediately before/after the exercise you're on.
+        insertAt = addPosRef.current === 'before' ? curIdx : curIdx + 1;
+      } else {
+        insertAt = prev.length;
+        for (let i = prev.length - 1; i >= 0; i--) { if (prev[i].phase === phaseId) { insertAt = i + 1; break; } }
+      }
       const newEx = {
         id: 'cx' + Date.now(),
         name: ex.name, img: ex.img || '',
@@ -350,6 +358,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
     });
     setAddingEx(false);
   };
+  const openAddExercise = (pos) => { addPosRef.current = pos || 'after'; setAddingEx(true); };
 
   // Tick off every set of an exercise in one tap — no rest timer.
   const completeAllSets = (ids) => {
@@ -522,7 +531,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
           onUpdate={(exId, si, p) => updateSet(exId, si, p)}
           onAddSet={(exId, kind) => addSet(exId, kind)}
           onDelSet={(exId) => delSet(exId)}
-          onAddExercise={() => setAddingEx(true)}
+          onAddExercise={() => openAddExercise('after')}
           onCompleteAll={() => completeAllSets(it.group.map(e => e.id))}
           onTitle={(exId) => setAltsForId(exId)}
           onComment={dayId ? (exId) => setCommentForId(exId) : null}
@@ -534,7 +543,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
         onTitle={() => setAltsForId(it.ex.id)}
         onAddSet={(kind) => addSet(it.ex.id, kind)}
         onDelSet={() => delSet(it.ex.id)}
-        onAddExercise={() => setAddingEx(true)}
+        onAddExercise={openAddExercise}
         onCompleteAll={() => completeAllSets(it.ex.id)}
         onComment={dayId ? () => setCommentForId(it.ex.id) : null}
         onHistory={() => setHistoryForId(it.ex.id)} />
@@ -739,6 +748,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
 function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onCompleteAll, onHistory, onComment, intro }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
+  const [addChoose, setAddChoose] = React.useState(false);
   return (
     <div style={{
       flex: '0 0 100%', width: '100%', height: '100%',
@@ -808,11 +818,36 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
               </Hex>
             </button>
             {onComment &&
-            <button onClick={onComment} aria-label="Comments" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+            <button onClick={onComment} aria-label="Add a comment" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
                 <IconClipboard size={14} />
               </Hex>
             </button>}
+            {onAddExercise &&
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setAddChoose(o => !o)} aria-label="Add exercise" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+                <Hex size={30} square style={{ background: addChoose ? 'var(--accent-soft)' : 'var(--bg-2)', border: `1px solid ${addChoose ? 'var(--accent)' : 'var(--line-strong)'}`, color: addChoose ? 'var(--accent)' : 'var(--text-2)' }}>
+                  <IconPlus size={14} />
+                </Hex>
+              </button>
+              {addChoose && (
+                <>
+                  <div onClick={() => setAddChoose(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 41, background: 'var(--bg-3)', border: '1px solid var(--line-strong)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', padding: 6, display: 'grid', gap: 2, minWidth: 150 }}>
+                    <div className="label" style={{ padding: '4px 8px 6px' }}>// ADD EXERCISE</div>
+                    {[['before', '↑ ADD BEFORE'], ['after', '↓ ADD AFTER']].map(([pos, lbl]) => (
+                      <button key={pos} onClick={() => { setAddChoose(false); onAddExercise(pos); }} style={{
+                        all: 'unset', cursor: 'pointer', padding: '9px 10px', borderRadius: 7,
+                        fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-2)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >{lbl}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>}
             {ex.tempo &&
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -876,13 +911,6 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
           <AddSetControl onAdd={onAddSet} onRemove={ex.sets.length > 1 ? onDelSet : null} />
         </div>
 
-        {/* Add exercise (removal is coach-only, from the programme builder) */}
-        {onAddExercise && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button onClick={onAddExercise} className="btn-ghost" style={{ flex: 1, fontSize: 11 }}>+ ADD EXERCISE</button>
-          </div>
-        )}
-
         {/* Coach note */}
         {ex.coach &&
         <div className="card" style={{ marginTop: 12, padding: 12 }}>
@@ -890,9 +918,6 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
             <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>{ex.coach}</div>
           </div>
         }
-
-        {/* Athlete comment */}
-        <ExerciseComment />
       </div>
     </div>);
 
@@ -1854,14 +1879,16 @@ function printWorkout(exercises, meta = {}) {
   }).join('');
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Workout</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       * { box-sizing: border-box; }
-      body { font-family: -apple-system, system-ui, sans-serif; color: #14181b; margin: 28px; }
+      body { font-family: 'JetBrains Mono', ui-monospace, monospace; color: #14181b; margin: 28px; }
       header { border-bottom: 2px solid #189CAA; padding-bottom: 10px; margin-bottom: 18px; }
-      h1 { font-size: 22px; margin: 0; }
+      h1 { font-family: 'Orbitron', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; margin: 0; }
       .meta { color: #667; font-size: 12px; margin-top: 4px; }
       section { margin-bottom: 18px; break-inside: avoid; }
-      h2 { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #189CAA; border-bottom: 1px solid #dde; padding-bottom: 4px; }
+      h2 { font-family: 'Orbitron', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #189CAA; border-bottom: 1px solid #dde; padding-bottom: 4px; }
       .ex { margin: 10px 0 10px; padding-left: 2px; }
       .exname { font-weight: 700; font-size: 14px; }
       .ss { font-size: 9px; color: #189CAA; border: 1px solid #9cd; border-radius: 4px; padding: 1px 4px; vertical-align: middle; }
@@ -1869,7 +1896,7 @@ function printWorkout(exercises, meta = {}) {
       ol { margin: 4px 0 0 20px; padding: 0; font-size: 13px; }
       li { margin: 1px 0; }
       .note { font-size: 11px; color: #556; margin-top: 3px; font-style: italic; }
-      footer { margin-top: 24px; font-size: 10px; color: #99a; }
+      footer { margin-top: 24px; font-size: 10px; color: #99a; letter-spacing: 0.08em; }
       @media print { body { margin: 12mm; } }
     </style></head>
     <body>
