@@ -12,6 +12,7 @@ import { loadForms } from '../lib/forms'
 import { IconPlus, IconCheck, IconX2, IconChevronRight } from '../components/icons'
 import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
+import { ImportHistory } from './ImportHistory'
 import { toast } from '../lib/toast'
 
 // ── Constants ────────────────────────────────────────────────────
@@ -472,6 +473,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
   const [anchor, setAnchor] = React.useState(() => mondayOf(new Date()));
   const [workouts, setWorkouts] = React.useState([]);
   const [showAssign, setShowAssign] = React.useState(false);
+  const [showImport, setShowImport] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
 
   const loadWorkouts = React.useCallback(() => {
@@ -516,6 +518,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '9px 12px', color: 'var(--heading-deep)' }}>
           <IconPlus size={13}/> ASSIGN
         </button>
+        <button onClick={() => setShowImport(true)} style={navBtnSt}>IMPORT</button>
         <button onClick={() => setAnchor(mondayOf(new Date()))} style={navBtnSt}>TODAY</button>
         <div style={{ display: 'flex', gap: 4 }}>
           <button onClick={() => shift(-1)} style={navBtnSt}>‹</button>
@@ -543,6 +546,12 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
           ))}
         </div>
       </div>
+
+      {showImport && (
+        <ImportHistory clientId={c.id} clientName={c.name} trainerId={trainerId}
+          onClose={() => setShowImport(false)}
+          onImported={() => { loadWorkouts(); onChanged?.(); }} />
+      )}
     </div>
   );
 }
