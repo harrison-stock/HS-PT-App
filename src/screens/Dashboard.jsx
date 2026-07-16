@@ -149,7 +149,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
   }, [userId, today]);
 
   return (
-    <div className="scroller" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 16px 120px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
+    <div className="scroller" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 16px 28px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>

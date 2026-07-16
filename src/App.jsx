@@ -308,7 +308,8 @@ export default function App() {
 
   return (
     <div data-role={navIsTrainer ? 'trainer' : 'client'} style={{
-      width: '100%', minHeight: '100dvh',
+      width: '100%', height: '100dvh',
+      display: 'flex', flexDirection: 'column',
       fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', monospace",
       background: 'var(--bg-1)',
       color: 'var(--text)',
@@ -334,7 +335,7 @@ export default function App() {
           }}>✕ EXIT</span>
         </div>
       )}
-      <div key={screen} className="screen-enter" style={{ marginTop: clientViewId ? 48 : 0 }}>
+      <div key={screen} className="screen-enter" style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', marginTop: clientViewId ? 48 : 0 }}>
         {ScreenEl}
       </div>
       {showNav && <BottomNav screen={screen} go={navigate} isTrainer={navIsTrainer}/>}

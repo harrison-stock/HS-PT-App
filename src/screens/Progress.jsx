@@ -87,7 +87,7 @@ export function Progress({ go, userId, embedded }) {
   const [range, setRange] = React.useState('7d');
 
   return (
-    <div className={embedded ? '' : 'scroller'} style={{ padding: embedded ? '0 0 24px' : '0 16px 120px', paddingTop: embedded ? 0 : 'calc(env(safe-area-inset-top, 0px) + 18px)' }} data-comment-anchor="2e58f3c1e8-div-7-5">
+    <div className={embedded ? '' : 'scroller'} style={{ padding: embedded ? '0 0 24px' : '0 16px 28px', paddingTop: embedded ? 0 : 'calc(env(safe-area-inset-top, 0px) + 18px)' }} data-comment-anchor="2e58f3c1e8-div-7-5">
       <div style={{ display: 'flex', justifyContent: tab === 'photos' ? 'flex-end' : 'flex-end', alignItems: 'flex-end', marginBottom: 14 }}>
         {!embedded && (
           <div style={{ marginRight: 'auto' }}>

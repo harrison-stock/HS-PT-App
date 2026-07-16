@@ -4,7 +4,9 @@ import { ACTIVE_EXERCISES, PHASES, MUSCLE_LABELS } from '../data/index'
 import { muscleGroupsFor } from '../lib/muscleVolume'
 import { BodyMap, MiniLine } from './Progress'
 import { Hex, HexBackButton } from '../components/hex'
-import { IconPause, IconPlay, IconCheck, IconX2, IconChevronLeft, IconChevronRight, IconPlus, IconTrophy, IconTimer, IconFlame, IconBand, IconDumbbell, IconLeaf, IconActivity, IconSwap, IconTrend, IconMetronome, IconClipboard } from '../components/icons'
+import { IconPause, IconPlay, IconCheck, IconX2, IconChevronLeft, IconChevronRight, IconPlus, IconTrophy, IconTimer, IconFlame, IconBand, IconDumbbell, IconLeaf, IconActivity, IconSwap, IconTrend, IconMetronome, IconClipboard, IconDoc } from '../components/icons'
+import { LoadingTile } from '../components/Loading'
+import { toast } from '../lib/toast'
 import { ExerciseComments } from './ExerciseComments'
 import { notify, trainerOf } from '../lib/notifications'
 import { saveActiveWorkout, loadActiveWorkout, clearActiveWorkout } from '../lib/activeWorkout'
@@ -28,6 +30,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
   const [commentForId, setCommentForId] = React.useState(null);
   const [addingEx, setAddingEx] = React.useState(false);
   const [paused, setPaused] = React.useState(false);
+  const [finishing, setFinishing] = React.useState(false);
   const [confirmQuit, setConfirmQuit] = React.useState(false);
   const [complete, setComplete] = React.useState(false);
   const scrollRef = React.useRef(null);
@@ -509,7 +512,7 @@ export function ActiveLog({ go, dayId, userId, resume }) {
       }}>
         {railItems.map((it, i) =>
         it.type === 'finish' ?
-        <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setComplete(true); }} /> :
+        <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
         it.type === 'divider' ?
         <SectionDivider key={`d${i}`} phaseId={it.phaseId} nextPhaseId={it.nextPhaseId} exercises={exercises} slideText={sectionIntros[it.nextPhaseId]} onContinue={() => setActiveIdx(i + 1)} /> :
         it.type === 'superset' ?
@@ -517,8 +520,8 @@ export function ActiveLog({ go, dayId, userId, resume }) {
           intro={it.exIdx === 0 ? dayIntro : ''}
           onComplete={(exId, si) => completeSet(exId, si)}
           onUpdate={(exId, si, p) => updateSet(exId, si, p)}
-          onAddRound={() => it.group.forEach(e => addSet(e.id, 'WORK'))}
-          onRemoveRound={() => it.group.forEach(e => delSet(e.id))}
+          onAddSet={(exId, kind) => addSet(exId, kind)}
+          onDelSet={(exId) => delSet(exId)}
           onAddExercise={() => setAddingEx(true)}
           onCompleteAll={() => completeAllSets(it.group.map(e => e.id))}
           onTitle={(exId) => setAltsForId(exId)}
@@ -645,6 +648,9 @@ export function ActiveLog({ go, dayId, userId, resume }) {
       {/* Session complete — results screen */}
       {complete && <SessionComplete exercises={exercises} sessionTime={sessionTime} go={go} />}
 
+      {/* Processing overlay — shown while the session is being saved. */}
+      {finishing && <LoadingTile label="Saving session…" variant="hex" />}
+
       {/* Paused overlay */}
       {paused &&
       <div style={{
@@ -669,6 +675,15 @@ export function ActiveLog({ go, dayId, userId, resume }) {
             onClick={() => setPaused(false)}>
                 <IconPlay size={14} /> RESUME
               </button>
+              <button onClick={() => printWorkout(exercises, { title: dayIntro ? '' : 'Workout', elapsed: fmt(sessionTime) })} style={{
+              width: '100%', padding: '13px 16px', borderRadius: 12,
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.28)',
+              color: '#eceff4', cursor: 'pointer',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontWeight: 600, fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}><IconDoc size={14} /> PRINT WORKOUT</button>
               <button onClick={() => setConfirmQuit(true)} style={{
               width: '100%', padding: '13px 16px', borderRadius: 12,
               background: 'transparent',
@@ -773,9 +788,14 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
               </span>
             )}
           </div>
-          <div className="h-bold" style={{ fontSize: 18, fontWeight: 900, letterSpacing: '0.01em', lineHeight: 1.05, marginBottom: 8 }}>
-            {ex.name.toUpperCase()}
-          </div>
+          <button onClick={onTitle} aria-label="Swap or choose an alternate" style={{
+            all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 8, maxWidth: '100%',
+          }}>
+            <span className="h-bold" style={{ fontSize: 18, fontWeight: 900, letterSpacing: '0.01em', lineHeight: 1.05 }}>
+              {ex.name.toUpperCase()}
+            </span>
+            <IconChevronRight size={16} style={{ color: 'var(--accent)', transform: 'rotate(90deg)', flexShrink: 0 }} />
+          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={onTitle} aria-label="Swap exercise" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
@@ -996,10 +1016,9 @@ function FinishSlide({ phaseId, onFinish }) {
 // ── SUPERSET CARD (interleaved, round-based) ─────────────────────
 // Renders a superset group as rounds: round 1 = one set of each exercise,
 // round 2 = the next set of each, etc., so the client alternates A1→A2→A1…
-function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onRemoveRound, onAddExercise, onCompleteAll, onComment, onHistory, intro }) {
+function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onAddExercise, onCompleteAll, onComment, onHistory, intro }) {
   const phase = PHASES.find((p) => p.id === group[0].phase);
   const phaseColor = phase?.accent || 'var(--accent)';
-  const maxRounds = Math.max(...group.map((e) => e.sets.length));
   const letter = (gi) => `${String.fromCharCode(65)}${gi + 1}`; // A1, A2, …
 
   return (
@@ -1012,89 +1031,94 @@ function SupersetCard({ group, onComplete, onUpdate, onTitle, onAddRound, onRemo
           </div>
         )}
 
-        {/* Superset header */}
-        <div style={{ marginTop: 4, marginBottom: 14 }}>
-          <div className="mono" style={{ display: 'inline-block', fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--accent-2)', background: 'color-mix(in srgb, var(--accent-2) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-2) 40%, transparent)', borderRadius: 6, padding: '3px 8px', marginBottom: 10 }}>
+        {/* Superset banner */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4, marginBottom: 12 }}>
+          <div className="mono" style={{ display: 'inline-block', fontSize: 9, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--accent-2)', background: 'color-mix(in srgb, var(--accent-2) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-2) 40%, transparent)', borderRadius: 6, padding: '4px 9px' }}>
             ⛓ SUPERSET · {group.length} EXERCISES
           </div>
+          {onCompleteAll && !group.every((e) => e.sets.every((s) => s.done)) && (
+            <button onClick={onCompleteAll} className="mono" style={{
+              all: 'unset', cursor: 'pointer', padding: '5px 9px', borderRadius: 6,
+              background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+              color: 'var(--accent)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}><IconCheck size={9} sw={3} /> ALL SETS</button>
+          )}
+        </div>
+
+        {/* Each superset exercise stacked with its own set table */}
+        <div style={{ display: 'grid', gap: 10 }}>
           {group.map((e, gi) => (
-            <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: gi < group.length - 1 ? '1px dashed var(--line)' : 'none' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, background: `url('${e.img}') center/cover, var(--bg-3)`, border: '1px solid var(--line)', flexShrink: 0 }}/>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="mono" style={{ fontSize: 9, fontWeight: 800, color: 'var(--accent-2)', letterSpacing: '0.06em' }}>{letter(gi)}</div>
-                <div style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
-              </div>
-              <button onClick={() => onTitle(e.id)} aria-label="Swap" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconSwap size={13}/></Hex></button>
-              <button onClick={() => onHistory(e.id)} aria-label="History" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconTrend size={13}/></Hex></button>
-              {onComment && <button onClick={() => onComment(e.id)} aria-label="Comments" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconClipboard size={13}/></Hex></button>}
-            </div>
+            <SupersetExercise key={e.id} e={e} label={letter(gi)} color={phaseColor}
+              onComplete={(si) => onComplete(e.id, si)}
+              onUpdate={(si, p) => onUpdate(e.id, si, p)}
+              onAddSet={(kind) => onAddSet(e.id, kind)}
+              onDelSet={() => onDelSet(e.id)}
+              onTitle={() => onTitle(e.id)}
+              onHistory={() => onHistory(e.id)}
+              onComment={onComment ? () => onComment(e.id) : null} />
           ))}
         </div>
 
-        {/* Rounds */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <span className="label">// SUPERSET ROUNDS</span>
-            {onCompleteAll && !group.every((e) => e.sets.every((s) => s.done)) && (
-              <button onClick={onCompleteAll} className="mono" style={{
-                all: 'unset', cursor: 'pointer', padding: '4px 8px', borderRadius: 6,
-                background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-                color: 'var(--accent)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em',
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-              }}>
-                <IconCheck size={9} sw={3} /> ALL SETS
-              </button>
-            )}
-          </div>
-          {Array.from({ length: maxRounds }).map((_, r) => (
-            <div key={r} style={{ borderBottom: '1px solid var(--line)' }}>
-              <div className="mono" style={{ fontSize: 9, color: phaseColor, letterSpacing: '0.12em', fontWeight: 700, padding: '8px 14px 2px' }}>ROUND {r + 1}</div>
-              {group.map((e, gi) => {
-                const s = e.sets[r];
-                if (!s) return null;
-                return (
-                  <div key={e.id} style={{ padding: '0 0 2px' }}>
-                    <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '2px 14px 0' }}>
-                      {letter(gi)} · {e.name.toUpperCase()}
-                    </div>
-                    <LogSetRow idx={r} setNum={r + 1} set={s} color={phaseColor}
-                      onComplete={() => onComplete(e.id, r)}
-                      onRpe={(rpe) => onUpdate(e.id, r, { rpe })}
-                      onReps={(reps) => onUpdate(e.id, r, { reps })}
-                      onKg={(kg) => onUpdate(e.id, r, { kg })}
-                      onKind={(kind) => onUpdate(e.id, r, kindPatch(s, kind))} />
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-          <div style={{ display: 'flex', borderTop: '1px dashed var(--line-strong)' }}>
-            <button onClick={onAddRound} style={{ all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '12px 0', color: phaseColor, fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.12em', fontWeight: 700 }}>+ ADD ROUND</button>
-            {onRemoveRound && group[0]?.sets?.length > 1 && (
-              <button onClick={onRemoveRound} style={{ all: 'unset', cursor: 'pointer', padding: '12px 18px', color: 'var(--c-coral)', fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 700, borderLeft: '1px dashed var(--line-strong)' }}>−</button>
-            )}
-          </div>
-        </div>
-
-        {/* Add exercise (removal is coach-only, from the programme builder) */}
         {onAddExercise && (
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button onClick={onAddExercise} className="btn-ghost" style={{ flex: 1, fontSize: 11 }}>+ ADD EXERCISE</button>
           </div>
         )}
-
-        {group.some((e) => e.coach) && (
-          <div className="card" style={{ marginTop: 12, padding: 12, display: 'grid', gap: 8 }}>
-            {group.map((e) => e.coach ? (
-              <div key={e.id}>
-                <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent-2)', letterSpacing: '0.06em', marginBottom: 3 }}>{e.name.toUpperCase()}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>{e.coach}</div>
-              </div>
-            ) : null)}
-          </div>
-        )}
       </div>
+    </div>
+  );
+}
+
+// One exercise inside a superset — its own title row + set table, tinted with
+// the superset accent and tagged A1/A2… so the grouping stays clear.
+function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onHistory, onComment }) {
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden', borderColor: 'color-mix(in srgb, var(--accent-2) 40%, var(--line))', borderLeft: '2px solid var(--accent-2)' }}>
+      {/* Title row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
+        <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 9, background: `url('${e.img}') center/cover, var(--bg-3)`, border: '1px solid var(--line)' }}/>
+          <span className="mono" style={{ position: 'absolute', top: -6, left: -6, fontSize: 8, fontWeight: 800, color: 'var(--accent-2)', background: 'var(--bg-1)', border: '1px solid color-mix(in srgb, var(--accent-2) 45%, transparent)', borderRadius: 5, padding: '1px 4px' }}>{label}</span>
+        </div>
+        <button onClick={onTitle} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="h-bold" style={{ fontSize: 14, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
+          <IconChevronRight size={13} style={{ color: 'var(--text-3)', transform: 'rotate(90deg)', flexShrink: 0 }} />
+        </button>
+        <button onClick={onHistory} aria-label="Prior progress" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconTrend size={13}/></Hex></button>
+        {onComment && <button onClick={onComment} aria-label="Comments" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconClipboard size={13}/></Hex></button>}
+      </div>
+      {e.tempo && (
+        <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '0 12px 8px' }}>TEMPO · {e.tempo}</div>
+      )}
+      {/* Set table */}
+      <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 56px 36px', gap: 8, padding: '6px 12px', fontSize: 9, color: 'var(--text-3)', borderTop: '1px solid var(--line)' }} className="mono">
+        <span style={{ letterSpacing: '0.1em' }}>SET</span>
+        <span style={{ letterSpacing: '0.1em' }}>{e.banded ? 'BAND' : e.sets[0]?.kg != null ? 'KG' : 'TYPE'}</span>
+        <span style={{ letterSpacing: '0.1em' }}>{e.sets[0]?.time ? 'TIME' : 'REPS'}{e.unilateral ? '/SIDE' : ''}</span>
+        <span style={{ letterSpacing: '0.04em' }}>DIFFICULTY</span>
+        <span />
+      </div>
+      {(() => { let wn = 0; return (e.sets || []).map((s, i) => {
+        if (!s) return null;
+        if (!s.kind) wn += 1;
+        return (
+          <LogSetRow key={i} idx={i} setNum={wn} set={s} color={color} banded={e.banded}
+            onComplete={() => onComplete(i)}
+            onRpe={(rpe) => onUpdate(i, { rpe })}
+            onReps={(reps) => onUpdate(i, { reps })}
+            onKg={(kg) => onUpdate(i, { kg })}
+            onBand={(band) => onUpdate(i, { band })}
+            onKind={(kind) => onUpdate(i, kindPatch(s, kind))} />);
+      }); })()}
+      <AddSetControl onAdd={onAddSet} onRemove={e.sets.length > 1 ? onDelSet : null} />
+      {e.coach && (
+        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--line)' }}>
+          <div className="label" style={{ marginBottom: 4 }}>// COACH NOTE</div>
+          <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>{e.coach}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1239,7 +1263,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose }) {
         <div className="h-bold" style={{ fontSize: 26, lineHeight: 1.05 }}>NICE WORK</div>
       </div>
 
-      <div className="scroller" style={{ flex: 1, padding: '12px 16px 120px', minHeight: 0 }}>
+      <div className="scroller" style={{ flex: 1, padding: '12px 16px 28px', minHeight: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
           <SCKpi label="TIME" value={fmtT(sessionTime)} unit="" />
           <SCKpi label="VOLUME" value={volume.toLocaleString()} unit="KG" />
@@ -1692,21 +1716,106 @@ function RepsCell({ set, onChange }) {
 }
 
 function NumCell({ value, suffix, done, onChange }) {
+  const [calcOpen, setCalcOpen] = React.useState(false);
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-      <input value={value || ''} onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-      style={{
-        width: '100%', background: 'transparent', border: 0,
-        color: done ? 'var(--text-2)' : 'var(--text)',
-        fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
-        letterSpacing: '0.04em', outline: 'none',
-        textDecoration: done ? 'line-through' : 'none',
-        textDecorationColor: 'var(--text-3)'
-      }} />
-      
-      {suffix && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
-    </div>);
+    <>
+      <button onClick={() => setCalcOpen(true)} style={{
+        all: 'unset', cursor: 'pointer', width: '100%',
+        display: 'flex', alignItems: 'baseline', gap: 4,
+      }}>
+        <span style={{
+          fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
+          color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
+          textDecoration: done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
+        }}>{value || '0'}</span>
+        {suffix && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
+      </button>
+      {calcOpen && (
+        <CalcKeypad value={value} unit={suffix || 'kg'}
+          onClose={() => setCalcOpen(false)}
+          onApply={(v) => { onChange(v); setCalcOpen(false); }} />
+      )}
+    </>);
 
+}
+
+// Sum a +/- expression like "4.5 + 2.3" or "20-2.5" (plate maths). No eval().
+function evalExpr(s) {
+  const m = String(s).match(/[+-]?\s*\d*\.?\d+/g);
+  if (!m) return NaN;
+  const total = m.reduce((a, t) => a + (parseFloat(t.replace(/\s+/g, '')) || 0), 0);
+  return Math.round(total * 100) / 100;
+}
+
+// Weight calculator keypad — tap a weight to open it. Supports plate maths
+// (+/-) and a kg/lb toggle (lb is converted to kg on apply, since we store kg).
+function CalcKeypad({ value, unit = 'kg', onClose, onApply }) {
+  const [expr, setExpr] = React.useState(value ? String(value) : '');
+  const [asLb, setAsLb] = React.useState(false);
+  const preview = evalExpr(expr);
+  const hasOp = /[+\-]\s*\d/.test(expr.replace(/^[+-]/, ''));
+
+  const push = (ch) => setExpr(e => {
+    if ('+-'.includes(ch)) {
+      if (e === '' && ch === '+') return e;        // no leading +
+      if (/[+\-]\s*$/.test(e)) return e.replace(/[+\-]\s*$/, ch + ' '); // swap trailing op
+      return e + ' ' + ch + ' ';
+    }
+    if (ch === '.' && /\.\d*$/.test(e.split(/[+\-]/).pop())) return e; // one dot per number
+    return e + ch;
+  });
+  const back = () => setExpr(e => e.replace(/\s*[+\-]\s*$|.$/, ''));
+  const apply = () => {
+    let n = evalExpr(expr);
+    if (isNaN(n)) n = 0;
+    if (asLb) n = Math.round(n * 0.45359237 * 2) / 2; // lb → kg, nearest 0.5
+    onApply(Math.max(0, n));
+  };
+
+  const Key = ({ label, onClick, tint, span, big }) => (
+    <button onClick={onClick} style={{
+      all: 'unset', cursor: 'pointer', textAlign: 'center',
+      gridColumn: span ? `span ${span}` : undefined,
+      padding: '16px 0', borderRadius: 12,
+      background: tint ? `color-mix(in srgb, ${tint} 16%, var(--bg-3))` : 'var(--bg-3)',
+      border: `1px solid ${tint ? `color-mix(in srgb, ${tint} 45%, transparent)` : 'var(--line-strong)'}`,
+      color: tint || 'var(--text)',
+      fontFamily: 'JetBrains Mono', fontSize: big ? 20 : 18, fontWeight: 700,
+    }}>{label}</button>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', animation: 'fadeIn .15s ease' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 20px)', animation: 'sheetUp .26s cubic-bezier(.22,.61,.36,1)' }}>
+        <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
+        {/* Display */}
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, padding: '6px 8px 14px' }}>
+          <span className="mono" style={{ fontSize: 26, fontWeight: 700, color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {expr || '0'}{hasOp && !isNaN(preview) ? <span style={{ color: 'var(--text-3)' }}>  = {preview}</span> : ''}
+          </span>
+          <span className="mono" style={{ fontSize: 13, color: 'var(--text-3)', flexShrink: 0 }}>{asLb ? 'lb' : 'kg'}</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          <Key label="1" onClick={() => push('1')} />
+          <Key label="2" onClick={() => push('2')} />
+          <Key label="3" onClick={() => push('3')} />
+          <Key label={asLb ? 'LB' : 'KG'} onClick={() => setAsLb(v => !v)} tint="var(--text-2)" />
+          <Key label="4" onClick={() => push('4')} />
+          <Key label="5" onClick={() => push('5')} />
+          <Key label="6" onClick={() => push('6')} />
+          <Key label="+" onClick={() => push('+')} tint="var(--accent)" />
+          <Key label="7" onClick={() => push('7')} />
+          <Key label="8" onClick={() => push('8')} />
+          <Key label="9" onClick={() => push('9')} />
+          <Key label="−" onClick={() => push('-')} tint="var(--accent)" />
+          <Key label="." onClick={() => push('.')} />
+          <Key label="0" onClick={() => push('0')} />
+          <Key label="⌫" onClick={back} tint="var(--text-2)" />
+          <Key label="=" onClick={apply} tint="var(--accent-2)" big />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Parse a stored time value ("60s" / "5 min" / "01:00" / "90") to seconds.
@@ -1721,6 +1830,60 @@ function parseTimeToSeconds(value) {
 function formatMMSS(secs) {
   const m = Math.floor(secs / 60), s = secs % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+// Open a clean, printable sheet of the current workout (→ browser print / Save
+// as PDF). Grouped by phase; each set shown as it stands right now.
+function printWorkout(exercises, meta = {}) {
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const setLabel = (s) => {
+    if (s.time) return formatMMSS(parseTimeToSeconds(s.reps));
+    const b = bandOf(s.band);
+    const load = b ? b.label : (s.kg != null ? `${s.kg} kg` : 'BW');
+    const tag = SET_TYPE[s.kind] ? ` (${SET_TYPE[s.kind].label})` : '';
+    return `${load} × ${s.reps}${s.perSide ? '/side' : ''}${tag}`;
+  };
+  const rows = PHASES.filter(ph => exercises.some(e => e.phase === ph.id)).map(ph => {
+    const items = exercises.filter(e => e.phase === ph.id).map(e => `
+      <div class="ex">
+        <div class="exname">${esc(e.name)}${e.ss != null ? ' <span class="ss">SUPERSET</span>' : ''}${e.tempo ? ` <span class="tempo">tempo ${esc(e.tempo)}</span>` : ''}</div>
+        <ol>${e.sets.map(s => `<li>${esc(setLabel(s))}</li>`).join('')}</ol>
+        ${e.coach ? `<div class="note">${esc(e.coach)}</div>` : ''}
+      </div>`).join('');
+    return `<section><h2>${esc(ph.label)}</h2>${items}</section>`;
+  }).join('');
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Workout</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { font-family: -apple-system, system-ui, sans-serif; color: #14181b; margin: 28px; }
+      header { border-bottom: 2px solid #189CAA; padding-bottom: 10px; margin-bottom: 18px; }
+      h1 { font-size: 22px; margin: 0; }
+      .meta { color: #667; font-size: 12px; margin-top: 4px; }
+      section { margin-bottom: 18px; break-inside: avoid; }
+      h2 { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #189CAA; border-bottom: 1px solid #dde; padding-bottom: 4px; }
+      .ex { margin: 10px 0 10px; padding-left: 2px; }
+      .exname { font-weight: 700; font-size: 14px; }
+      .ss { font-size: 9px; color: #189CAA; border: 1px solid #9cd; border-radius: 4px; padding: 1px 4px; vertical-align: middle; }
+      .tempo { font-size: 11px; color: #778; font-weight: 400; }
+      ol { margin: 4px 0 0 20px; padding: 0; font-size: 13px; }
+      li { margin: 1px 0; }
+      .note { font-size: 11px; color: #556; margin-top: 3px; font-style: italic; }
+      footer { margin-top: 24px; font-size: 10px; color: #99a; }
+      @media print { body { margin: 12mm; } }
+    </style></head>
+    <body>
+      <header><h1>${esc(meta.title || 'Workout')}</h1>
+        <div class="meta">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}${meta.elapsed ? ` · ${esc(meta.elapsed)} elapsed` : ''}</div>
+      </header>
+      ${rows || '<p>No exercises.</p>'}
+      <footer>Generated from HS PT</footer>
+      <script>window.onload = () => { window.print(); };</script>
+    </body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { toast('Allow pop-ups to print', { kind: 'error' }); return; }
+  w.document.open(); w.document.write(html); w.document.close();
 }
 
 // Editable time field — always displays/edits in MM:SS (stopwatch style).
