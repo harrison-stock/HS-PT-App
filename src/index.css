@@ -362,6 +362,8 @@ body:has([data-role="trainer"]) {
 @keyframes slideRight { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
 @keyframes sheetUp    { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes sheetDown  { from { transform: none; opacity: 1; } to { transform: translateY(16px); opacity: 0; } }
+@keyframes spin       { to { transform: rotate(360deg); } }
+@keyframes tilePulse  { 0%, 100% { opacity: 0.35; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1); } }
 @keyframes popIn      { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
 
 .screen-enter { animation: screenIn .26s cubic-bezier(.22,.61,.36,1); }
