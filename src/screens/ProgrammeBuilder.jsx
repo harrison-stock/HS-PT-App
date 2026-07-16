@@ -7,6 +7,7 @@ import { MasterPlanner } from './MasterPlanner'
 import { BandPicker, BandChip, bandOf } from '../components/bands'
 import { exerciseMatches } from '../lib/exerciseSearch'
 import { ICON_LIBRARY, SectionGlyph, sanitizeSvg } from '../lib/svgIcon'
+import { uploadWorkoutPhoto } from '../lib/workoutPhotos'
 
 const IMG_FALLBACK = 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70';
 const TAGS = ['STRENGTH','ONBOARD','REHAB','ENDURANCE','HYBRID','SPORT'];
@@ -71,7 +72,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         .order('sort_order');
 
       if (cancelled) return;
-      setDay(sections ? { intro: dayRow.intro || '', notes: dayRow.notes || '', sections: dbToSections(sections) } : null);
+      setDay(sections ? { intro: dayRow.intro || '', notes: dayRow.notes || '', img: dayRow.image_url || '', sections: dbToSections(sections) } : null);
       setDirty(false);
       setDayLoading(false);
     }
@@ -86,13 +87,23 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   // ── Save ─────────────────────────────────────────────────────
   // Writes a day-content object to a specific (phase, week, day) slot.
   const writeDayContent = async (phid, week, dow, content) => {
-    const { data: dayRow, error: dayErr } = await supabase
+    let { data: dayRow, error: dayErr } = await supabase
       .from('programme_days')
       .upsert(
-        { phase_id: phid, week_index: week, day_of_week: dow, intro: content.intro || '', notes: content.notes || '' },
+        { phase_id: phid, week_index: week, day_of_week: dow, intro: content.intro || '', notes: content.notes || '', image_url: content.img || null },
         { onConflict: 'phase_id,week_index,day_of_week' }
       )
       .select('id').single();
+    // Fallback if migration 041 (cover photo) isn't applied yet.
+    if (!dayRow) {
+      ({ data: dayRow, error: dayErr } = await supabase
+        .from('programme_days')
+        .upsert(
+          { phase_id: phid, week_index: week, day_of_week: dow, intro: content.intro || '', notes: content.notes || '' },
+          { onConflict: 'phase_id,week_index,day_of_week' }
+        )
+        .select('id').single());
+    }
     if (!dayRow) throw new Error(dayErr?.message || 'Save failed — have you run migration 3 (notes_tempo)?');
 
     await supabase.from('workout_sections').delete().eq('day_id', dayRow.id);
@@ -452,6 +463,10 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           <RestDay onAdd={() => { setDay(seedDay()); setDirty(true); }}/>
         ) : (
           <>
+            {/* Cover photo */}
+            <CoverPhoto img={day.img || ''} trainerId={trainerId}
+              onChange={(url) => { setDay(d => ({ ...d, img: url })); setDirty(true); }} />
+
             {/* Workout intro */}
             <div style={{ marginBottom: 16 }}>
               <div className="label" style={{ marginBottom: 8 }}>// WORKOUT INTRO</div>
@@ -1008,6 +1023,62 @@ function Section({ s, sIdx, onIntro, onIcon, expandedExId, expandedSetId, onExpa
   );
 }
 
+// ── WORKOUT COVER PHOTO ───────────────────────────────────────────
+// Optional hero image for the day. Uploads to the public `workout-photos`
+// bucket (under the trainer's folder) and stores the resulting URL.
+function CoverPhoto({ img, trainerId, onChange }) {
+  const fileRef = React.useRef(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+
+  const pick = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    if (f.size > 6 * 1024 * 1024) { setErr('Image too large (max 6MB).'); return; }
+    setErr(null); setBusy(true);
+    const { url, error } = await uploadWorkoutPhoto(trainerId, f);
+    setBusy(false);
+    if (error || !url) { setErr(error?.message || 'Upload failed.'); return; }
+    onChange(url);
+  };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div className="label" style={{ marginBottom: 8 }}>// COVER PHOTO</div>
+      <input ref={fileRef} type="file" accept="image/*" onChange={pick} style={{ display: 'none' }} />
+      <div
+        onClick={() => !busy && fileRef.current?.click()}
+        style={{
+          position: 'relative', height: 128, borderRadius: 12, cursor: busy ? 'wait' : 'pointer',
+          border: `1px ${img ? 'solid' : 'dashed'} var(--line-strong)`, overflow: 'hidden',
+          display: 'grid', placeItems: 'center',
+          background: img
+            ? `linear-gradient(180deg, rgba(7,7,12,0.15) 0%, rgba(7,7,12,0.55) 100%), url('${img}') center/cover, var(--bg-2)`
+            : 'var(--bg-2)',
+        }}
+      >
+        {busy ? (
+          <span className="mono" style={{ fontSize: 10, color: 'var(--text-2)', letterSpacing: '0.12em' }}>UPLOADING…</span>
+        ) : img ? (
+          <span className="mono" style={{ fontSize: 10, color: '#eceff4', letterSpacing: '0.1em', textShadow: '0 1px 8px rgba(0,0,0,0.8)' }}>TAP TO REPLACE</span>
+        ) : (
+          <div style={{ textAlign: 'center', color: 'var(--text-3)' }}>
+            <div className="mono" style={{ fontSize: 11, letterSpacing: '0.1em' }}>+ ADD COVER PHOTO</div>
+            <div className="mono" style={{ fontSize: 9, marginTop: 4, opacity: 0.7 }}>Shown at the top of the client's workout</div>
+          </div>
+        )}
+      </div>
+      {img && !busy && (
+        <button onClick={() => onChange('')} style={{
+          all: 'unset', cursor: 'pointer', marginTop: 6, display: 'inline-block',
+          color: 'var(--c-coral)', fontFamily: 'JetBrains Mono', fontSize: 9.5, letterSpacing: '0.08em',
+        }}>REMOVE PHOTO</button>
+      )}
+      {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)', marginTop: 6 }}>{err}</div>}
+    </div>
+  );
+}
+
 // ── SECTION ICON PICKER ───────────────────────────────────────────
 // Pick a curated glyph or paste a custom SVG for this section. Custom SVG is
 // sanitised (geometry only) and recoloured to the zone colour on save.
@@ -1026,8 +1097,13 @@ function ToggleBtn({ active, onClick, children }) {
 function IconPickerSheet({ current, kind, color, onPick, onClose }) {
   const [mode, setMode] = React.useState((current || '').trim().startsWith('<svg') ? 'custom' : 'library');
   const [raw, setRaw]   = React.useState((current || '').trim().startsWith('<svg') ? current : '');
+  const [query, setQuery] = React.useState('');
   const fileRef = React.useRef(null);
   const safe = React.useMemo(() => sanitizeSvg(raw), [raw]);
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? ICON_LIBRARY.filter(it => it.label.toLowerCase().includes(q)) : ICON_LIBRARY;
+  }, [query]);
 
   const loadFile = (e) => {
     const f = e.target.files?.[0]; e.target.value = '';
@@ -1064,12 +1140,14 @@ function IconPickerSheet({ current, kind, color, onPick, onClose }) {
                 <SectionGlyph icon="" kind={kind} size={18} color={color} glow />
                 <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>DEFAULT ({kind.replace('_', ' ')})</span>
               </button>
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search icons…" spellCheck={false}
+                style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 8, color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 11, padding: '9px 12px', outline: 'none', marginBottom: 10 }} />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-                {ICON_LIBRARY.map(it => {
-                  const val = `lib:${it.key}`;
+                {filtered.map(it => {
+                  const val = it.value;
                   const sel = current === val;
                   return (
-                    <button key={it.key} onClick={() => onPick(val)} title={it.label} style={{
+                    <button key={it.value} onClick={() => onPick(val)} title={it.label} style={{
                       all: 'unset', cursor: 'pointer', aspectRatio: '1', display: 'grid', placeItems: 'center', borderRadius: 10,
                       background: sel ? `color-mix(in srgb, ${color} 16%, transparent)` : 'var(--bg-2)',
                       border: `1px solid ${sel ? color : 'var(--line)'}`,
@@ -1080,6 +1158,9 @@ function IconPickerSheet({ current, kind, color, onPick, onClose }) {
                     </button>
                   );
                 })}
+                {filtered.length === 0 && (
+                  <div className="mono" style={{ gridColumn: '1 / -1', textAlign: 'center', fontSize: 10, color: 'var(--text-3)', padding: '16px 0' }}>No icons match “{query}”.</div>
+                )}
               </div>
             </>
           ) : (

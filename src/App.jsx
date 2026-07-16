@@ -1,6 +1,7 @@
 import React from 'react'
 import { supabase } from './lib/supabase'
 import { HexShape } from './components/hex'
+import { BrandIcon } from './components/BrandIcon'
 import { IconHome, IconCalendar, IconChart, IconBook, IconUser, IconBolt, IconActivity, IconDumbbell, IconDoc, IconPlay } from './components/icons'
 import { Login, SetPassword } from './screens/Login'
 import { Dashboard } from './screens/Dashboard'
@@ -393,17 +394,17 @@ function ResumeWorkoutPrompt({ snap, onResume, onDiscard }) {
 
 function BottomNav({ screen, go, isTrainer }) {
   const items = isTrainer ? [
-    { id: 'coach',      label: 'COACH',     Icon: IconBolt },
-    { id: 'programmes', label: 'BUILD',     Icon: IconCalendar },
-    { id: 'exercises',  label: 'EXERCISES', Icon: IconDumbbell },
-    { id: 'forms',      label: 'FORMS',     Icon: IconDoc },
-    { id: 'resources',  label: 'RECIPES',   Icon: IconBook },
+    { id: 'coach',      label: 'COACH',     brand: 'Hub' },
+    { id: 'programmes', label: 'BUILD',     brand: 'Calendar' },
+    { id: 'exercises',  label: 'EXERCISES', brand: 'Dumbbell' },
+    { id: 'forms',      label: 'FORMS',     brand: 'Checklist' },
+    { id: 'resources',  label: 'RECIPES',   brand: 'Recipe' },
   ] : [
-    { id: 'dashboard', label: 'HOME',     Icon: IconHome },
-    { id: 'workouts',  label: 'TRAIN',    Icon: IconCalendar },
-    { id: 'progress',  label: 'PROGRESS', Icon: IconChart },
-    { id: 'resources', label: 'LIBRARY',  Icon: IconBook },
-    { id: 'body',      label: 'BODY',     Icon: IconActivity },
+    { id: 'dashboard', label: 'HOME',     brand: 'Home' },
+    { id: 'workouts',  label: 'TRAIN',    brand: 'Calendar' },
+    { id: 'progress',  label: 'PROGRESS', brand: 'Graph (Ascending)' },
+    { id: 'resources', label: 'LIBRARY',  brand: 'Book' },
+    { id: 'body',      label: 'BODY',     brand: 'Flexed Bicep' },
   ];
 
   return (
@@ -416,16 +417,8 @@ function BottomNav({ screen, go, isTrainer }) {
               position: 'relative', height: 32, width: 38,
               display: 'grid', placeItems: 'center', marginBottom: 2,
             }}>
-              {active && (
-                <HexShape size={30} fill="var(--accent-soft)"
-                  stroke="var(--accent-2)" strokeWidth={13}
-                  style={{
-                    position: 'absolute', left: '50%', top: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    filter: 'drop-shadow(0 0 calc(9px * var(--glow)) var(--accent-glow))',
-                  }}/>
-              )}
-              <it.Icon size={18} style={{ position: 'relative' }}/>
+              <BrandIcon name={it.brand} size={24} glow={active}
+                color={active ? 'var(--accent)' : 'var(--text-3)'} />
             </div>
             <span>{it.label}</span>
           </button>
