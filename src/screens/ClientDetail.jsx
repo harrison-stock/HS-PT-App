@@ -495,7 +495,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
 
   if (editing) return (
     <EditWorkout
-      w={editing} programmes={programmes} trainerId={trainerId}
+      w={editing} clientId={c.id} programmes={programmes} trainerId={trainerId}
       onClose={() => setEditing(null)}
       onSaved={() => { setEditing(null); loadWorkouts(); onChanged?.(); }}
     />
@@ -647,13 +647,15 @@ function WorkoutCell({ w, onClick }) {
 
 // Coach-side edit of a single scheduled workout — open it in the full
 // programme builder, reschedule it, or remove it, straight from the calendar.
-function EditWorkout({ w, programmes, trainerId, onClose, onSaved }) {
+function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
   const day = w.programme_days;
   const phase = day?.programme_phases;
+  const done = w.status === 'completed';
   const [date, setDate]           = React.useState(w.scheduled_date);
   const [saving, setSaving]       = React.useState(false);
   const [removeConfirm, setRemoveConfirm] = React.useState(false);
   const [builderOpen, setBuilderOpen] = React.useState(false);
+  const [logOpen, setLogOpen]     = React.useState(false);
   const sections = [...(day?.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
 
   // The full shaped programme (with phaseList) this workout came from.
@@ -666,6 +668,11 @@ function EditWorkout({ w, programmes, trainerId, onClose, onSaved }) {
       startAt={{ phaseIdx, weekIdx: day?.week_index ?? 0, dayIdx: day?.day_of_week ?? 0 }}
       onClose={() => onSaved()}
     />
+  );
+
+  if (logOpen) return (
+    <LoggedSetsEditor clientId={clientId} dayId={day?.id} phaseName={phase?.name}
+      onClose={() => setLogOpen(false)} onSaved={() => { setLogOpen(false); onSaved(); }} />
   );
 
   const save = async () => {
@@ -692,8 +699,8 @@ function EditWorkout({ w, programmes, trainerId, onClose, onSaved }) {
       </div>
 
       <div style={{ borderRadius: 8, padding: 10, background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 4 }}>
-          {(phase?.name || 'WORKOUT').toUpperCase()}
+        <div className="mono" style={{ fontSize: 9, color: done ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 4 }}>
+          {(phase?.name || 'WORKOUT').toUpperCase()}{done ? ' · ✓ COMPLETED' : ''}
         </div>
         {sections.length === 0 && <Mono>No exercises</Mono>}
         {sections.map((s, i) => (
@@ -702,6 +709,16 @@ function EditWorkout({ w, programmes, trainerId, onClose, onSaved }) {
           </div>
         ))}
       </div>
+
+      {done && (
+        <div>
+          <button onClick={() => setLogOpen(true)} className="btn-primary"
+            style={{ width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <IconCheck size={13} sw={3}/> EDIT LOGGED RESULTS →
+          </button>
+          <Mono style={{ marginTop: 6 }}>Amend the sets this client actually logged — fix typos in weights or reps.</Mono>
+        </div>
+      )}
 
       <div>
         <button onClick={() => setBuilderOpen(true)} disabled={!prog} className="btn-primary"
@@ -739,6 +756,119 @@ function EditWorkout({ w, programmes, trainerId, onClose, onSaved }) {
       }}>
         {removeConfirm ? 'CONFIRM REMOVE — TAP AGAIN' : 'REMOVE FROM CALENDAR'}
       </button>
+    </div>
+  );
+}
+
+// Amend a completed session's logged sets (data-quality fixes). Loads the most
+// recent completed session for this day + client and writes edits back.
+function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
+  const [state, setState] = React.useState(null); // null=loading | 'none' | { sessionId, exercises }
+  const [saving, setSaving] = React.useState(false);
+  const [dirty, setDirty]   = React.useState(false);
+
+  React.useEffect(() => {
+    if (!clientId || !dayId) { setState('none'); return; }
+    supabase.from('workout_sessions')
+      .select('id, completed_at, logged_sets(id, exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_band, actual_time_secs, intensity, section_exercises(name))')
+      .eq('client_id', clientId).eq('day_id', dayId)
+      .not('completed_at', 'is', null)
+      .order('completed_at', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => {
+        if (!data || !(data.logged_sets || []).length) { setState('none'); return; }
+        const map = new Map();
+        [...data.logged_sets].sort((a, b) => a.set_index - b.set_index).forEach(ls => {
+          const key = ls.exercise_id || `n:${ls.exercise_name}`;
+          const name = ls.section_exercises?.name || ls.exercise_name || 'Exercise';
+          if (!map.has(key)) map.set(key, { key, name, sets: [] });
+          map.get(key).sets.push({
+            id: ls.id,
+            reps: ls.actual_reps ?? '', kg: ls.actual_weight_kg ?? '', band: ls.actual_band || '',
+            timeSecs: ls.actual_time_secs ?? null, intensity: ls.intensity ?? '',
+            timed: !!ls.actual_time_secs, banded: !!ls.actual_band, _deleted: false,
+          });
+        });
+        setState({ sessionId: data.id, exercises: [...map.values()] });
+      });
+  }, [clientId, dayId]);
+
+  const upd = (exi, si, patch) => {
+    setState(st => ({ ...st, exercises: st.exercises.map((ex, i) => i !== exi ? ex : ({ ...ex, sets: ex.sets.map((s, j) => j === si ? { ...s, ...patch } : s) })) }));
+    setDirty(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const rows = state.exercises.flatMap(ex => ex.sets);
+    for (const s of rows) {
+      if (s._deleted) { await supabase.from('logged_sets').delete().eq('id', s.id); continue; }
+      await supabase.from('logged_sets').update({
+        actual_reps: s.timed ? null : (s.reps === '' ? null : parseInt(s.reps) || 0),
+        actual_weight_kg: (s.kg === '' || s.banded) ? null : (parseFloat(s.kg) || null),
+        actual_band: s.band || null,
+        actual_time_secs: s.timed ? (s.timeSecs || null) : null,
+        intensity: s.intensity === '' ? null : parseInt(s.intensity),
+      }).eq('id', s.id);
+    }
+    setSaving(false);
+    toast('Results updated');
+    onSaved();
+  };
+
+  const cell = { ...fieldSt, padding: '7px 8px', fontSize: 12, textAlign: 'center' };
+
+  return (
+    <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="label">// EDIT LOGGED RESULTS{phaseName ? ` — ${phaseName.toUpperCase()}` : ''}</div>
+        <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
+      </div>
+
+      {state === null && <Mono>LOADING LOGGED SETS…</Mono>}
+      {state === 'none' && (
+        <div className="card" style={{ padding: 18, textAlign: 'center', background: 'var(--bg-2)' }}>
+          <Mono style={{ lineHeight: 1.7 }}>NO LOGGED SETS FOUND<br/><span style={{ fontSize: 9 }}>This session was completed without logged sets, or hasn't been logged yet.</span></Mono>
+        </div>
+      )}
+
+      {state && state !== 'none' && (
+        <>
+          {state.exercises.map((ex, exi) => (
+            <div key={ex.key} style={{ display: 'grid', gap: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{ex.name}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '22px 1fr 1fr 44px 26px', gap: 6, alignItems: 'center' }}>
+                <Mono style={{ fontSize: 8 }}>SET</Mono>
+                <Mono style={{ fontSize: 8 }}>{ex.sets[0]?.timed ? 'TIME(S)' : ex.sets[0]?.banded ? 'BAND' : 'KG'}</Mono>
+                <Mono style={{ fontSize: 8 }}>{ex.sets[0]?.timed ? 'KG' : 'REPS'}</Mono>
+                <Mono style={{ fontSize: 8 }}>RPE</Mono>
+                <span/>
+              </div>
+              {ex.sets.map((s, si) => s._deleted ? (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
+                  <Mono style={{ flex: 1 }}>SET {si + 1} — removed</Mono>
+                  <button onClick={() => upd(exi, si, { _deleted: false })} className="mono" style={{ all: 'unset', cursor: 'pointer', fontSize: 9, color: 'var(--accent)' }}>UNDO</button>
+                </div>
+              ) : (
+                <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '22px 1fr 1fr 44px 26px', gap: 6, alignItems: 'center' }}>
+                  <Mono style={{ textAlign: 'center' }}>{si + 1}</Mono>
+                  {s.timed
+                    ? <input type="number" value={s.timeSecs ?? ''} onChange={e => upd(exi, si, { timeSecs: e.target.value === '' ? null : parseInt(e.target.value) || 0 })} style={cell}/>
+                    : s.banded
+                      ? <input value={s.band} onChange={e => upd(exi, si, { band: e.target.value })} style={cell}/>
+                      : <input type="number" inputMode="decimal" value={s.kg} onChange={e => upd(exi, si, { kg: e.target.value })} style={cell}/>}
+                  <input type="number" inputMode="numeric" value={s.timed ? (s.kg ?? '') : s.reps} onChange={e => upd(exi, si, s.timed ? { kg: e.target.value } : { reps: e.target.value })} style={cell}/>
+                  <input type="number" inputMode="numeric" value={s.intensity} onChange={e => upd(exi, si, { intensity: e.target.value })} style={cell}/>
+                  <button onClick={() => upd(exi, si, { _deleted: true })} aria-label="Remove set" style={{ all: 'unset', cursor: 'pointer', color: 'var(--c-coral)', display: 'grid', placeItems: 'center' }}><IconX2 size={12}/></button>
+                </div>
+              ))}
+            </div>
+          ))}
+
+          <button onClick={save} disabled={saving || !dirty} className="btn-primary" style={{ opacity: dirty ? 1 : 0.4, pointerEvents: dirty ? 'auto' : 'none' }}>
+            {saving ? 'SAVING…' : 'SAVE CHANGES →'}
+          </button>
+        </>
+      )}
     </div>
   );
 }
