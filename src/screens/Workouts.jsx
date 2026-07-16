@@ -528,8 +528,10 @@ function PreviewBody({ w, sections, expanded, onToggle, onOpenSection, onClose, 
   return (
     <>
       <div style={{
-        height: 260, position: 'relative', flexShrink: 0,
-        background: `linear-gradient(180deg, rgba(7,7,12,0.35) 0%, transparent 30%, rgba(17,22,26,0.95) 100%), url('${w.img || ''}') center/cover, var(--bg-3)`,
+        height: w.img ? 168 : 118, position: 'relative', flexShrink: 0,
+        background: w.img
+          ? `linear-gradient(180deg, rgba(7,7,12,0.35) 0%, transparent 30%, rgba(17,22,26,0.95) 100%), url('${w.img}') center/cover, var(--bg-3)`
+          : `linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, var(--bg-2)) 0%, var(--bg-1) 100%)`,
       }}>
         <HexBackButton onClick={onClose} variant="overlay" size={38}
           style={{ position: 'absolute', top: 14, left: 14, zIndex: 2 }}/>
