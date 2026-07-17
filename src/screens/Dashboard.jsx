@@ -4,6 +4,7 @@ import { HEX_RATIO, HexShape, Hex } from '../components/hex'
 import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
 import { FormFill } from './FormFill'
+import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 
 function useLiveClock() {
   const [now, setNow] = React.useState(() => new Date());
@@ -62,6 +63,7 @@ function shapeTask(t) {
     title: t.title,
     kind: t.kind,
     icon: t.kind, // check | log | photo | form
+    brandIcon: t.icon || '', // optional coach-chosen brand icon
     formId: t.form_id,
     sub,
     done: !!t.completed_at,
@@ -262,6 +264,9 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
       {/* Goal set by the coach */}
       <GoalCard userId={userId} />
 
+      {/* In-person PT credits (only for in-person / hybrid clients) */}
+      <PtCreditsCard userId={userId} />
+
       {formTask && (
         <FormFill
           formId={formTask.formId} taskId={formTask.id} clientId={userId}
@@ -335,7 +340,9 @@ function GoalCard({ userId }) {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div className="label" style={{ color: 'var(--c-amber)' }}>// YOUR GOAL</div>
+          <div className="label" style={{ color: 'var(--c-amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <BrandIcon name="Mountain" size={14} color="var(--c-amber)" glow /> // YOUR GOAL
+          </div>
           <div className="h-bold" style={{ fontSize: 18, marginTop: 4, color: 'var(--heading-deep)' }}>{goal.title}</div>
           {goal.description && (
             <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, marginTop: 6 }}>{goal.description}</div>
@@ -356,6 +363,57 @@ function GoalCard({ userId }) {
           {goal.target_date && ` · ${new Date(goal.target_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── PT CREDITS ────────────────────────────────────────────────────
+// In-person / hybrid clients see their remaining 1-to-1 session credits at the
+// foot of the home screen. Online-only clients never see this card.
+function PtCreditsCard({ userId }) {
+  const [info, setInfo] = React.useState(undefined); // undefined=loading | null=hide | { credits, status }
+  React.useEffect(() => {
+    if (!userId) { setInfo(null); return; }
+    let cancelled = false;
+    (async () => {
+      let { data } = await supabase.from('profiles').select('credits, client_status').eq('id', userId).maybeSingle();
+      if (!data) ({ data } = await supabase.from('managed_clients').select('credits, client_status').eq('id', userId).maybeSingle());
+      if (cancelled) return;
+      const status = data?.client_status;
+      if (!data || (status !== 'in_person' && status !== 'hybrid')) { setInfo(null); return; }
+      setInfo({ credits: data.credits ?? 0, status });
+    })();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  if (info === undefined || info === null) return null;
+  const { credits } = info;
+  const low = credits <= 1;
+  const col = credits === 0 ? 'var(--c-coral)' : low ? 'var(--c-amber)' : 'var(--accent)';
+
+  return (
+    <div className="card" style={{
+      padding: 16, display: 'flex', alignItems: 'center', gap: 14,
+      background: `linear-gradient(135deg, color-mix(in srgb, ${col} 9%, transparent), transparent), var(--bg-2)`,
+      borderColor: `color-mix(in srgb, ${col} 30%, var(--line))`,
+    }}>
+      <Hex size={52} style={{ background: `color-mix(in srgb, ${col} 16%, var(--bg-3))`, border: `1px solid color-mix(in srgb, ${col} 42%, transparent)`, color: col, flexShrink: 0 }}>
+        <BrandIcon name="Weightlifting" size={24} color={col} glow />
+      </Hex>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="label" style={{ color: col }}>// IN-PERSON CREDITS</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
+          <span className="h-bold" style={{ fontSize: 30, lineHeight: 1, color: col }}>{credits}</span>
+          <span className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-3)' }}>
+            {credits === 1 ? 'SESSION LEFT' : 'SESSIONS LEFT'}
+          </span>
+        </div>
+        {credits === 0 && (
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.04em', marginTop: 6 }}>
+            Contact your coach to top up credits.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -408,7 +466,9 @@ function TasksSection({ tasks, onToggle }) {
                   border: `1px solid color-mix(in srgb, ${kindCol} 40%, transparent)`,
                   color: kindCol, flexShrink: 0
                 }}>
-                  <Icon size={16} />
+                  {t.brandIcon && hasBrandIcon(t.brandIcon)
+                    ? <BrandIcon name={t.brandIcon} size={18} color={kindCol} />
+                    : <Icon size={16} />}
                 </Hex>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', textDecoration: t.done ? 'line-through' : 'none' }}>
