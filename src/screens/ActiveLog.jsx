@@ -18,7 +18,7 @@ import { ExercisePicker } from './ProgrammeBuilder'
 // One full-page card per exercise; horizontal snap-scroll between them.
 // Phases (Pulse · Banded · Main · Cooldown) are pinned as a strip up top.
 // Tap exercise title to see/swap alternatives.
-export function ActiveLog({ go, dayId, userId, resume }) {
+export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const [exercises, setExercises] = React.useState(ACTIVE_EXERCISES);
   const [activeIdx, setActiveIdx] = React.useState(0); // start on Pulse warm-up
   const [sessionTime, setSessionTime] = React.useState(0);
@@ -183,6 +183,13 @@ export function ActiveLog({ go, dayId, userId, resume }) {
       });
   }, [dayId]);
 
+  // When re-opening a finished workout to fix results, the next save replaces
+  // the prior session instead of adding a duplicate. `editModeRef` covers the
+  // first save of a re-opened past session; `savedSessionRef` covers repeated
+  // finishes within this same run.
+  const savedSessionRef = React.useRef(null);
+  const editModeRef = React.useRef(!!edit);
+
   // ── Persist in-progress state so a crash/close can be resumed ──
   const liveRef = React.useRef({ sessionTime: 0, activeIdx: 0, exercises });
   React.useEffect(() => { liveRef.current = { sessionTime, activeIdx, exercises }; }, [sessionTime, activeIdx, exercises]);
@@ -212,11 +219,24 @@ export function ActiveLog({ go, dayId, userId, resume }) {
   const saveSession = async () => {
     if (!dayId || !userId) return;
     try {
+      // Replace prior results when re-finishing this run, or when this run was
+      // opened to edit a past session (delete cascades to its logged_sets).
+      if (savedSessionRef.current) {
+        await supabase.from('workout_sessions').delete().eq('id', savedSessionRef.current);
+        savedSessionRef.current = null;
+      } else if (editModeRef.current) {
+        const { data: prev } = await supabase.from('workout_sessions')
+          .select('id').eq('client_id', userId).eq('day_id', dayId)
+          .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle();
+        if (prev) await supabase.from('workout_sessions').delete().eq('id', prev.id);
+        editModeRef.current = false;
+      }
       const { data: ws } = await supabase
         .from('workout_sessions')
         .insert({ client_id: userId, day_id: dayId, started_at: sessionStartRef.current, completed_at: new Date().toISOString() })
         .select('id').single();
       if (ws) {
+        savedSessionRef.current = ws.id;
         // Client-added exercises have non-DB ids — log them by name with a null
         // exercise_id (the FK only accepts real section_exercises rows).
         const isDbId = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id);
@@ -656,7 +676,8 @@ export function ActiveLog({ go, dayId, userId, resume }) {
       )}
 
       {/* Session complete — results screen */}
-      {complete && <SessionComplete exercises={exercises} sessionTime={sessionTime} go={go} />}
+      {complete && <SessionComplete exercises={exercises} sessionTime={sessionTime} go={go}
+        onEdit={() => { setComplete(false); setActiveIdx(0); }} />}
 
       {/* Processing overlay — shown while the session is being saved. */}
       {finishing && <LoadingTile label="Saving session…" variant="hex" />}
@@ -1216,7 +1237,7 @@ function SectionDivider({ phaseId, nextPhaseId, exercises, slideText, onContinue
 // ── SESSION COMPLETE (post-workout results) ──────────────────────
 // Celebratory results screen: summary stats, PRs, and a muscle map of
 // what was trained this session.
-export function SessionComplete({ exercises, sessionTime, go, onClose }) {
+export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit }) {
   const [side, setSide] = React.useState('front');
 
   const setsDone = exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
@@ -1266,6 +1287,17 @@ export function SessionComplete({ exercises, sessionTime, go, onClose }) {
         {onClose &&
         <HexBackButton onClick={onClose} variant="overlay" size={36}
           style={{ position: 'absolute', top: 50, left: 16, zIndex: 3 }} />
+        }
+        {onEdit &&
+        <button onClick={onEdit} className="mono" style={{
+          all: 'unset', cursor: 'pointer', position: 'absolute', top: 50, right: 16, zIndex: 3,
+          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 999,
+          background: 'color-mix(in srgb, var(--accent) 16%, var(--bg-2))',
+          border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)',
+          color: 'var(--accent)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+        }}>
+          <IconSwap size={12} /> EDIT RESULT
+        </button>
         }
         {['var(--c-amber)', 'var(--c-blue)', 'var(--c-coral)', 'var(--accent)', 'var(--c-pink)', 'var(--accent-2)'].map((c, i) => {
           const x = (i * 53) % 100;
@@ -2258,5 +2290,6 @@ export function SessionResults({ dayId, userId, go, onClose }) {
     </div>
   );
 
-  return <SessionComplete exercises={state.exercises} sessionTime={state.sessionTime} go={go} onClose={onClose}/>;
+  return <SessionComplete exercises={state.exercises} sessionTime={state.sessionTime} go={go} onClose={onClose}
+    onEdit={dayId ? () => go('log', { dayId, resume: false, edit: true }) : undefined}/>;
 }
