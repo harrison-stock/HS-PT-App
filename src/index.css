@@ -317,6 +317,11 @@ body:has([data-role="trainer"]) {
 }
 
 /* Screen scroll containers */
+/* When a scroller is a flex column, its children must keep their natural
+   height and let the container scroll — otherwise flexbox compresses them to
+   fit the viewport (e.g. the dashboard's today's-session card shrinking when a
+   task pushes total content past the screen height). */
+.dash-scroll > * { flex-shrink: 0; }
 .scroller {
   height: 100%;
   overflow-y: auto;
