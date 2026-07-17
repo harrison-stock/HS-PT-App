@@ -68,6 +68,7 @@ export default function App() {
   const [previewWorkoutId, setPreviewWorkoutId] = React.useState(null);
   const [logDayId, setLogDayId] = React.useState(null);
   const [logResume, setLogResume] = React.useState(false);
+  const [logEdit, setLogEdit] = React.useState(false);
   const [resumePrompt, setResumePrompt] = React.useState(null);
   const [showInstall, setShowInstall] = React.useState(false);
   const [resultsDayId, setResultsDayId] = React.useState(null);
@@ -224,7 +225,7 @@ export default function App() {
       setPreviewWorkoutId(null);
       return;
     }
-    if (target === 'log') { setLogDayId(opts?.dayId || null); setLogResume(!!opts?.resume); }
+    if (target === 'log') { setLogDayId(opts?.dayId || null); setLogResume(!!opts?.resume); setLogEdit(!!opts?.edit); }
     if (target === 'sessionresults') setResultsDayId(opts?.dayId || null);
     // While controlling a client, navigation stays in their app until the coach
     // exits (which routes to 'coach').
@@ -308,7 +309,7 @@ export default function App() {
 
   let ScreenEl;
   if (screen === 'workouts')        ScreenEl = <Workouts go={navigate} openPreview={previewWorkoutId} userId={activeUserId}/>;
-  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={activeUserId} resume={logResume}/>;
+  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={activeUserId} resume={logResume} edit={logEdit}/>;
   else if (screen === 'progress')   ScreenEl = <Progress go={navigate} userId={activeUserId}/>;
   else if (screen === 'body')       ScreenEl = <Body go={navigate} userId={activeUserId} trainerId={impersonating ? session.user.id : profile?.trainer_id}/>;
   else if (screen === 'resources')  ScreenEl = <Resources go={navigate} userId={session.user.id} isTrainer={navIsTrainer}/>;
