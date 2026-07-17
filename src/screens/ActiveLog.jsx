@@ -10,6 +10,7 @@ import { toast } from '../lib/toast'
 import { ExerciseComments } from './ExerciseComments'
 import { notify, trainerOf } from '../lib/notifications'
 import { saveActiveWorkout, loadActiveWorkout, clearActiveWorkout } from '../lib/activeWorkout'
+import { BrandIcon } from '../components/BrandIcon'
 import { BANDS, bandOf } from '../components/bands'
 import { ExercisePicker } from './ProgrammeBuilder'
 
@@ -1280,12 +1281,22 @@ export function SessionComplete({ exercises, sessionTime, go, onClose }) {
           color: 'var(--on-accent)',
           boxShadow: '0 0 calc(34px * var(--glow)) var(--accent-glow)'
         }}>
-          <IconTrophy size={40} />
+          <BrandIcon name="Trophy" size={46} color="var(--on-accent)" />
         </Hex>
         <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color: 'var(--accent)', marginBottom: 8 }}>
           ✓ SESSION COMPLETE
         </div>
-        <div className="h-bold" style={{ fontSize: 26, lineHeight: 1.05 }}>NICE WORK</div>
+        <div className="h-bold" style={{ fontSize: 26, lineHeight: 1.05 }}>WORKOUT COMPLETED</div>
+        {volume > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div className="h-bold text-glow" style={{ fontSize: 34, lineHeight: 1, color: 'var(--accent)' }}>
+              {volume.toLocaleString()}<span style={{ fontSize: 15, marginLeft: 4, color: 'var(--text-2)' }}>kg</span>
+            </div>
+            <div className="mono" style={{ fontSize: 10, letterSpacing: '0.16em', color: 'var(--text-3)', marginTop: 5 }}>
+              TOTAL VOLUME LIFTED
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="scroller" style={{ flex: 1, padding: '12px 16px 28px', minHeight: 0 }}>

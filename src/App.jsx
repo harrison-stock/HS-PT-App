@@ -70,8 +70,23 @@ export default function App() {
   const [resumePrompt, setResumePrompt] = React.useState(null);
   const [showInstall, setShowInstall] = React.useState(false);
   const [resultsDayId, setResultsDayId] = React.useState(null);
-  const [clientViewId, setClientViewId] = React.useState(null);
-  const [clientViewName, setClientViewName] = React.useState(null);
+  // Impersonation ("assume control") persists across a background reload so a
+  // coach isn't booted out of a client when the OS reclaims the tab.
+  const [clientViewId, setClientViewId] = React.useState(() => {
+    try { return sessionStorage.getItem('hs_cv_id') || null; } catch (e) { return null; }
+  });
+  const [clientViewName, setClientViewName] = React.useState(() => {
+    try { return sessionStorage.getItem('hs_cv_name') || null; } catch (e) { return null; }
+  });
+  React.useEffect(() => {
+    try {
+      if (clientViewId) { sessionStorage.setItem('hs_cv_id', clientViewId); sessionStorage.setItem('hs_cv_name', clientViewName || ''); }
+      else { sessionStorage.removeItem('hs_cv_id'); sessionStorage.removeItem('hs_cv_name'); }
+    } catch (e) {}
+  }, [clientViewId, clientViewName]);
+  // Route a coach to their hub only once, on first load — never on later token
+  // refreshes (which would otherwise eject them from a client they're viewing).
+  const didInitialRoute = React.useRef(false);
 
   // Auth state
   const [session, setSession] = React.useState(null);
@@ -125,8 +140,15 @@ export default function App() {
       ]);
       setProfile(data);
       setBootError(false);
-      // Coaches land on the Coach hub (no client homepage in their nav).
-      if (data?.role === 'trainer') setScreen(s => s === 'dashboard' ? 'coach' : s);
+      // Coaches land on the Coach hub (no client homepage in their nav) — but
+      // only on first load, and never while assuming control of a client, so a
+      // token refresh on tab-back doesn't eject them from the client's app.
+      if (data?.role === 'trainer' && !didInitialRoute.current) {
+        didInitialRoute.current = true;
+        let impersonating = false;
+        try { impersonating = !!sessionStorage.getItem('hs_cv_id'); } catch (e) {}
+        if (!impersonating) setScreen(s => s === 'dashboard' ? 'coach' : s);
+      }
     } catch (e) {
       setBootError(true);
     } finally {
@@ -417,7 +439,7 @@ function BottomNav({ screen, go, isTrainer }) {
               position: 'relative', height: 32, width: 38,
               display: 'grid', placeItems: 'center', marginBottom: 2,
             }}>
-              <BrandIcon name={it.brand} size={24} glow={active}
+              <BrandIcon name={it.brand} size={30} glow={active}
                 color={active ? 'var(--accent)' : 'var(--text-3)'} />
             </div>
             <span>{it.label}</span>

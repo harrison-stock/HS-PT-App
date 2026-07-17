@@ -14,6 +14,8 @@ import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { ImportHistory } from './ImportHistory'
 import { toast } from '../lib/toast'
+import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
+import { BRAND_ICONS } from '../data/brandIcons'
 
 // ── Constants ────────────────────────────────────────────────────
 const SEV_COLOR  = { mild: 'var(--c-amber)', moderate: 'var(--c-coral)', severe: '#d93434' };
@@ -1253,6 +1255,7 @@ function TasksTab({ c, trainerId }) {
   const [formId, setFormId] = React.useState('');
   const [title, setTitle]   = React.useState('');
   const [kind, setKind]     = React.useState('check');
+  const [icon, setIcon]     = React.useState('');
   const [due, setDue]       = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const [templates, setTemplates] = React.useState([]);
@@ -1271,10 +1274,13 @@ function TasksTab({ c, trainerId }) {
 
   // Assign a saved template in one tap.
   const applyTemplate = async (t) => {
-    await supabase.from('client_tasks').insert({
+    const trow = {
       client_id: c.id, trainer_id: trainerId,
       title: t.title, kind: t.kind, due_date: t.due_date || null, form_id: t.kind === 'form' ? t.form_id : null,
-    });
+    };
+    if (t.icon) trow.icon = t.icon;
+    let { error } = await supabase.from('client_tasks').insert(trow);
+    if (error && trow.icon) { delete trow.icon; await supabase.from('client_tasks').insert(trow); }
     notify({ recipientId: c.id, actorId: trainerId, kind: t.kind === 'form' ? 'form' : 'task',
       title: t.kind === 'form' ? 'New form to complete' : 'New task assigned', body: t.title, link: { screen: 'dashboard' } });
     reload();
@@ -1287,14 +1293,18 @@ function TasksTab({ c, trainerId }) {
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
-    await supabase.from('client_tasks').insert({
+    const row = {
       client_id: c.id, trainer_id: trainerId,
       title: effTitle, kind, due_date: due || null,
       form_id: kind === 'form' ? formId : null,
-    });
+    };
+    if (icon) row.icon = icon;
+    let { error } = await supabase.from('client_tasks').insert(row);
+    // Fallback if migration 042 (task icon) isn't applied yet.
+    if (error && row.icon) { delete row.icon; ({ error } = await supabase.from('client_tasks').insert(row)); }
     notify({ recipientId: c.id, actorId: trainerId, kind: kind === 'form' ? 'form' : 'task',
       title: kind === 'form' ? 'New form to complete' : 'New task assigned', body: effTitle, link: { screen: 'dashboard' } });
-    setSaving(false); setAdding(false); setTitle(''); setDue(''); setFormId(''); setKind('check'); reload();
+    setSaving(false); setAdding(false); setTitle(''); setDue(''); setFormId(''); setKind('check'); setIcon(''); reload();
   };
 
   const toggle = async (task) => {
@@ -1375,6 +1385,19 @@ function TasksTab({ c, trainerId }) {
               </select>
             </FieldLabel>
           )}
+          <FieldLabel label="ICON (OPTIONAL)">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 34, height: 34, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
+                {icon && hasBrandIcon(icon)
+                  ? <BrandIcon name={icon} size={20} color={TASK_COLOR[kind] || 'var(--accent)'} glow />
+                  : <span className="mono" style={{ fontSize: 13, color: TASK_COLOR[kind] || 'var(--accent)' }}>{TASK_ICON[kind]}</span>}
+              </div>
+              <select value={icon} onChange={e => setIcon(e.target.value)} style={{ ...fieldSt, appearance: 'auto', flex: 1 }}>
+                <option value="">Default ({kind})</option>
+                {BRAND_ICONS.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+          </FieldLabel>
           <button onClick={save} disabled={!canSave} className="btn-primary" style={{ opacity: canSave ? 1 : 0.4 }}>
             {saving ? 'SAVING…' : kind === 'form' ? 'ASSIGN FORM' : 'ADD TASK'}
           </button>
@@ -1408,6 +1431,9 @@ function TaskRow({ t, onToggle, onDelete, faded }) {
       }}>
         {t.completed_at && <IconCheck size={11} sw={2.5}/>}
       </button>
+      {t.icon && hasBrandIcon(t.icon) && (
+        <BrandIcon name={t.icon} size={18} color={col} glow={!t.completed_at} style={{ flexShrink: 0 }} />
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600, textDecoration: t.completed_at ? 'line-through' : 'none', color: 'var(--text)' }}>{t.title}</div>
         <div className="mono" style={{ fontSize: 9, color: col, marginTop: 2, fontWeight: 700 }}>
