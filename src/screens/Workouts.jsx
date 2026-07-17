@@ -93,6 +93,7 @@ function shapeWorkout(row) {
     duration,
     exercises: exerciseCount,
     coachNotes: day.notes || '',
+    img: day.image_url || null,
     sections,
   };
 }
@@ -122,12 +123,12 @@ export function Workouts({ go, openPreview, userId }) {
   React.useEffect(() => {
     if (!userId) return;
     setLoading(true);
-    const query = (sectionFields) => supabase
+    const query = (dayFields, sectionFields) => supabase
       .from('client_workouts')
       .select(`
         id, scheduled_date, status,
         programme_days (
-          id, day_of_week, notes,
+          ${dayFields},
           programme_phases (
             id, name, phase_index,
             programmes ( id, name, tag )
@@ -145,9 +146,11 @@ export function Workouts({ go, openPreview, userId }) {
       .order('scheduled_date');
 
     (async () => {
-      let { data, error } = await query('id, kind, title, sort_order, icon');
+      let { data, error } = await query('id, day_of_week, notes, image_url', 'id, kind, title, sort_order, icon');
+      // Fallback if migration 041 (cover photo) isn't applied yet.
+      if (error) ({ data, error } = await query('id, day_of_week, notes', 'id, kind, title, sort_order, icon'));
       // Fallback if migration 037 (per-section icon) isn't applied yet.
-      if (error) ({ data } = await query('id, kind, title, sort_order'));
+      if (error) ({ data } = await query('id, day_of_week, notes', 'id, kind, title, sort_order'));
       if (data) setWorkouts(data.map(shapeWorkout).filter(Boolean));
       setLoading(false);
     })();

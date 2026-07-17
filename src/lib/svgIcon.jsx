@@ -1,38 +1,22 @@
 import React from 'react'
-import {
-  IconFlame, IconBand, IconDumbbell, IconLeaf, IconActivity, IconHeart,
-  IconBolt, IconTimer, IconTrophy, IconClipboard, IconTarget, IconTrend,
-  IconScale, IconMetronome, IconClock, IconSwap,
-} from '../components/icons'
+import { IconFlame, IconBand, IconDumbbell, IconLeaf } from '../components/icons'
+import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
+import { BRAND_ICONS } from '../data/brandIcons'
 
-// ── Curated section-icon library ─────────────────────────────────
-// Coaches pick one of these (stored as `lib:<key>`) or paste a custom SVG.
-export const ICON_LIBRARY = [
-  { key: 'flame',     label: 'Flame',      render: (s) => <IconFlame size={s}/> },
-  { key: 'band',      label: 'Band',       render: (s) => <IconBand size={s}/> },
-  { key: 'dumbbell',  label: 'Dumbbell',   render: (s) => <IconDumbbell size={s}/> },
-  { key: 'leaf',      label: 'Leaf',       render: (s) => <IconLeaf size={s}/> },
-  { key: 'activity',  label: 'Pulse',      render: (s) => <IconActivity size={s}/> },
-  { key: 'heart',     label: 'Heart',      render: (s) => <IconHeart size={s}/> },
-  { key: 'bolt',      label: 'Bolt',       render: (s) => <IconBolt size={s}/> },
-  { key: 'timer',     label: 'Timer',      render: (s) => <IconTimer size={s}/> },
-  { key: 'clock',     label: 'Clock',      render: (s) => <IconClock size={s}/> },
-  { key: 'trophy',    label: 'Trophy',     render: (s) => <IconTrophy size={s}/> },
-  { key: 'target',    label: 'Target',     render: (s) => <IconTarget size={s}/> },
-  { key: 'trend',     label: 'Trend',      render: (s) => <IconTrend size={s}/> },
-  { key: 'scale',     label: 'Scale',      render: (s) => <IconScale size={s}/> },
-  { key: 'metronome', label: 'Tempo',      render: (s) => <IconMetronome size={s}/> },
-  { key: 'clipboard', label: 'Clipboard',  render: (s) => <IconClipboard size={s}/> },
-  { key: 'swap',      label: 'Swap',       render: (s) => <IconSwap size={s}/> },
-];
-const LIB = Object.fromEntries(ICON_LIBRARY.map(i => [i.key, i]));
+// ── Section-icon library ─────────────────────────────────────────
+// The full uploaded brand icon set (public/icons). Coaches pick one in the
+// programme builder (stored as `brand:<Name>`) or paste a custom SVG.
+export const ICON_LIBRARY = BRAND_ICONS.map((name) => ({ key: name, label: name, value: `brand:${name}` }));
 
-// Default glyph by section kind (used when no custom icon is set).
-export function defaultSectionRender(kind) {
-  return kind === 'PULSE_RAISER' ? (s) => <IconFlame size={s}/>
-    : kind === 'BANDED'   ? (s) => <IconBand size={s}/>
-    : kind === 'COOLDOWN' ? (s) => <IconLeaf size={s}/>
-    : (s) => <IconDumbbell size={s}/>;
+// Default brand glyph by section kind (used when no custom icon is set).
+const KIND_BRAND = { PULSE_RAISER: 'Flame', BANDED: 'Stretches', MAIN: 'Weightlifting', COOLDOWN: 'Cooldown' };
+
+// Fallback line icons if a brand icon is somehow missing.
+function defaultLineIcon(kind, s) {
+  return kind === 'PULSE_RAISER' ? <IconFlame size={s}/>
+    : kind === 'BANDED'   ? <IconBand size={s}/>
+    : kind === 'COOLDOWN' ? <IconLeaf size={s}/>
+    : <IconDumbbell size={s}/>;
 }
 
 // ── SVG sanitiser ────────────────────────────────────────────────
@@ -72,31 +56,37 @@ export function sanitizeSvg(raw) {
   const viewBox = svg.getAttribute('viewBox') || '0 0 24 24';
   const inner = svg.innerHTML.trim();
   if (!inner) return null;
-  // Default to a filled icon adopting currentColor when the markup sets no paint.
   const hasPaint = /(fill|stroke)=/i.test(inner);
   return { viewBox, inner, fill: hasPaint ? undefined : 'currentColor' };
 }
 
 // ── Renderer ─────────────────────────────────────────────────────
-// `icon`: '' / null → default by kind; 'lib:<key>' → curated; '<svg…>' → custom.
+// `icon`: '' / null → default by kind; 'brand:<Name>' → uploaded brand icon;
+// '<svg…>' → sanitised custom SVG. ('lib:' from the old set falls back to kind.)
 export function SectionGlyph({ icon, kind, size = 15, color = 'currentColor', glow = false }) {
-  const wrap = (node) => (
-    <span style={{
-      display: 'inline-grid', placeItems: 'center', color, width: size, height: size,
-      filter: glow ? `drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, ${color} 55%, transparent))` : 'none',
-    }}>{node}</span>
-  );
-
-  if (typeof icon === 'string' && icon.startsWith('lib:')) {
-    const item = LIB[icon.slice(4)];
-    if (item) return wrap(item.render(size));
+  if (typeof icon === 'string' && icon.startsWith('brand:')) {
+    const name = icon.slice(6);
+    if (hasBrandIcon(name)) return <BrandIcon name={name} size={size} color={color} glow={glow} />;
   }
   if (typeof icon === 'string' && icon.trim().startsWith('<svg')) {
     const safe = sanitizeSvg(icon);
-    if (safe) return wrap(
-      <svg width={size} height={size} viewBox={safe.viewBox} fill={safe.fill}
-        style={{ display: 'block' }} dangerouslySetInnerHTML={{ __html: safe.inner }} />
+    if (safe) return (
+      <span style={{
+        display: 'inline-grid', placeItems: 'center', color, width: size, height: size,
+        filter: glow ? `drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, ${color} 55%, transparent))` : 'none',
+      }}>
+        <svg width={size} height={size} viewBox={safe.viewBox} fill={safe.fill}
+          style={{ display: 'block' }} dangerouslySetInnerHTML={{ __html: safe.inner }} />
+      </span>
     );
   }
-  return wrap(defaultSectionRender(kind)(size));
+  // Default by section kind → brand icon (fallback to a line icon).
+  const brand = KIND_BRAND[kind];
+  if (brand && hasBrandIcon(brand)) return <BrandIcon name={brand} size={size} color={color} glow={glow} />;
+  return (
+    <span style={{
+      display: 'inline-grid', placeItems: 'center', color, width: size, height: size,
+      filter: glow ? `drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, ${color} 55%, transparent))` : 'none',
+    }}>{defaultLineIcon(kind, size)}</span>
+  );
 }

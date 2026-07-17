@@ -725,7 +725,7 @@ function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
             style={{ width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <IconCheck size={13} sw={3}/> EDIT LOGGED RESULTS →
           </button>
-          <Mono style={{ marginTop: 6 }}>Amend the sets this client actually logged — fix typos in weights or reps.</Mono>
+          <Mono style={{ marginTop: 6 }}>Amend logged sets or fill in exercises the client missed — every prescribed movement is listed.</Mono>
         </div>
       )}
 
@@ -778,27 +778,60 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
 
   React.useEffect(() => {
     if (!clientId || !dayId) { setState('none'); return; }
-    supabase.from('workout_sessions')
-      .select('id, completed_at, logged_sets(id, exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_band, actual_time_secs, intensity, section_exercises(name))')
-      .eq('client_id', clientId).eq('day_id', dayId)
-      .not('completed_at', 'is', null)
-      .order('completed_at', { ascending: false }).limit(1).maybeSingle()
-      .then(({ data }) => {
-        if (!data || !(data.logged_sets || []).length) { setState('none'); return; }
-        const map = new Map();
-        [...data.logged_sets].sort((a, b) => a.set_index - b.set_index).forEach(ls => {
-          const key = ls.exercise_id || `n:${ls.exercise_name}`;
-          const name = ls.section_exercises?.name || ls.exercise_name || 'Exercise';
-          if (!map.has(key)) map.set(key, { key, name, sets: [] });
-          map.get(key).sets.push({
-            id: ls.id,
-            reps: ls.actual_reps ?? '', kg: ls.actual_weight_kg ?? '', band: ls.actual_band || '',
-            timeSecs: ls.actual_time_secs ?? null, intensity: ls.intensity ?? '',
-            timed: !!ls.actual_time_secs, banded: !!ls.actual_band, _deleted: false,
+    let cancelled = false;
+    (async () => {
+      // 1) Most recent completed session for this client/day + its logged sets.
+      const { data: sess } = await supabase.from('workout_sessions')
+        .select('id, completed_at, logged_sets(id, exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_band, actual_time_secs, intensity, section_exercises(name))')
+        .eq('client_id', clientId).eq('day_id', dayId)
+        .not('completed_at', 'is', null)
+        .order('completed_at', { ascending: false }).limit(1).maybeSingle();
+
+      // 2) The prescribed structure for this day, so we can also surface
+      //    exercises the client skipped (no logged sets).
+      const { data: secs } = await supabase.from('workout_sections')
+        .select('sort_order, section_exercises(id, name, timed, banded, sort_order, exercise_sets(set_index, kind))')
+        .eq('day_id', dayId).order('sort_order');
+      if (cancelled) return;
+
+      // Logged sets grouped by their exercise.
+      const logged = new Map();
+      [...((sess?.logged_sets) || [])].sort((a, b) => a.set_index - b.set_index).forEach(ls => {
+        const key = ls.exercise_id || `n:${ls.exercise_name}`;
+        const name = ls.section_exercises?.name || ls.exercise_name || 'Exercise';
+        if (!logged.has(key)) logged.set(key, { key, exId: ls.exercise_id || null, name, missed: false, sets: [] });
+        logged.get(key).sets.push({
+          id: ls.id,
+          reps: ls.actual_reps ?? '', kg: ls.actual_weight_kg ?? '', band: ls.actual_band || '',
+          timeSecs: ls.actual_time_secs ?? null, intensity: ls.intensity ?? '',
+          timed: !!ls.actual_time_secs, banded: !!ls.actual_band, _deleted: false,
+        });
+      });
+
+      // Walk the prescribed exercises in order: reuse logged data when present,
+      // otherwise show the exercise as "missed" with blank rows to fill in.
+      const exercises = [];
+      const usedKeys = new Set();
+      (secs || []).forEach(sec => {
+        [...(sec.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order).forEach(se => {
+          if (logged.has(se.id)) { exercises.push(logged.get(se.id)); usedKeys.add(se.id); return; }
+          const nSets = Math.max(1, ([...(se.exercise_sets || [])].filter(s => s.kind !== 'WARMUP').length) || (se.exercise_sets || []).length);
+          exercises.push({
+            key: `p:${se.id}`, exId: se.id, name: se.name || 'Exercise', missed: true,
+            sets: Array.from({ length: nSets }, () => ({
+              id: null, _new: true, reps: '', kg: '', band: '', timeSecs: null, intensity: '',
+              timed: !!se.timed, banded: !!se.banded, _deleted: false,
+            })),
           });
         });
-        setState({ sessionId: data.id, exercises: [...map.values()] });
       });
+      // Any logged exercises not in the prescribed plan (e.g. added ad-hoc).
+      logged.forEach((ex, key) => { if (!usedKeys.has(key)) exercises.push(ex); });
+
+      if (!sess && exercises.every(e => e.missed)) { setState('none'); return; }
+      setState({ sessionId: sess?.id || null, exercises });
+    })();
+    return () => { cancelled = true; };
   }, [clientId, dayId]);
 
   const upd = (exi, si, patch) => {
@@ -808,20 +841,52 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
 
   const save = async () => {
     setSaving(true);
-    const rows = state.exercises.flatMap(ex => ex.sets);
-    for (const s of rows) {
-      if (s._deleted) { await supabase.from('logged_sets').delete().eq('id', s.id); continue; }
-      await supabase.from('logged_sets').update({
-        actual_reps: s.timed ? null : (s.reps === '' ? null : parseInt(s.reps) || 0),
-        actual_weight_kg: (s.kg === '' || s.banded) ? null : (parseFloat(s.kg) || null),
-        actual_band: s.band || null,
-        actual_time_secs: s.timed ? (s.timeSecs || null) : null,
-        intensity: s.intensity === '' ? null : parseInt(s.intensity),
-      }).eq('id', s.id);
+    // A missed exercise being filled in needs a session to attach to — create
+    // one if this day was completed without a logged session.
+    let sessionId = state.sessionId;
+    const hasNewFilled = state.exercises.some(ex => ex.exId && ex.sets.some(s =>
+      s._new && !s._deleted && (s.reps !== '' || s.kg !== '' || s.band !== '' || s.timeSecs != null || s.intensity !== '')));
+    if (!sessionId && hasNewFilled) {
+      const { data: ns } = await supabase.from('workout_sessions')
+        .insert({ client_id: clientId, day_id: dayId, completed_at: new Date().toISOString() })
+        .select('id').single();
+      sessionId = ns?.id || null;
+    }
+
+    for (const ex of state.exercises) {
+      for (const s of ex.sets) {
+        const payload = {
+          actual_reps: s.timed ? null : (s.reps === '' ? null : parseInt(s.reps) || 0),
+          actual_weight_kg: (s.kg === '' || s.banded) ? null : (parseFloat(s.kg) || null),
+          actual_band: s.band || null,
+          actual_time_secs: s.timed ? (s.timeSecs || null) : null,
+          intensity: s.intensity === '' ? null : parseInt(s.intensity),
+        };
+        if (s._new) {
+          const filled = s.reps !== '' || s.kg !== '' || s.band !== '' || s.timeSecs != null || s.intensity !== '';
+          if (s._deleted || !filled || !sessionId || !ex.exId) continue;
+          const idx = ex.sets.filter(x => !x._deleted).indexOf(s);
+          await supabase.from('logged_sets').insert({
+            session_id: sessionId, exercise_id: ex.exId, exercise_name: ex.name,
+            set_index: idx < 0 ? 0 : idx, ...payload,
+          });
+        } else if (s._deleted) {
+          await supabase.from('logged_sets').delete().eq('id', s.id);
+        } else {
+          await supabase.from('logged_sets').update(payload).eq('id', s.id);
+        }
+      }
     }
     setSaving(false);
     toast('Results updated');
     onSaved();
+  };
+
+  const addSet = (exi) => {
+    setState(st => ({ ...st, exercises: st.exercises.map((ex, i) => i !== exi ? ex : ({
+      ...ex, sets: [...ex.sets, { id: null, _new: true, reps: '', kg: '', band: '', timeSecs: null, intensity: '', timed: !!ex.sets[0]?.timed, banded: !!ex.sets[0]?.banded, _deleted: false }],
+    })) }));
+    setDirty(true);
   };
 
   const cell = { ...fieldSt, padding: '7px 8px', fontSize: 12, textAlign: 'center' };
@@ -843,8 +908,13 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
       {state && state !== 'none' && (
         <>
           {state.exercises.map((ex, exi) => (
-            <div key={ex.key} style={{ display: 'grid', gap: 6 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{ex.name}</div>
+            <div key={ex.key} style={{ display: 'grid', gap: 6, opacity: ex.missed && ex.sets.every(s => s._new && !(s.reps !== '' || s.kg !== '' || s.band !== '' || s.timeSecs != null || s.intensity !== '')) ? 0.72 : 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{ex.name}</span>
+                {ex.missed && (
+                  <span className="mono" style={{ fontSize: 8, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--c-coral)', background: 'color-mix(in srgb, var(--c-coral) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--c-coral) 40%, transparent)', borderRadius: 5, padding: '2px 6px' }}>MISSED</span>
+                )}
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '22px 1fr 1fr 44px 26px', gap: 6, alignItems: 'center' }}>
                 <Mono style={{ fontSize: 8 }}>SET</Mono>
                 <Mono style={{ fontSize: 8 }}>{ex.sets[0]?.timed ? 'TIME(S)' : ex.sets[0]?.banded ? 'BAND' : 'KG'}</Mono>
@@ -853,12 +923,12 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
                 <span/>
               </div>
               {ex.sets.map((s, si) => s._deleted ? (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
+                <div key={s.id ?? `n${si}`} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
                   <Mono style={{ flex: 1 }}>SET {si + 1} — removed</Mono>
                   <button onClick={() => upd(exi, si, { _deleted: false })} className="mono" style={{ all: 'unset', cursor: 'pointer', fontSize: 9, color: 'var(--accent)' }}>UNDO</button>
                 </div>
               ) : (
-                <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '22px 1fr 1fr 44px 26px', gap: 6, alignItems: 'center' }}>
+                <div key={s.id ?? `n${si}`} style={{ display: 'grid', gridTemplateColumns: '22px 1fr 1fr 44px 26px', gap: 6, alignItems: 'center' }}>
                   <Mono style={{ textAlign: 'center' }}>{si + 1}</Mono>
                   {s.timed
                     ? <input type="number" value={s.timeSecs ?? ''} onChange={e => upd(exi, si, { timeSecs: e.target.value === '' ? null : parseInt(e.target.value) || 0 })} style={cell}/>
@@ -870,6 +940,7 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
                   <button onClick={() => upd(exi, si, { _deleted: true })} aria-label="Remove set" style={{ all: 'unset', cursor: 'pointer', color: 'var(--c-coral)', display: 'grid', placeItems: 'center' }}><IconX2 size={12}/></button>
                 </div>
               ))}
+              <button onClick={() => addSet(exi)} className="mono" style={{ all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '5px 0', borderRadius: 6, border: '1px dashed var(--line-strong)', color: 'var(--text-3)', fontSize: 9, letterSpacing: '0.1em' }}>+ ADD SET</button>
             </div>
           ))}
 
