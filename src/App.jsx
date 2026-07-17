@@ -2,6 +2,7 @@ import React from 'react'
 import { supabase } from './lib/supabase'
 import { HexShape } from './components/hex'
 import { BrandIcon } from './components/BrandIcon'
+import { HexLoader } from './components/Loading'
 import { IconHome, IconCalendar, IconChart, IconBook, IconUser, IconBolt, IconActivity, IconDumbbell, IconDoc, IconPlay } from './components/icons'
 import { Login, SetPassword } from './screens/Login'
 import { Dashboard } from './screens/Dashboard'
@@ -456,18 +457,7 @@ function LoadingScreen() {
       minHeight: '100dvh', display: 'grid', placeItems: 'center',
       background: 'var(--bg-0)',
     }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{
-          display: 'flex', justifyContent: 'center', marginBottom: 14,
-          filter: 'drop-shadow(0 0 calc(18px * var(--glow)) var(--accent-glow))',
-          opacity: 0.8,
-        }}>
-          <HexShape size={38} fill="var(--accent)" />
-        </div>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.2em' }}>
-          LOADING…
-        </div>
-      </div>
+      <HexLoader size={116} label="Loading" />
     </div>
   );
 }
