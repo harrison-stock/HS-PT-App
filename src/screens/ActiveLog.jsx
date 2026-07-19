@@ -30,6 +30,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const [historyForId, setHistoryForId] = React.useState(null);
   const [commentForId, setCommentForId] = React.useState(null);
   const [addingEx, setAddingEx] = React.useState(false);
+  const [supersetForId, setSupersetForId] = React.useState(null); // exId being superset-linked
   const [paused, setPaused] = React.useState(false);
   const [finishing, setFinishing] = React.useState(false);
   const [confirmQuit, setConfirmQuit] = React.useState(false);
@@ -381,6 +382,36 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   };
   const openAddExercise = (pos) => { addPosRef.current = pos || 'after'; setAddingEx(true); };
 
+  // ── Superset link / unlink (during the session) ───────────────
+  // Split a superset back into standalone exercises.
+  const unsupersetGroup = (ssVal) => {
+    if (ssVal == null) return;
+    setExercises((prev) => prev.map((e) => e.ss === ssVal ? { ...e, ss: null } : e));
+  };
+  // Superset the chosen exercise with `supersetForId`: give both the same group
+  // and drop the new one immediately after so the rail merges them into a card.
+  const supersetPick = (ex) => {
+    const anchorId = supersetForId;
+    setExercises((prev) => {
+      const idx = prev.findIndex((e) => e.id === anchorId);
+      if (idx < 0) return prev;
+      const anchor = prev[idx];
+      const ssVal = anchor.ss != null ? anchor.ss : (Date.now() % 1000000);
+      const newEx = {
+        id: 'cx' + Date.now(),
+        name: ex.name, img: ex.img || '',
+        base: { name: ex.name, img: ex.img || '' },
+        phase: anchor.phase, ss: ssVal, banded: !!ex.banded, unilateral: !!ex.unilateral,
+        tempo: '', rest: 60, coach: '', alternatives: [],
+        sets: [{ reps: '10', kg: ex.banded ? null : 0, band: ex.banded ? 'medium' : undefined, perSide: !!ex.unilateral, done: false, active: false, rpe: null }],
+      };
+      const withAnchor = prev.map((e) => e.id === anchorId ? { ...e, ss: ssVal } : e);
+      const insertAt = idx + 1;
+      return [...withAnchor.slice(0, insertAt), newEx, ...withAnchor.slice(insertAt)];
+    });
+    setSupersetForId(null);
+  };
+
   // Tick off every set of an exercise in one tap — no rest timer.
   const completeAllSets = (ids) => {
     const set = new Set(Array.isArray(ids) ? ids : [ids]);
@@ -548,7 +579,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           onUpdate={(exId, si, p) => updateSet(exId, si, p)}
           onAddSet={(exId, kind) => addSet(exId, kind)}
           onDelSet={(exId) => delSet(exId)}
-          onAddExercise={() => openAddExercise('after')}
+          onUnlink={() => unsupersetGroup(it.group[0].ss)}
           onCompleteAll={() => completeAllSets(it.group.map(e => e.id))}
           onTitle={(exId) => setAltsForId(exId)}
           onComment={dayId ? (exId) => setCommentForId(exId) : null}
@@ -561,6 +592,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         onAddSet={(kind) => addSet(it.ex.id, kind)}
         onDelSet={() => delSet(it.ex.id)}
         onAddExercise={openAddExercise}
+        onSuperset={() => setSupersetForId(it.ex.id)}
         onCompleteAll={() => completeAllSets(it.ex.id)}
         onComment={dayId ? () => setCommentForId(it.ex.id) : null}
         onHistory={() => setHistoryForId(it.ex.id)} />
@@ -657,6 +689,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       {/* Alternatives sheet */}
       {addingEx && <ExercisePicker onClose={() => setAddingEx(false)} onPick={addExercise} />}
 
+      {/* Superset picker — link the chosen exercise into a superset */}
+      {supersetForId && <ExercisePicker onClose={() => setSupersetForId(null)} onPick={supersetPick} />}
+
       {altsFor && <AlternativesSheet ex={altsFor} onClose={() => setAltsForId(null)} onPick={swapExercise} />}
 
       {/* Prior progress sheet */}
@@ -688,10 +723,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       }}>
           <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
           <div style={{ textAlign: 'center', width: '100%', maxWidth: 300 }}>
-            <img src="/logo-mark.png" alt="HS" style={{
-              width: 64, height: 'auto', display: 'block', margin: '0 auto 18px',
-              filter: 'drop-shadow(0 0 calc(16px * var(--glow)) var(--accent-glow))'
-            }} />
+            <div style={{ display: 'grid', placeItems: 'center', margin: '0 auto 18px' }}>
+              <BrandIcon name="Pause" size={76} color="var(--accent)" glow />
+            </div>
             <div className="label" style={{ color: 'var(--accent)', marginBottom: 6 }}>// SESSION PAUSED</div>
             <div className="h-bold" style={{ fontSize: 30, marginBottom: 6, color: '#eceff4' }}>PAUSED</div>
             <div className="mono" style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', letterSpacing: '0.08em', marginBottom: 24 }}>
@@ -763,7 +797,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
 }
 
 // ── EXERCISE CARD (one per swipe page) ───────────────────────────
-function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onCompleteAll, onHistory, onComment, intro }) {
+function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onSuperset, onCompleteAll, onHistory, onComment, intro }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   const [addChoose, setAddChoose] = React.useState(false);
@@ -816,20 +850,21 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
               </span>
             )}
           </div>
-          <button onClick={onTitle} aria-label="Swap or choose an alternate" style={{
-            all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 8, maxWidth: '100%',
-          }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, maxWidth: '100%' }}>
             <span className="h-bold" style={{ fontSize: 18, fontWeight: 900, letterSpacing: '0.01em', lineHeight: 1.05 }}>
               {ex.name.toUpperCase()}
             </span>
-            <IconChevronRight size={16} style={{ color: 'var(--accent)', transform: 'rotate(90deg)', flexShrink: 0 }} />
-          </button>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={onTitle} aria-label="Swap exercise" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
                 <IconSwap size={14} />
               </Hex>
             </button>
+            {onSuperset && ex.ss == null &&
+            <button onClick={onSuperset} aria-label="Superset with another exercise" title="Superset" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+              <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--accent-2)', fontSize: 14, fontWeight: 700 }}>⛓</Hex>
+            </button>}
             <button onClick={onHistory} aria-label="Prior progress" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
                 <IconTrend size={14} />
@@ -1059,7 +1094,7 @@ function FinishSlide({ phaseId, onFinish }) {
 // ── SUPERSET CARD (interleaved, round-based) ─────────────────────
 // Renders a superset group as rounds: round 1 = one set of each exercise,
 // round 2 = the next set of each, etc., so the client alternates A1→A2→A1…
-function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onAddExercise, onCompleteAll, onComment, onHistory, intro }) {
+function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onUnlink, onCompleteAll, onComment, onHistory, intro }) {
   const phase = PHASES.find((p) => p.id === group[0].phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   const letter = (gi) => `${String.fromCharCode(65)}${gi + 1}`; // A1, A2, …
@@ -1104,9 +1139,9 @@ function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle
           ))}
         </div>
 
-        {onAddExercise && (
+        {onUnlink && (
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button onClick={onAddExercise} className="btn-ghost" style={{ flex: 1, fontSize: 11 }}>+ ADD EXERCISE</button>
+            <button onClick={onUnlink} className="btn-ghost" style={{ flex: 1, fontSize: 10, color: 'var(--c-coral)', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))' }}>⛓ UNLINK SUPERSET</button>
           </div>
         )}
       </div>
@@ -1125,10 +1160,9 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
           <div style={{ width: 44, height: 44, borderRadius: 9, background: `url('${e.img}') center/cover, var(--bg-3)`, border: '1px solid var(--line)' }}/>
           <span className="mono" style={{ position: 'absolute', top: -6, left: -6, fontSize: 8, fontWeight: 800, color: 'var(--accent-2)', background: 'var(--bg-1)', border: '1px solid color-mix(in srgb, var(--accent-2) 45%, transparent)', borderRadius: 5, padding: '1px 4px' }}>{label}</span>
         </div>
-        <button onClick={onTitle} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="h-bold" style={{ fontSize: 14, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
-          <IconChevronRight size={13} style={{ color: 'var(--text-3)', transform: 'rotate(90deg)', flexShrink: 0 }} />
-        </button>
+        </div>
         <button onClick={onHistory} aria-label="Prior progress" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconTrend size={13}/></Hex></button>
         {onComment && <button onClick={onComment} aria-label="Comments" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconClipboard size={13}/></Hex></button>}
       </div>
@@ -1199,16 +1233,10 @@ function SectionDivider({ phaseId, nextPhaseId, exercises, slideText, onContinue
           })}
         </div>
 
-        {/* Big brand hex with the count */}
-        <Hex size={140} square style={{
-          background: `linear-gradient(160deg, ${color}, color-mix(in srgb, ${color} 70%, #000))`,
-          boxShadow: `0 0 calc(40px * var(--glow)) color-mix(in srgb, ${color} 45%, transparent)`,
-          color: 'var(--on-accent)', marginBottom: 26
-        }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
-            {(PHASE_ICON[phaseId] || PHASE_ICON._default)(64)}
-          </div>
-        </Hex>
+        {/* Big brand icon (fills the hex footprint, phase-coloured, no badge) */}
+        <div style={{ display: 'grid', placeItems: 'center', color, marginBottom: 26 }}>
+          {(PHASE_ICON[phaseId] || PHASE_ICON._default)(140)}
+        </div>
 
         <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color, marginBottom: 10 }}>
           ✓ {phase.label ? phase.label.toUpperCase() : 'SECTION'} COMPLETE
@@ -1216,15 +1244,9 @@ function SectionDivider({ phaseId, nextPhaseId, exercises, slideText, onContinue
         <div className="h-bold" style={{ fontSize: 26, marginBottom: 18 }}>
           NEXT · {next.label ? next.label.toUpperCase() : ''}
         </div>
-        <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300, marginBottom: 24 }}>
+        <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300 }}>
           {blurb}
         </div>
-
-        <button onClick={onContinue} className="btn-primary" style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 28px'
-        }}>
-          START {next.label ? next.label.toUpperCase() : 'NEXT'} <IconChevronRight size={14} />
-        </button>
       </div>
     </div>);
 
