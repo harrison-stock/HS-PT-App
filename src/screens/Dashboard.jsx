@@ -338,31 +338,21 @@ function GoalCard({ userId }) {
       background: 'linear-gradient(135deg, rgba(243,158,31,0.08), rgba(243,158,31,0.02)), var(--bg-2)',
       borderColor: 'color-mix(in srgb, var(--c-amber) 28%, var(--line))',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-        <div style={{ minWidth: 0 }}>
-          <div className="label" style={{ color: 'var(--c-amber)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <BrandIcon name="Mountain" size={14} color="var(--c-amber)" glow /> // YOUR GOAL
-          </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <BrandIcon name="Mountain" size={56} color="var(--c-amber)" glow style={{ flexShrink: 0 }} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="label" style={{ color: 'var(--c-amber)' }}>// YOUR GOAL</div>
           <div className="h-bold" style={{ fontSize: 18, marginTop: 4, color: 'var(--heading-deep)' }}>{goal.title}</div>
           {goal.description && (
             <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, marginTop: 6 }}>{goal.description}</div>
           )}
+          {countdown && (
+            <div style={{ fontSize: 12.5, color: 'var(--c-amber)', marginTop: 8 }}>
+              {countdown}{goal.target_date && ` · ${new Date(goal.target_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`}
+            </div>
+          )}
         </div>
-        {countdown && (
-          <div style={{ textAlign: 'center', flexShrink: 0 }}>
-            <Hex size={54} style={{ background: 'color-mix(in srgb, var(--c-amber) 16%, var(--bg-3))', border: '1px solid color-mix(in srgb, var(--c-amber) 40%, transparent)', color: 'var(--c-amber)', fontFamily: 'Orbitron', fontWeight: 800, fontSize: 15 }}>
-              {goal.target_date ? Math.max(0, Math.ceil((new Date(goal.target_date) - new Date()) / 86400000)) : '—'}
-            </Hex>
-            <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.1em', marginTop: 5 }}>DAYS LEFT</div>
-          </div>
-        )}
       </div>
-      {countdown && (
-        <div className="mono" style={{ fontSize: 9, color: 'var(--c-amber)', letterSpacing: '0.08em', marginTop: 10 }}>
-          ◷ {countdown.toUpperCase()}
-          {goal.target_date && ` · ${new Date(goal.target_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`}
-        </div>
-      )}
     </div>
   );
 }
@@ -397,9 +387,7 @@ function PtCreditsCard({ userId }) {
       background: `linear-gradient(135deg, color-mix(in srgb, ${col} 9%, transparent), transparent), var(--bg-2)`,
       borderColor: `color-mix(in srgb, ${col} 30%, var(--line))`,
     }}>
-      <Hex size={52} style={{ background: `color-mix(in srgb, ${col} 16%, var(--bg-3))`, border: `1px solid color-mix(in srgb, ${col} 42%, transparent)`, color: col, flexShrink: 0 }}>
-        <BrandIcon name="Weightlifting" size={24} color={col} glow />
-      </Hex>
+      <BrandIcon name="Finances" size={56} color={col} glow style={{ flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="label" style={{ color: col }}>// IN-PERSON CREDITS</div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>

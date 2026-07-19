@@ -223,6 +223,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
 
   // ── Section edits ─────────────────────────────────────────────
   const updateSection = (sIdx, patch) => { setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({ ...s, ...patch })) })); setDirty(true); };
+  const delSection = (sIdx) => { setDay(d => ({ ...d, sections: d.sections.filter((_, si) => si !== sIdx) })); setDirty(true); };
 
   // ── Exercise edits ────────────────────────────────────────────
   const updateEx = (sIdx, eIdx, patch) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, ...patch }))); setDirty(true); };
@@ -489,6 +490,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               <Section key={s.kind + sIdx} s={s} sIdx={sIdx}
                 onIntro={(v) => updateSection(sIdx, { intro: v })}
                 onIcon={(v) => updateSection(sIdx, { icon: v })}
+                onDelete={() => delSection(sIdx)}
                 expandedExId={expandedExId} expandedSetId={expandedSetId}
                 onExpandEx={(id) => { setExpandedExId(expandedExId === id ? null : id); setExpandedSetId(null); }}
                 onExpandSet={(id) => setExpandedSetId(expandedSetId === id ? null : id)}
@@ -931,10 +933,11 @@ function RestDay({ onAdd }) {
 }
 
 // ── SECTION ───────────────────────────────────────────────────────
-function Section({ s, sIdx, onIntro, onIcon, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
   const color = sectionColor(s.kind);
   const [slideOpen, setSlideOpen] = React.useState(false);
   const [iconOpen, setIconOpen] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(false);
   const showSlide = slideOpen || !!s.intro;
   // Superset labels: A1/A2, B1/B2… per consecutive grouped run.
   const seen = {}; let li = 0; const cnt = {};
@@ -977,6 +980,18 @@ function Section({ s, sIdx, onIntro, onIcon, expandedExId, expandedSetId, onExpa
             }}>✎ SLIDE TEXT</button>
           )}
           <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.1em' }}>{s.items.length} EX</span>
+          {onDelete && (
+            confirmDel ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button onClick={onDelete} className="mono" title="Confirm remove section" style={{ all: 'unset', cursor: 'pointer', padding: '3px 7px', borderRadius: 6, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--c-coral)', border: '1px solid color-mix(in srgb, var(--c-coral) 50%, transparent)', background: 'color-mix(in srgb, var(--c-coral) 12%, transparent)' }}>REMOVE?</button>
+                <button onClick={() => setConfirmDel(false)} className="mono" style={{ all: 'unset', cursor: 'pointer', padding: '3px 6px', borderRadius: 6, fontSize: 8.5, fontWeight: 700, color: 'var(--text-3)' }}>✕</button>
+              </span>
+            ) : (
+              <button onClick={() => setConfirmDel(true)} aria-label="Remove section" title="Remove section" style={{ all: 'unset', cursor: 'pointer', width: 22, height: 22, borderRadius: 6, display: 'grid', placeItems: 'center', color: 'var(--text-3)', border: '1px solid var(--line)' }}>
+                <IconX2 size={11}/>
+              </button>
+            )
+          )}
         </div>
       </div>
       {onIntro && showSlide && (
@@ -1344,8 +1359,9 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
   const accent = sk ? sk.c : color;
   const bandCol = bandOf(st.band);
   return (
-    <div style={{ background: expanded ? 'var(--bg-3)' : 'var(--bg-1)', border: '1px solid '+(expanded?accent:'var(--line)'), borderRadius: 8, overflow: 'hidden' }}>
-      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', width: '100%', display: 'grid', gridTemplateColumns: '26px 1fr 1fr 1fr 28px 16px', gap: 4, alignItems: 'center', padding: '6px 4px', boxSizing: 'border-box' }}>
+    <div style={{ background: expanded ? 'var(--bg-3)' : 'var(--bg-1)', border: '1px solid '+(expanded?accent:'var(--line)'), borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: '26px 1fr 1fr 1fr 28px 16px', gap: 4, alignItems: 'center', padding: '6px 4px', boxSizing: 'border-box' }}>
         <span style={{ width: 20, height: 20, borderRadius: 4, background: sk?`color-mix(in srgb, ${sk.c} 15%, transparent)`:'rgba(255,255,255,0.04)', color: sk?sk.c:'var(--text-2)', border: sk?`1px solid color-mix(in srgb, ${sk.c} 50%, transparent)`:'1px solid var(--line)', fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 9, display: 'grid', placeItems: 'center' }}>
           {sk ? sk.l : String(setIdx+1).padStart(2,'0')}
         </span>
@@ -1359,6 +1375,12 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
         <span style={{ width: 22, height: 20, borderRadius: 4, display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${intensityColor(st.intensity)} 18%, transparent)`, color: intensityColor(st.intensity), fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 10, border: `1px solid color-mix(in srgb, ${intensityColor(st.intensity)} 40%, transparent)` }}>{st.intensity}</span>
         <div style={{ color: 'var(--text-3)', transform: expanded?'rotate(90deg)':'rotate(0)', transition: 'transform .2s', display: 'grid', placeItems: 'center' }}><IconChevronRight size={11}/></div>
       </button>
+      {total > 1 && (
+        <button onClick={onDelete} aria-label="Remove set" title="Remove set" style={{ all: 'unset', cursor: 'pointer', flexShrink: 0, padding: '0 9px', display: 'grid', placeItems: 'center', color: 'var(--c-coral)', borderLeft: '1px solid var(--line)' }}>
+          <IconX2 size={11}/>
+        </button>
+      )}
+      </div>
 
       {expanded && (
         <div style={{ padding: '4px 8px 10px', borderTop: '1px dashed var(--line)' }}>
