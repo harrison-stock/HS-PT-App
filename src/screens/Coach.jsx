@@ -6,6 +6,8 @@ import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { ClientDetail } from './ClientDetail'
 import { loadForms } from '../lib/forms'
 import { notify } from '../lib/notifications'
+import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
+import { BRAND_ICONS } from '../data/brandIcons'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -1139,6 +1141,7 @@ function TaskTemplatesTab({ trainerId }) {
   const [adding, setAdding] = React.useState(false);
   const [title, setTitle] = React.useState('');
   const [kind, setKind] = React.useState('check');
+  const [icon, setIcon] = React.useState('');
   const [formId, setFormId] = React.useState('');
   const [due, setDue] = React.useState('');
   const [saving, setSaving] = React.useState(false);
@@ -1154,11 +1157,15 @@ function TaskTemplatesTab({ trainerId }) {
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
-    await supabase.from('task_templates').insert({
+    const row = {
       trainer_id: trainerId, title: effTitle, kind, form_id: kind === 'form' ? formId : null,
       due_date: due || null, sort_order: (templates?.length || 0),
-    });
-    setSaving(false); setAdding(false); setTitle(''); setKind('check'); setFormId(''); setDue(''); reload();
+    };
+    if (icon) row.icon = icon;
+    let { error } = await supabase.from('task_templates').insert(row);
+    // Fallback if migration 042 (task icon) isn't applied yet.
+    if (error && row.icon) { delete row.icon; ({ error } = await supabase.from('task_templates').insert(row)); }
+    setSaving(false); setAdding(false); setTitle(''); setKind('check'); setIcon(''); setFormId(''); setDue(''); reload();
   };
 
   const del = async (id) => { await supabase.from('task_templates').delete().eq('id', id); reload(); };
@@ -1213,6 +1220,20 @@ function TaskTemplatesTab({ trainerId }) {
               </select>
             </div>
           )}
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>ICON (OPTIONAL)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 34, height: 34, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
+                {icon && hasBrandIcon(icon)
+                  ? <BrandIcon name={icon} size={20} color={TT_COLOR[kind] || 'var(--accent)'} glow />
+                  : <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>—</span>}
+              </div>
+              <select value={icon} onChange={e => setIcon(e.target.value)} style={{ ...ttInputSt, appearance: 'auto', flex: 1 }}>
+                <option value="">Default ({kind})</option>
+                {BRAND_ICONS.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+          </div>
           <button onClick={save} disabled={!canSave} className="btn-primary" style={{ opacity: canSave ? 1 : 0.4 }}>
             {saving ? 'SAVING…' : 'SAVE TEMPLATE'}
           </button>
@@ -1231,7 +1252,9 @@ function TaskTemplatesTab({ trainerId }) {
             const col = TT_COLOR[t.kind] || 'var(--accent)';
             return (
               <div key={t.id} className="card" style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, borderLeft: `2px solid ${col}` }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }}/>
+                {t.icon && hasBrandIcon(t.icon)
+                  ? <BrandIcon name={t.icon} size={20} color={col} style={{ flexShrink: 0 }}/>
+                  : <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }}/>}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
                   <div className="mono" style={{ fontSize: 9, color: col, marginTop: 2, letterSpacing: '0.08em', fontWeight: 700 }}>

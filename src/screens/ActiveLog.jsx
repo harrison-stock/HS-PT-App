@@ -514,13 +514,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
                 }}>
                   <IconCheck size={11} sw={3} />
                 </Hex> :
-                <Hex size={26} square style={{
-                  background: `color-mix(in srgb, ${p.accent} ${isCurrent ? 26 : 16}%, var(--bg-3))`,
-                  border: `1.5px solid color-mix(in srgb, ${p.accent} ${isCurrent ? 70 : 42}%, transparent)`,
-                  color: p.accent
-                }}>
-                  {(PHASE_ICON[p.id] || PHASE_ICON._default)(13)}
-                </Hex>}
+                <span style={{ display: 'grid', placeItems: 'center', width: 30, height: 28, color: p.accent }}>
+                  {(PHASE_ICON[p.id] || PHASE_ICON._default)(28)}
+                </span>}
               </button>);
 
           })}
@@ -1307,14 +1303,9 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
             transform: `rotate(${x * 3.6}deg)`, opacity: 0.85
           }} />;
         })}
-        <Hex size={92} square style={{
-          margin: '6px auto 16px',
-          background: 'linear-gradient(160deg, var(--accent), var(--accent-2))',
-          color: 'var(--on-accent)',
-          boxShadow: '0 0 calc(34px * var(--glow)) var(--accent-glow)'
-        }}>
-          <BrandIcon name="Trophy" size={46} color="var(--on-accent)" />
-        </Hex>
+        <div style={{ display: 'grid', placeItems: 'center', margin: '6px auto 16px' }}>
+          <BrandIcon name="Trophy" size={92} color="var(--accent)" glow />
+        </div>
         <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color: 'var(--accent)', marginBottom: 8 }}>
           ✓ SESSION COMPLETE
         </div>
@@ -1464,10 +1455,10 @@ function SCKpi({ label, value, unit }) {
 
 // Cute little icon per training phase (rendered inside the phase-strip hex).
 const PHASE_ICON = {
-  pulse:    (s) => <IconFlame size={s} />,
-  banded:   (s) => <IconBand size={s} />,
-  main:     (s) => <IconDumbbell size={s} />,
-  cooldown: (s) => <IconLeaf size={s} />,
+  pulse:    (s) => <BrandIcon name="Flame" size={s} />,
+  banded:   (s) => <BrandIcon name="Stretches" size={s} />,
+  main:     (s) => <BrandIcon name="Weightlifting" size={s} />,
+  cooldown: (s) => <BrandIcon name="Cooldown" size={s} />,
   _default: (s) => <IconActivity size={s} />
 };
 
