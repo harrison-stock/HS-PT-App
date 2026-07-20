@@ -1,6 +1,6 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
-import { loadMuscleVolume } from '../lib/muscleVolume'
+import { loadMuscleVolume, muscleGroupsFor } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { loadPhotoHistory, uploadProgressPhoto, deleteProgressPhoto } from '../lib/progressPhotos'
 import { toast } from '../lib/toast'
@@ -26,6 +26,19 @@ const CAT_ICON = (id, sz) => {
   return null;
 };
 
+// Fine muscle key → coarse body-region bucket, so weights group by muscle.
+const MUSCLE_BUCKET = {
+  chest: 'chest',
+  lats: 'back', upperBack: 'back', lowerBack: 'back', traps: 'back',
+  quads: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs', adductors: 'legs',
+  shoulders: 'shoulders',
+  biceps: 'arms', triceps: 'arms', forearms: 'arms',
+  abs: 'core', obliques: 'core',
+};
+const BUCKET_LABEL = { chest: 'Chest', back: 'Back', legs: 'Legs', shoulders: 'Shoulders', arms: 'Arms', core: 'Core', other: 'Other' };
+const BUCKET_ORDER = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core', 'other'];
+const bucketFor = (name) => MUSCLE_BUCKET[muscleGroupsFor(name)[0]] || 'other';
+
 async function loadWeightData(userId) {
   const { data: sessions } = await supabase
     .from('workout_sessions')
@@ -42,8 +55,9 @@ async function loadWeightData(userId) {
     for (const ls of (sess.logged_sets || [])) {
       const se = ls.section_exercises;
       if (!se) continue;
-      const kind = se.workout_sections?.kind || 'MAIN';
-      if (!exMap.has(se.id)) exMap.set(se.id, { id: se.id, name: se.name, category: kind, sessMap: new Map() });
+      // Group by muscle region derived from the exercise name (not the section).
+      const bucket = bucketFor(se.name);
+      if (!exMap.has(se.id)) exMap.set(se.id, { id: se.id, name: se.name, category: bucket, sessMap: new Map() });
       const ex = exMap.get(se.id);
       if (!ex.sessMap.has(sess.id)) ex.sessMap.set(sess.id, { d, completedAt: sess.completed_at, sets: [] });
       ex.sessMap.get(sess.id).sets.push({ w: parseFloat(ls.actual_weight_kg) || 0, r: ls.actual_reps || 0 });
@@ -56,7 +70,9 @@ async function loadWeightData(userId) {
     const history = sessArr.map(sg => {
       const maxW = sg.sets.reduce((m, s) => Math.max(m, s.w), 0);
       const atMax = sg.sets.find(s => s.w === maxW) || sg.sets[0];
-      return { d: sg.d, w: maxW, r: atMax?.r || 0, sets: sg.sets };
+      const setSummary = sg.sets.map(s => `${s.w || 'BW'}${s.w ? 'kg' : ''}×${s.r}`).join(', ');
+      return { d: sg.d, date: sg.completedAt, w: maxW, r: atMax?.r || 0, sets: sg.sets,
+        label: `${ex.name} — ${sg.sets.length} set${sg.sets.length === 1 ? '' : 's'} · ${setSummary}` };
     });
     const best = history.reduce((b, h) => h.w > b.w ? h : b, history[0] || { w: 0, r: 0 });
     const prevBest = history.length > 1 ? history.slice(0, -1).reduce((b, h) => h.w > b.w ? h : b, history[0]) : null;
@@ -65,7 +81,7 @@ async function loadWeightData(userId) {
     const allSets = sessArr.flatMap(sg => sg.sets);
     const maxR = allSets.reduce((b, s) => s.r > b.r ? s : b, allSets[0] || { r: 0, w: 0 });
     exs.push({
-      id: ex.id, name: ex.name, category: ex.category, muscle: '',
+      id: ex.id, name: ex.name, category: ex.category, muscle: BUCKET_LABEL[ex.category] || '',
       pr: isPR,
       maxWeight: { value: best.w, unit: 'kg', reps: best.r, delta: isPR ? `+${(last.w - prevBest.w).toFixed(1)}kg` : null },
       maxReps: { value: maxR.r, weight: maxR.w },
@@ -73,9 +89,8 @@ async function loadWeightData(userId) {
     });
   }
 
-  const kindSet = [...new Set(exs.map(e => e.category))];
-  const KIND_LABEL = { MAIN: 'Main Lifts', BANDED: 'Activation', PULSE_RAISER: 'Pulse Raiser', COOLDOWN: 'Cooldown' };
-  const cats = kindSet.map(k => ({ id: k, label: KIND_LABEL[k] || k, accent: ZONE_COLOR_ALL[k] || 'var(--accent)' }));
+  const present = new Set(exs.map(e => e.category));
+  const cats = BUCKET_ORDER.filter(b => present.has(b)).map(k => ({ id: k, label: BUCKET_LABEL[k], accent: ZONE_COLOR_ALL[k] || 'var(--accent)' }));
 
   return { cats, exs };
 }
@@ -84,18 +99,19 @@ async function loadWeightData(userId) {
 // render a client's exact Metrics view inside the client file.
 export function Progress({ go, userId, embedded }) {
   const [tab, setTab] = React.useState('body');
-  const [range, setRange] = React.useState('7d');
+  const [range, setRange] = React.useState('90d');
 
   return (
     <div className={embedded ? '' : 'scroller'} style={{ padding: embedded ? '0 0 24px' : '0 16px 28px', paddingTop: embedded ? 0 : 'calc(env(safe-area-inset-top, 0px) + 18px)' }} data-comment-anchor="2e58f3c1e8-div-7-5">
-      <div style={{ display: 'flex', justifyContent: tab === 'photos' ? 'flex-end' : 'flex-end', alignItems: 'flex-end', marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end', marginBottom: 14 }}>
         {!embedded && (
           <div style={{ marginRight: 'auto' }}>
             <div className="label">// ANALYTICS</div>
             <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>PROGRESS</div>
           </div>
         )}
-        <div className="seg" style={{ visibility: tab === 'photos' ? 'hidden' : 'visible' }}>
+        {/* Per-chart 1M/3M/12M range controls now live on each graph. */}
+        <div className="seg" style={{ display: 'none' }}>
           {['7d', '30d', '90d'].map((r) =>
           <button key={r} className={range === r ? 'active' : ''} onClick={() => setRange(r)}>{r.toUpperCase()}</button>
           )}
@@ -352,24 +368,67 @@ function fmtMetricDate(iso) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
+// Custom (coach-defined) metrics + their entries.
+async function loadCustomMetrics(userId) {
+  const { data: defs } = await supabase.from('client_custom_metrics')
+    .select('id, name, unit, custom_metric_entries ( value, recorded_at )')
+    .eq('client_id', userId).order('created_at', { ascending: true });
+  return (defs || []).map((d) => ({
+    id: d.id, name: d.name, unit: d.unit || '',
+    entries: [...(d.custom_metric_entries || [])]
+      .map((e) => ({ v: parseFloat(e.value), date: e.recorded_at }))
+      .sort((a, b) => new Date(a.date) - new Date(b.date)),
+  }));
+}
+
+function buildCustomMetrics(defs) {
+  const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+  const out = {};
+  for (const def of defs) {
+    const key = 'c:' + def.id;
+    const series = def.entries;
+    if (!series.length) { out[key] = { key, label: def.name, unit: def.unit, value: '—', delta: 0, deltaPct: 0, series: [], history: [], custom: true, metricId: def.id }; continue; }
+    const value = series[series.length - 1].v;
+    const prior = [...series].reverse().find((p) => p.date <= cutoff) || series[0];
+    const delta = +(value - prior.v).toFixed(1);
+    const deltaPct = prior.v ? +(delta / prior.v * 100).toFixed(1) : 0;
+    out[key] = { key, label: def.name, unit: def.unit, value, delta, deltaPct, series, history: series.map((p) => p.v), custom: true, metricId: def.id };
+  }
+  return out;
+}
+
+function RangeSeg({ range, onChange }) {
+  return (
+    <div className="seg" style={{ display: 'inline-flex' }}>
+      {[['1m', '1M'], ['3m', '3M'], ['12m', '12M']].map(([r, l]) =>
+        <button key={r} className={range === r ? 'active' : ''} onClick={() => onChange(r)}>{l}</button>
+      )}
+    </div>
+  );
+}
+
 function BodyTab({ userId }) {
   const [rows, setRows] = React.useState(null);
+  const [customDefs, setCustomDefs] = React.useState([]);
   const [selected, setSelected] = React.useState('weight');
   const [detail, setDetail] = React.useState(null);   // metric key for full-history drill
   const [logging, setLogging] = React.useState(false); // log-measurement sheet
+  const [addingCustom, setAddingCustom] = React.useState(false);
+  const [range, setRange] = React.useState('3m');
 
-  const reload = React.useCallback(() => {
+  const reload = React.useCallback(async () => {
     if (!userId) { setRows([]); return; }
-    supabase.from('body_metrics').select('*').
-    eq('client_id', userId).
-    order('recorded_at', { ascending: true }).
-    then(({ data }) => setRows(data || []));
+    const { data } = await supabase.from('body_metrics').select('*')
+      .eq('client_id', userId).order('recorded_at', { ascending: true });
+    setRows(data || []);
+    try { setCustomDefs(await loadCustomMetrics(userId)); } catch (e) { setCustomDefs([]); }
   }, [userId]);
   React.useEffect(() => { reload(); }, [reload]);
 
-  const m = React.useMemo(() => buildMetrics(rows || []), [rows]);
+  const m = React.useMemo(() => ({ ...buildMetrics(rows || []), ...buildCustomMetrics(customDefs) }), [rows, customDefs]);
   const keys = Object.keys(m);
   const sel = m[selected] || m[keys[0]];
+  const heroSeries = React.useMemo(() => sel ? filterByRange(sel.series, range) : [], [sel, range]);
 
   if (rows === null) return (
     <div className="card" style={{ padding: 28, textAlign: 'center' }}>
@@ -377,9 +436,16 @@ function BodyTab({ userId }) {
     </div>
   );
 
+  const AddCustomBtn = (
+    <button onClick={() => setAddingCustom(true)} className="btn-ghost" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 }}>
+      <IconPlus size={14} /> ADD CUSTOM METRIC
+    </button>
+  );
+
   if (!sel) return (
     <>
-      {logging && <LogMeasurementSheet userId={userId} metrics={m} onClose={() => setLogging(false)} onSaved={reload} />}
+      {logging && <LogMeasurementSheet userId={userId} metrics={m} customDefs={customDefs} onClose={() => setLogging(false)} onSaved={reload} />}
+      {addingCustom && <AddCustomMetricSheet userId={userId} onClose={() => setAddingCustom(false)} onSaved={reload} />}
       <div className="card" style={{ padding: 28, textAlign: 'center', marginBottom: 14 }}>
         <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
           NO MEASUREMENTS YET<br/>
@@ -389,24 +455,24 @@ function BodyTab({ userId }) {
       <button onClick={() => setLogging(true)} className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         <IconPlus size={14} /> LOG MEASUREMENT
       </button>
+      {AddCustomBtn}
     </>
   );
 
   return (
     <>
       {detail && <BodyMetricDetail met={m[detail]} onBack={() => setDetail(null)} onLog={() => {setDetail(null);setLogging(true);}} />}
-      {logging && <LogMeasurementSheet userId={userId} metrics={m} onClose={() => setLogging(false)} onSaved={reload} />}
+      {logging && <LogMeasurementSheet userId={userId} metrics={m} customDefs={customDefs} onClose={() => setLogging(false)} onSaved={reload} />}
+      {addingCustom && <AddCustomMetricSheet userId={userId} onClose={() => setAddingCustom(false)} onSaved={reload} />}
 
-      {/* Hero metric */}
-      <div className="card" style={{ padding: 16, marginBottom: 14, background: 'linear-gradient(135deg, rgba(0,245,255,0.08), rgba(176,114,255,0.04)), var(--bg-2)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+      {/* Hero metric with large dated chart */}
+      <div className="card" style={{ padding: 18, marginBottom: 14, background: 'linear-gradient(135deg, rgba(0,245,255,0.06), rgba(176,114,255,0.03)), var(--bg-2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="label">// {sel.label.toUpperCase()}</span>
-            </div>
+            <span className="label">// {sel.label.toUpperCase()}</span>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
-              <span className="h-bold" style={{ fontSize: 36, color: 'var(--accent)' }}>{sel.value}</span>
-              <span className="mono" style={{ fontSize: 12, color: 'var(--text-2)' }}>{sel.unit}</span>
+              <span className="h-bold" style={{ fontSize: 40, color: 'var(--accent)' }}>{sel.value}</span>
+              <span className="mono" style={{ fontSize: 13, color: 'var(--text-2)' }}>{sel.unit}</span>
             </div>
             {sel.series.length > 1 && (
               <div className="mono" style={{ fontSize: 11, color: '#189CAA', marginTop: 4, letterSpacing: '0.08em' }}>
@@ -414,19 +480,15 @@ function BodyTab({ userId }) {
               </div>
             )}
           </div>
+          <RangeSeg range={range} onChange={setRange} />
         </div>
 
-        {sel.history.length > 1 ? (
-          <Sparkline data={sel.history} accent />
-        ) : (
-          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', padding: '14px 0', textAlign: 'center' }}>
-            LOG MORE MEASUREMENTS TO SEE YOUR TREND
-          </div>
-        )}
+        <MetricChart series={heroSeries} unit={sel.unit} color="var(--accent)" height={300} />
+
         <button onClick={() => setDetail(sel.key)} style={{
-          all: 'unset', cursor: 'pointer', marginTop: 10, width: '100%', boxSizing: 'border-box',
+          all: 'unset', cursor: 'pointer', marginTop: 12, width: '100%', boxSizing: 'border-box',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          padding: '8px', borderRadius: 8, border: '1px solid var(--line-strong)',
+          padding: '9px', borderRadius: 8, border: '1px solid var(--line-strong)',
           color: 'var(--text-2)', fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 600, letterSpacing: '0.1em'
         }}>
           VIEW FULL HISTORY <IconChevronRight size={11} />
@@ -434,7 +496,7 @@ function BodyTab({ userId }) {
       </div>
 
       <div className="label" style={{ margin: '4px 4px 8px' }}>// METRICS</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 18 }}>
         {Object.entries(m).map(([k, met]) =>
         <button key={k} onClick={() => setSelected(k)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
             <div className="card" style={{
@@ -444,7 +506,7 @@ function BodyTab({ userId }) {
           }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <span className="label" style={{ color: sel.key === k ? 'var(--accent)' : 'var(--text-3)' }}>
-                  {met.label.toUpperCase()}
+                  {met.label.toUpperCase()}{met.custom ? ' ★' : ''}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
@@ -461,17 +523,20 @@ function BodyTab({ userId }) {
         )}
       </div>
 
-      <button onClick={() => setLogging(true)} className="btn-ghost" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      <button onClick={() => setLogging(true)} className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--heading-deep)' }}>
         <IconPlus size={14} /> LOG MEASUREMENT
       </button>
+      {AddCustomBtn}
     </>);
 
 }
 
 // ── BODY METRIC DETAIL (full history drill) ──────────────────────
 function BodyMetricDetail({ met, onBack, onLog }) {
+  const [range, setRange] = React.useState('12m');
   if (!met) return null;
   const rows = [...met.series].reverse(); // most recent first
+  const chartSeries = filterByRange(met.series, range);
 
   return (
     <div style={{
@@ -487,24 +552,25 @@ function BodyMetricDetail({ met, onBack, onLog }) {
       </div>
 
       <div className="scroller" style={{ flex: 1, padding: '14px 16px 30px', minHeight: 0 }}>
-        {/* Hero value */}
-        <div className="card" style={{ padding: 16, marginBottom: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span className="h-bold" style={{ fontSize: 40, color: 'var(--accent)' }}>{met.value}</span>
-              <span className="mono" style={{ fontSize: 13, color: 'var(--text-2)' }}>{met.unit}</span>
+        {/* Hero value + large chart */}
+        <div className="card" style={{ padding: 18, marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span className="h-bold" style={{ fontSize: 44, color: 'var(--accent)' }}>{met.value}</span>
+                <span className="mono" style={{ fontSize: 14, color: 'var(--text-2)' }}>{met.unit}</span>
+              </div>
+              {met.series.length > 1 && (
+                <div className="mono" style={{ fontSize: 11, color: '#189CAA', marginTop: 4, letterSpacing: '0.08em' }}>
+                  {met.delta >= 0 ? '▲' : '▼'} {Math.abs(met.delta)}{met.unit} ({Math.abs(met.deltaPct)}%) vs prior 30d
+                </div>
+              )}
             </div>
+            <RangeSeg range={range} onChange={setRange} />
           </div>
-          {met.series.length > 1 && (
-            <div className="mono" style={{ fontSize: 11, color: '#189CAA', marginTop: 4, letterSpacing: '0.08em' }}>
-              {met.delta >= 0 ? '▲' : '▼'} {Math.abs(met.delta)}{met.unit} ({Math.abs(met.deltaPct)}%) vs prior 30d
-            </div>
-          )}
-          {met.history.length > 1 && (
-            <div style={{ marginTop: 10 }}>
-              <Sparkline data={met.history} accent />
-            </div>
-          )}
+          <div style={{ marginTop: 14 }}>
+            <MetricChart series={chartSeries} unit={met.unit} color="var(--accent)" height={340} />
+          </div>
         </div>
 
         {/* History log */}
@@ -538,20 +604,32 @@ function BodyMetricDetail({ met, onBack, onLog }) {
 }
 
 // ── LOG MEASUREMENT SHEET ────────────────────────────────────────
-function LogMeasurementSheet({ userId, metrics, onClose, onSaved }) {
-  const [vals, setVals] = React.useState(() => Object.fromEntries(METRIC_DEFS.map((f) => [f.key, ''])));
+function LogMeasurementSheet({ userId, metrics, customDefs = [], onClose, onSaved }) {
+  const allDefs = [
+    ...METRIC_DEFS,
+    ...customDefs.map((d) => ({ key: 'c:' + d.id, label: d.name, unit: d.unit, custom: true, metricId: d.id })),
+  ];
+  const [vals, setVals] = React.useState(() => Object.fromEntries(allDefs.map((f) => [f.key, ''])));
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
-  const anyFilled = METRIC_DEFS.some((f) => vals[f.key].trim() !== '');
+  const anyFilled = allDefs.some((f) => (vals[f.key] || '').trim() !== '');
+  const today = new Date().toISOString().slice(0, 10);
 
   const save = async () => {
     if (!anyFilled || saving) return;
     setSaving(true);
-    const payload = { client_id: userId, recorded_at: new Date().toISOString().slice(0, 10) };
+    // Built-in metrics → one body_metrics row.
+    const payload = { client_id: userId, recorded_at: today };
+    let anyBuiltin = false;
     METRIC_DEFS.forEach((f) => {
-      if (vals[f.key].trim() !== '') payload[f.col] = parseFloat(vals[f.key]);
+      if ((vals[f.key] || '').trim() !== '') { payload[f.col] = parseFloat(vals[f.key]); anyBuiltin = true; }
     });
-    await supabase.from('body_metrics').insert(payload);
+    if (anyBuiltin) await supabase.from('body_metrics').insert(payload);
+    // Custom metrics → one entry each.
+    const entries = customDefs
+      .filter((d) => (vals['c:' + d.id] || '').trim() !== '')
+      .map((d) => ({ metric_id: d.id, recorded_at: today, value: parseFloat(vals['c:' + d.id]) }));
+    if (entries.length) await supabase.from('custom_metric_entries').insert(entries);
     setSaving(false);
     setSaved(true);
     toast('Measurements logged');
@@ -592,7 +670,7 @@ function LogMeasurementSheet({ userId, metrics, onClose, onSaved }) {
           </div>
 
           <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
-            {METRIC_DEFS.map((f) =>
+            {allDefs.map((f) =>
             <div key={f.key} style={{
               display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'center',
               padding: '10px 14px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 12
@@ -625,6 +703,174 @@ function LogMeasurementSheet({ userId, metrics, onClose, onSaved }) {
       </div>
     </div>);
 
+}
+
+// ── ADD CUSTOM METRIC SHEET ──────────────────────────────────────
+function AddCustomMetricSheet({ userId, onClose, onSaved }) {
+  const [name, setName] = React.useState('');
+  const [unit, setUnit] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const save = async () => {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    let trainerId = null;
+    try { const { data } = await supabase.from('profiles').select('trainer_id').eq('id', userId).maybeSingle(); trainerId = data?.trainer_id || null; } catch (e) {}
+    const { error } = await supabase.from('client_custom_metrics')
+      .insert({ client_id: userId, trainer_id: trainerId, name: name.trim(), unit: unit.trim() });
+    setSaving(false);
+    if (error) { toast('Could not add metric'); return; }
+    toast('Custom metric added');
+    onSaved?.();
+    onClose();
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 66, background: 'rgba(6,10,12,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, padding: '12px 16px 28px', animation: 'sheetUp .25s ease' }}>
+        <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 14px' }} />
+        <div className="label">// NEW CUSTOM METRIC</div>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.05em', margin: '6px 0 16px', lineHeight: 1.5 }}>
+          Track anything not covered by the defaults — resting HR, sleep hours, grip strength, VO₂ max…
+        </div>
+        <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>NAME</div>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Resting heart rate" autoFocus
+              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 10, color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 13, padding: '11px 13px', outline: 'none' }} />
+          </div>
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>UNIT (OPTIONAL)</div>
+            <input value={unit} onChange={(e) => setUnit(e.target.value.slice(0, 8))} placeholder="e.g. bpm, hrs, kg"
+              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 10, color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 13, padding: '11px 13px', outline: 'none' }} />
+          </div>
+        </div>
+        <button onClick={save} className="btn-primary" style={{ width: '100%', opacity: name.trim() ? 1 : 0.5, pointerEvents: name.trim() && !saving ? 'auto' : 'none' }}>
+          {saving ? 'ADDING…' : 'ADD METRIC'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Chart helpers ─────────────────────────────────────────────────
+const METRIC_RANGE_DAYS = { '1m': 30, '3m': 90, '12m': 365 };
+export function filterByRange(series, range) {
+  const days = METRIC_RANGE_DAYS[range];
+  if (!days) return series;
+  const cutoff = Date.now() - days * 86_400_000;
+  const kept = series.filter((s) => new Date(s.date).getTime() >= cutoff);
+  return kept.length ? kept : series.slice(-2); // never show an empty chart
+}
+// "Nice" axis ticks spanning [min,max] with ~count divisions. The step is
+// rounded UP to a 1/2/2.5/5/10 multiple so charts stay uncluttered.
+function niceTicks(min, max, count = 5) {
+  if (min === max) { min -= 1; max += 1; }
+  const rawStep = (max - min) / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const norm = rawStep / mag;
+  const niceNorm = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+  const step = niceNorm * mag;
+  const start = Math.floor(min / step) * step;
+  const end = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = start; v <= end + step / 2; v += step) ticks.push(+v.toFixed(6));
+  return ticks;
+}
+const fmtDayMonth = (iso) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const fmtTickVal = (v) => Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'k' : (Number.isInteger(v) ? String(v) : v.toFixed(1));
+
+// ── METRIC CHART ──────────────────────────────────────────────────
+// Large, axis-annotated line chart with a real date x-axis and one marker
+// per data point. Hover/tap a point to see its value, date, and source.
+// `series`: ascending [{ date: ISO, v: number, label?: string }].
+export function MetricChart({ series, unit = '', color = 'var(--accent)', height = 280 }) {
+  const [hover, setHover] = React.useState(null);
+  if (!series || series.length < 2) {
+    return <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', padding: '28px 0', textAlign: 'center' }}>LOG MORE DATA TO SEE A TREND</div>;
+  }
+  const W = 760, H = height;
+  const padL = 48, padR = 20, padT = 18, padB = 36;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const vals = series.map((s) => s.v);
+  const dataMin = Math.min(...vals), dataMax = Math.max(...vals);
+  const ticks = niceTicks(dataMin, dataMax, 5);
+  const yMin = ticks[0], yMax = ticks[ticks.length - 1];
+  const yr = (yMax - yMin) || 1;
+  const t0 = new Date(series[0].date).getTime();
+  const t1 = new Date(series[series.length - 1].date).getTime();
+  const span = (t1 - t0) || 1;
+  const X = (iso) => padL + ((new Date(iso).getTime() - t0) / span) * plotW;
+  const Y = (v) => padT + (1 - (v - yMin) / yr) * plotH;
+  const pts = series.map((s) => ({ ...s, x: X(s.date), y: Y(s.v) }));
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
+  const area = line + ` L ${pts[pts.length - 1].x} ${padT + plotH} L ${pts[0].x} ${padT + plotH} Z`;
+  // Choose ~5 evenly-spaced x labels by index.
+  const nX = Math.min(5, series.length);
+  const xIdx = Array.from({ length: nX }, (_, i) => Math.round(i * (series.length - 1) / (nX - 1)));
+  const gid = 'mc' + React.useId().replace(/[:]/g, '');
+  const hp = hover != null ? pts[hover] : null;
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block', overflow: 'visible' }}
+        onMouseLeave={() => setHover(null)}>
+        <defs>
+          <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* Y gridlines + labels */}
+        {ticks.map((v, i) => {
+          const y = Y(v);
+          return (
+            <g key={i}>
+              <line x1={padL} y1={y} x2={padL + plotW} y2={y} stroke="color-mix(in srgb, var(--text-3) 16%, transparent)" strokeWidth="1" strokeDasharray="2 4" />
+              <text x={padL - 8} y={y + 3} textAnchor="end" fontFamily="JetBrains Mono" fontSize="9" fill="var(--text-3)">{fmtTickVal(v)}</text>
+            </g>
+          );
+        })}
+        {/* Axes */}
+        <line x1={padL} y1={padT} x2={padL} y2={padT + plotH} stroke="var(--line-strong)" strokeWidth="1" />
+        <line x1={padL} y1={padT + plotH} x2={padL + plotW} y2={padT + plotH} stroke="var(--line-strong)" strokeWidth="1" />
+        {/* X labels (dates) */}
+        {xIdx.map((idx, i) => (
+          <text key={i} x={pts[idx].x} y={H - 12} textAnchor={i === 0 ? 'start' : i === xIdx.length - 1 ? 'end' : 'middle'}
+            fontFamily="JetBrains Mono" fontSize="9" fill="var(--text-3)">{fmtDayMonth(series[idx].date)}</text>
+        ))}
+        {/* Unit label */}
+        <text x={padL - 8} y={padT - 6} textAnchor="end" fontFamily="JetBrains Mono" fontSize="8" fill="var(--text-3)">{unit}</text>
+        {/* Series */}
+        <path d={area} fill={`url(#${gid})`} />
+        <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          style={{ filter: 'drop-shadow(0 0 calc(4px * var(--glow)) color-mix(in srgb, ' + color + ' 55%, transparent))' }} />
+        {hp && <line x1={hp.x} x2={hp.x} y1={padT} y2={padT + plotH} stroke={color} strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />}
+        {/* One marker per point */}
+        {pts.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={hover === i ? 6 : 4} fill={hover === i ? color : 'var(--bg-1)'}
+            stroke={color} strokeWidth="2" style={{ transition: 'r .1s', cursor: 'pointer' }} />
+        ))}
+        {/* Hover targets */}
+        {pts.map((p, i) => (
+          <circle key={`h${i}`} cx={p.x} cy={p.y} r="18" fill="transparent" style={{ cursor: 'pointer' }}
+            onMouseEnter={() => setHover(i)} onClick={() => setHover(hover === i ? null : i)} />
+        ))}
+      </svg>
+      {hp && (
+        <div style={{
+          position: 'absolute', top: `${(hp.y / H) * 100}%`,
+          left: `clamp(4%, ${(hp.x / W) * 100}%, 82%)`, transform: 'translate(-50%, calc(-100% - 12px))',
+          background: 'var(--bg-3)', border: `1px solid color-mix(in srgb, ${color} 55%, transparent)`,
+          borderRadius: 9, padding: '7px 11px', pointerEvents: 'none', boxShadow: '0 8px 22px rgba(0,0,0,0.45)', whiteSpace: 'nowrap', zIndex: 3,
+        }}>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.08em' }}>{fmtMetricDate(hp.date)}</div>
+          <div className="h-bold" style={{ fontSize: 16, color, lineHeight: 1.15, marginTop: 2 }}>{fmtTickVal(hp.v)}<span style={{ fontSize: 9, marginLeft: 3, color: 'var(--text-2)' }}>{unit}</span></div>
+          {hp.label && <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-2)', letterSpacing: '0.04em', marginTop: 3, maxWidth: 200, whiteSpace: 'normal' }}>{hp.label}</div>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Sparkline({ data }) {
@@ -761,7 +1007,7 @@ function WeightTab({ range, userId }) {
   // Muscle map lives in its own BODY tab now — Metrics shows categories only.
   return (
     <>
-      <CategoriesView onPick={setCatId} cats={cats} exs={exs} />
+      <CategoriesView onPick={setCatId} onPickEx={setExId} cats={cats} exs={exs} />
     </>);
 
 }
@@ -856,7 +1102,8 @@ function MuscleZoneGlyph({ zoneId, color, size = 104 }) {
 
 }
 
-function CategoriesView({ onPick, cats, exs }) {
+function CategoriesView({ onPick, onPickEx, cats, exs }) {
+  const [q, setQ] = React.useState('');
   const totalPRs = exs.filter(e => e.pr).length;
   const SECTION_KINDS = new Set(['MAIN', 'BANDED', 'PULSE_RAISER', 'COOLDOWN']);
 
@@ -869,14 +1116,39 @@ function CategoriesView({ onPick, cats, exs }) {
     </div>
   );
 
+  const query = q.trim().toLowerCase();
+  const matches = query ? exs.filter(e => e.name.toLowerCase().includes(query) || (e.muscle || '').toLowerCase().includes(query)) : [];
+
+  const searchBox = (
+    <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search exercises…" spellCheck={false}
+      style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 10, color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 12, padding: '10px 13px', outline: 'none', marginBottom: 12 }} />
+  );
+
+  if (query) {
+    return (
+      <>
+        {searchBox}
+        <div className="label" style={{ margin: '0 4px 10px' }}>// {matches.length} RESULT{matches.length === 1 ? '' : 'S'}</div>
+        {matches.length === 0 ? (
+          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', textAlign: 'center', padding: '20px 0', letterSpacing: '0.06em' }}>No exercises match “{q}”.</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+            {matches.map(e => <ExerciseSummaryCard key={e.id} e={e} onClick={() => onPickEx(e.id)} />)}
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
+      {searchBox}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '0 4px 10px' }}>
-        <div className="label">// EXERCISE CATEGORIES</div>
+        <div className="label">// MUSCLE GROUPS</div>
         {totalPRs > 0 && <span className="chip chip-lime">{totalPRs} NEW PR</span>}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
         {cats.map((cat) => {
           const items = exs.filter(e => e.category === cat.id);
           const prs = items.filter(e => e.pr).length;
@@ -930,13 +1202,44 @@ function CategoriesView({ onPick, cats, exs }) {
 
 }
 
+// Compact exercise card — PR stats + a mini trend. Reused in the muscle-group
+// drill-down (2-up) and in search results.
+function ExerciseSummaryCard({ e, onClick }) {
+  const zc = ZONE_COLOR_ALL[e.category] || 'var(--accent)';
+  return (
+    <button onClick={onClick} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
+      <div className="card" style={{ padding: 14, height: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {e.name}
+              {e.pr && <span className="chip chip-lime" style={{ fontSize: 8, padding: '1px 6px' }}>PR</span>}
+            </div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 2 }}>
+              {(e.muscle || '').toUpperCase()}
+            </div>
+          </div>
+          <IconChevronRight size={16} style={{ color: 'var(--text-3)' }} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <PRStat label="MAX WEIGHT" value={`${e.maxWeight.value}${e.maxWeight.unit}`} sub={`× ${e.maxWeight.reps} reps`} delta={e.maxWeight.delta} accent={zc} />
+          <PRStat label="MAX REPS" value={e.maxReps.value} sub={`@ ${e.maxReps.weight}kg`} delta={null} accent={zc} />
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <MiniLine data={e.history.map((h) => h.w)} color={zc} />
+        </div>
+      </div>
+    </button>
+  );
+}
+
 // ── CATEGORY DRILL-DOWN ───────────────────────────────────────────
 function CategoryDrill({ cat, onBack, onPick, exs }) {
   const items = exs.filter(e => e.category === cat.id);
   const zc = ZONE_COLOR_ALL[cat.id] || cat.accent || 'var(--accent)';
   return (
     <>
-      <HexBackButton onClick={onBack} label="CATEGORIES" size={34} style={{ marginBottom: 14 }} />
+      <HexBackButton onClick={onBack} label="MUSCLE GROUPS" size={34} style={{ marginBottom: 14 }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <Hex size={50} square style={{
@@ -945,38 +1248,13 @@ function CategoryDrill({ cat, onBack, onPick, exs }) {
           <MuscleZoneGlyph zoneId={cat.id} color={zc} size={58} />
         </Hex>
         <div>
-          <div className="label">// CATEGORY</div>
+          <div className="label">// MUSCLE GROUP</div>
           <div className="h-bold" style={{ fontSize: 22 }}>{cat.label.toUpperCase()}</div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gap: 10 }}>
-        {items.map((e) =>
-        <button key={e.id} onClick={() => onPick(e.id)}
-        style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-            <div className="card" style={{ padding: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {e.name}
-                    {e.pr && <span className="chip chip-lime" style={{ fontSize: 8, padding: '1px 6px' }}>PR</span>}
-                  </div>
-                  <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 2 }}>
-                    {e.muscle.toUpperCase()}
-                  </div>
-                </div>
-                <IconChevronRight size={16} style={{ color: 'var(--text-3)' }} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <PRStat label="MAX WEIGHT" value={`${e.maxWeight.value}${e.maxWeight.unit}`} sub={`× ${e.maxWeight.reps} reps`} delta={e.maxWeight.delta} accent={zc} />
-                <PRStat label="MAX REPS" value={e.maxReps.value} sub={`@ ${e.maxReps.weight}kg`} delta={null} accent={zc} />
-              </div>
-              <div style={{ marginTop: 12 }}>
-                <MiniLine data={e.history.map((h) => h.w)} color={zc} />
-              </div>
-            </div>
-          </button>
-        )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+        {items.map((e) => <ExerciseSummaryCard key={e.id} e={e} onClick={() => onPick(e.id)} />)}
       </div>
     </>);
 
@@ -1351,8 +1629,13 @@ function BackSilhouette() {return <FrontSilhouette />;}
 // ── EXERCISE DRILL ────────────────────────────────────────────────
 function ExerciseDrill({ ex, onBack }) {
   const [view, setView] = React.useState('weight');
+  const [range, setRange] = React.useState('12m');
   const cat = null;
   const zc = ZONE_COLOR_ALL[ex.category] || 'var(--accent)';
+  const chartSeries = filterByRange(
+    ex.history.map((h) => ({ date: h.date, v: view === 'weight' ? h.w : h.r, label: h.label })),
+    range,
+  );
 
   return (
     <>
@@ -1391,10 +1674,11 @@ function ExerciseDrill({ ex, onBack }) {
           </button>
         </div>
 
-        <div className="label" style={{ marginBottom: 8 }}>
-          // {view === 'weight' ? 'WEIGHT (KG)' : 'REPS'} OVER TIME
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 10, flexWrap: 'wrap' }}>
+          <div className="label">// {view === 'weight' ? 'WEIGHT (KG)' : 'REPS'} OVER TIME</div>
+          <RangeSeg range={range} onChange={setRange} />
         </div>
-        <BigChart data={ex.history} view={view} zoneColor={zc} />
+        <MetricChart series={chartSeries} unit={view === 'weight' ? 'kg' : 'reps'} color={zc} height={320} />
       </div>
 
       <div className="label" style={{ margin: '4px 4px 8px' }}>// SESSION HISTORY · ALL SETS</div>
