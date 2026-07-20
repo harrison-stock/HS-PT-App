@@ -1624,7 +1624,7 @@ export function Segmented({ options, value, onChange, color = 'var(--accent)', w
   return (
     <div style={{
       position: 'relative', display: 'flex', width: width || 'auto',
-      background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 999, padding: 3,
+      background: 'var(--bg-2)', boxShadow: 'inset 0 0 0 1px var(--line)', borderRadius: 999, padding: 3,
     }}>
       <div style={{
         position: 'absolute', top: 3, bottom: 3, left: 3, width: `calc(${100 / options.length}% - ${6 / options.length}px)`,

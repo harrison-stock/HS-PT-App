@@ -110,7 +110,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       }
       return { data, error };
     })()
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (data) {
           const SECTION_TO_PHASE = { PULSE_RAISER: 'pulse', BANDED: 'banded', MAIN: 'main', COOLDOWN: 'cooldown' };
           const rows = [];
@@ -170,6 +170,31 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           } else if (userId) {
             clearActiveWorkout(userId);
           }
+          // Editing a past session: overlay the previously-logged actuals so the
+          // client edits real data (rather than a blank sheet that would wipe it).
+          if (edit && userId && rows.length > 0) {
+            const { data: sess } = await supabase.from('workout_sessions')
+              .select('completed_at, logged_sets ( exercise_id, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, intensity )')
+              .eq('client_id', userId).eq('day_id', dayId)
+              .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle();
+            const byEx = {};
+            (sess?.logged_sets || []).forEach(ls => { (byEx[ls.exercise_id || 'n'] = byEx[ls.exercise_id || 'n'] || {})[ls.set_index] = ls; });
+            rows.forEach(ex => {
+              const m = byEx[ex.id];
+              if (!m) return;
+              ex.sets = ex.sets.map((s, i) => {
+                const ls = m[i];
+                if (!ls) return s;
+                return {
+                  ...s, done: true,
+                  reps: s.time ? formatMMSS(parseInt(ls.actual_time_secs) || 0) : (ls.actual_reps ?? s.reps),
+                  kg: s.time ? null : (ls.actual_weight_kg != null ? parseFloat(ls.actual_weight_kg) : s.kg),
+                  band: ls.actual_band ?? s.band,
+                  rpe: ls.intensity ? Math.round(ls.intensity / 2.5) : s.rpe,
+                };
+              });
+            });
+          }
           // A real assigned day must have exercises — never fall back to the
           // built-in demo against a client's actual session.
           if (rows.length > 0) setExercises(rows);
@@ -220,6 +245,30 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const saveSession = async () => {
     if (!dayId || !userId) return;
     try {
+      // Build the rows FIRST. Client-added exercises have non-DB ids — log them
+      // by name with a null exercise_id (the FK only accepts real rows).
+      const isDbId = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id);
+      const pendingSets = [];
+      exercises.forEach(ex => {
+        ex.sets.forEach((s, i) => {
+          if (s.done) pendingSets.push({
+            exercise_id: isDbId(ex.id) ? ex.id : null, exercise_name: ex.name, set_index: i,
+            actual_reps: s.time ? null : (typeof s.reps === 'number' ? s.reps : (parseInt(s.reps) || null)),
+            actual_weight_kg: (s.time || s.band) ? null : (s.kg || null),
+            actual_band: s.band || null,
+            actual_time_secs: s.time ? parseTimeToSeconds(s.reps) : null,
+            intensity: s.rpe ? Math.round(s.rpe * 2.5) : null,
+          });
+        });
+      });
+      // Never destroy prior results for an empty save (e.g. a blank edit-reopen
+      // that was finished without re-logging). Just mark the day complete.
+      if (pendingSets.length === 0) {
+        editModeRef.current = false;
+        await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
+        return;
+      }
+
       // Replace prior results when re-finishing this run, or when this run was
       // opened to edit a past session (delete cascades to its logged_sets).
       if (savedSessionRef.current) {
@@ -238,30 +287,13 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         .select('id').single();
       if (ws) {
         savedSessionRef.current = ws.id;
-        // Client-added exercises have non-DB ids — log them by name with a null
-        // exercise_id (the FK only accepts real section_exercises rows).
-        const isDbId = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id);
-        const logRows = [];
-        exercises.forEach(ex => {
-          ex.sets.forEach((s, i) => {
-            if (s.done) logRows.push({
-              session_id: ws.id, exercise_id: isDbId(ex.id) ? ex.id : null, exercise_name: ex.name, set_index: i,
-              actual_reps: s.time ? null : (typeof s.reps === 'number' ? s.reps : (parseInt(s.reps) || null)),
-              actual_weight_kg: (s.time || s.band) ? null : (s.kg || null),
-              actual_band: s.band || null,
-              actual_time_secs: s.time ? parseTimeToSeconds(s.reps) : null,
-              intensity: s.rpe ? Math.round(s.rpe * 2.5) : null,
-            });
-          });
-        });
-        if (logRows.length) {
-          const { error: logErr } = await supabase.from('logged_sets').insert(logRows);
-          // Fallback if migration 032 (exercise_name / nullable exercise_id) isn't
-          // applied yet: log the programme exercises without the new fields.
-          if (logErr) {
-            const safe = logRows.filter(r => r.exercise_id).map(({ exercise_name, ...r }) => r);
-            if (safe.length) await supabase.from('logged_sets').insert(safe);
-          }
+        const logRows = pendingSets.map(r => ({ ...r, session_id: ws.id }));
+        const { error: logErr } = await supabase.from('logged_sets').insert(logRows);
+        // Fallback if migration 032 (exercise_name / nullable exercise_id) isn't
+        // applied yet: log the programme exercises without the new fields.
+        if (logErr) {
+          const safe = logRows.filter(r => r.exercise_id).map(({ exercise_name, ...r }) => r);
+          if (safe.length) await supabase.from('logged_sets').insert(safe);
         }
         await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
         // Notify the coach that the client finished a workout.
