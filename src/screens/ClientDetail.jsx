@@ -41,6 +41,7 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go 
     { id: 'report',    label: 'REPORT'    },
     { id: 'tasks',     label: 'TASKS'     },
     { id: 'goals',     label: 'GOALS'     },
+    { id: 'vault',     label: 'VAULT'     },
     { id: 'settings',  label: 'SETTINGS'  },
   ];
 
@@ -98,6 +99,7 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go 
         {tab === 'data'     && <DataTab      c={c} trainerId={trainerId} />}
         {tab === 'tasks'    && <TasksTab     c={c} trainerId={trainerId} />}
         {tab === 'goals'    && <GoalsTab     c={c} trainerId={trainerId} />}
+        {tab === 'vault'    && <VaultTab     c={c} trainerId={trainerId} />}
         {tab === 'report'   && <ProgrammeReport clientId={c.id} clientName={c.name} embedded onClose={() => setTab('overview')} />}
         {tab === 'settings' && <SettingsTab  c={c} trainerId={trainerId} onSaved={onChanged} onArchived={() => { onChanged?.(); onClose(); }} />}
       </div>
@@ -190,17 +192,22 @@ function OverviewTab({ c, go, onClose, onTab }) {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      {/* Assume control — full width */}
+      {/* Assume control — compact */}
+      <div>
       {!c.managed ? (
         <button onClick={() => { onClose(); go('clientview', { clientId: c.id, clientName: c.name, screen: 'dashboard' }); }}
-          className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--heading-deep)' }}>
-          ◉ ASSUME CONTROL — OPEN CLIENT APP
+          className="mono" style={{
+            all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: '7px 14px', borderRadius: 8, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+            color: 'var(--accent)', background: 'var(--accent-soft)',
+            border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)',
+          }}>
+          ◉ ASSUME CONTROL
         </button>
       ) : (
-        <div className="card" style={{ padding: 12, textAlign: 'center' }}>
-          <Mono>◉ AWAITING SIGN-UP — assume control unlocks once the client joins</Mono>
-        </div>
+        <Mono>◉ AWAITING SIGN-UP — assume control unlocks once the client joins</Mono>
       )}
+      </div>
 
       <div className="ov-2col">
         <div className="ov-col">
@@ -271,7 +278,9 @@ function OverviewTab({ c, go, onClose, onTab }) {
       {/* Goal & countdown */}
       <button onClick={() => onTab('goals')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
         <div className="card" style={{ padding: 14 }}>
-          <div className="label" style={{ marginBottom: 8 }}>// GOAL &amp; COUNTDOWN</div>
+          <div className="label" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <BrandIcon name="Mountain" size={14} color="var(--c-amber)" glow /> // GOAL &amp; COUNTDOWN
+          </div>
           {!d ? <Mono>LOADING…</Mono> : goal ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -303,31 +312,6 @@ function OverviewTab({ c, go, onClose, onTab }) {
         initial={d?.coachNotes || ''}
         onSave={saveNote('coach_notes')}
       />
-
-      {/* Limitations / injuries */}
-      <NoteCard
-        label="// LIMITATIONS / INJURIES"
-        placeholder={`Add any medical note or injury about ${c.name.split(' ')[0]}…`}
-        accent="var(--c-coral)"
-        loading={!d}
-        initial={d?.medicalNotes || ''}
-        onSave={saveNote('medical_notes')}
-      >
-        {d && d.injuries.length > 0 && (
-          <button onClick={(e) => { e.stopPropagation(); onTab('body'); }} style={{ all: 'unset', cursor: 'pointer', display: 'block', marginTop: 10 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {d.injuries.slice(0, 8).map(inj => (
-                <span key={inj.id} className="mono" style={{
-                  fontSize: 9, fontWeight: 700, padding: '4px 8px', borderRadius: 999,
-                  color: SEV_COLOR[inj.severity],
-                  background: `color-mix(in srgb, ${SEV_COLOR[inj.severity]} 12%, transparent)`,
-                  border: `1px solid color-mix(in srgb, ${SEV_COLOR[inj.severity]} 35%, transparent)`,
-                }}>{injuryTitle(inj)}</span>
-              ))}
-            </div>
-          </button>
-        )}
-      </NoteCard>
 
       {/* Progress photo */}
       <button onClick={() => onTab('data')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
@@ -956,11 +940,19 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
 }
 
 // ── BODY ─────────────────────────────────────────────────────────
+const MUSCLE_TINT = {
+  chest: '#3F84D9', upperBack: '#F39E1F', lats: '#F39E1F', lowerBack: '#F39E1F', traps: '#F39E1F', neck: '#F39E1F',
+  shoulders: '#EE6A6A', biceps: '#9D7CE0', triceps: '#9D7CE0', forearms: '#9D7CE0', hands: '#9D7CE0',
+  abs: '#8086A3', obliques: '#8086A3',
+  quads: '#E0A5B8', hamstrings: '#E0A5B8', glutes: '#E0A5B8', calves: '#E0A5B8', adductors: '#E0A5B8',
+};
+const BODY_RANGE_DAYS = { '1m': 30, '3m': 90, '12m': 365 };
 function BodyTab({ c, trainerId }) {
-  const [mode, setMode]           = React.useState('injuries');
+  const [mode, setMode]           = React.useState('worked');
   const [side, setSide]           = React.useState('front');
+  const [range, setRange]         = React.useState('1m');
   const [injuries, setInjuries]   = React.useState([]);
-  const [volume, setVolume]       = React.useState(null);   // last-30d muscle volume
+  const [volume, setVolume]       = React.useState(null);   // muscle volume for the range
   const [picked, setPicked]       = React.useState(null);
   const [editPanel, setEditPanel] = React.useState(null); // { group } when reporting
   const [openId, setOpenId]       = React.useState(null); // open injury thread
@@ -972,10 +964,10 @@ function BodyTab({ c, trainerId }) {
   React.useEffect(() => { reload(); }, [c.id]);
 
   React.useEffect(() => {
-    if (mode === 'worked' && volume === null) {
-      loadExerciseMuscleMap().then(map => loadMuscleVolume(c.id, 30, map)).then(setVolume);
-    }
-  }, [mode, volume, c.id]);
+    if (mode !== 'worked') return;
+    setVolume(null);
+    loadExerciseMuscleMap().then(map => loadMuscleVolume(c.id, BODY_RANGE_DAYS[range] || 30, map)).then(setVolume);
+  }, [mode, range, c.id]);
 
   // Injury mode: every muscle AND joint is interactive (trainer can click any)
   const injurySlugMap = MUSCLE_BODY.injurySlugs?.[side] || {};
@@ -1022,16 +1014,30 @@ function BodyTab({ c, trainerId }) {
     : [];
   const pickedVolume = picked ? workedData[picked] : null;
 
+  const workedTint = React.useCallback(
+    (group) => group === picked ? (MUSCLE_TINT[group] || 'var(--accent-2)') : 'var(--accent)',
+    [picked]
+  );
+
   return (
-    <div style={{ display: 'grid', gap: 10, maxWidth: 600, margin: '0 auto' }}>
+    <div style={{ display: 'grid', gap: 10, maxWidth: 1000, margin: '0 auto' }}>
       <div className="body-col">
-      {/* Mode toggle — large */}
+      {/* Mode toggle — TRAINED first (default) */}
       <div style={{ display: 'flex', gap: 8 }}>
+        <BigToggle active={!isInjuryMode} onClick={() => { setMode('worked');   setPicked(null); setEditPanel(null); }}>MUSCLES WORKED</BigToggle>
         <BigToggle active={isInjuryMode}  onClick={() => { setMode('injuries'); setPicked(null); }}>INJURIES</BigToggle>
-        <BigToggle active={!isInjuryMode} onClick={() => { setMode('worked');   setPicked(null); setEditPanel(null); }}>TRAINED</BigToggle>
       </div>
-      {/* Front / back — compact sliding toggle */}
-      <SideSlider side={side} onChange={(s) => { setSide(s); setPicked(null); }} />
+      {/* Front / back + (trained) range filter on one row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <SideSlider side={side} onChange={(s) => { setSide(s); setPicked(null); }} />
+        {!isInjuryMode && (
+          <div className="seg" style={{ display: 'inline-flex' }}>
+            {[['1m', '1M'], ['3m', '3M'], ['12m', '12M']].map(([r, l]) =>
+              <button key={r} className={range === r ? 'active' : ''} onClick={() => setRange(r)}>{l}</button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Body map */}
       <BodyMap
@@ -1042,7 +1048,7 @@ function BodyTab({ c, trainerId }) {
         slugMap={isInjuryMode ? injurySlugMap : undefined}
         perSide={isInjuryMode}
         neutralBase={isInjuryMode}
-        tintFor={isInjuryMode ? injuryTint : undefined}
+        tintFor={isInjuryMode ? injuryTint : workedTint}
         zoomable
         labels={REGION_LABELS}
         onPick={isInjuryMode
@@ -1068,7 +1074,7 @@ function BodyTab({ c, trainerId }) {
             flex: 1, height: 6, borderRadius: 999,
             background: 'linear-gradient(90deg, rgba(255,255,255,0.05), color-mix(in srgb, var(--accent) 30%, transparent), var(--accent))',
           }}/>
-          <Mono style={{ color: 'var(--accent)' }}>HIGH · LAST 30D</Mono>
+          <Mono style={{ color: 'var(--accent)' }}>HIGH · TOTAL VOLUME</Mono>
         </div>
       )}
 
@@ -1387,10 +1393,10 @@ function TasksTab({ c, trainerId }) {
           )}
           <FieldLabel label="ICON (OPTIONAL)">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 34, height: 34, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
+              <div style={{ width: 48, height: 48, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 10, background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
                 {icon && hasBrandIcon(icon)
-                  ? <BrandIcon name={icon} size={20} color={TASK_COLOR[kind] || 'var(--accent)'} glow />
-                  : <span className="mono" style={{ fontSize: 13, color: TASK_COLOR[kind] || 'var(--accent)' }}>{TASK_ICON[kind]}</span>}
+                  ? <BrandIcon name={icon} size={32} color={TASK_COLOR[kind] || 'var(--accent)'} glow />
+                  : <span className="mono" style={{ fontSize: 16, color: TASK_COLOR[kind] || 'var(--accent)' }}>{TASK_ICON[kind]}</span>}
               </div>
               <select value={icon} onChange={e => setIcon(e.target.value)} style={{ ...fieldSt, appearance: 'auto', flex: 1 }}>
                 <option value="">Default ({kind})</option>
@@ -1432,7 +1438,7 @@ function TaskRow({ t, onToggle, onDelete, faded }) {
         {t.completed_at && <IconCheck size={11} sw={2.5}/>}
       </button>
       {t.icon && hasBrandIcon(t.icon) && (
-        <BrandIcon name={t.icon} size={18} color={col} glow={!t.completed_at} style={{ flexShrink: 0 }} />
+        <BrandIcon name={t.icon} size={26} color={col} glow={!t.completed_at} style={{ flexShrink: 0 }} />
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600, textDecoration: t.completed_at ? 'line-through' : 'none', color: 'var(--text)' }}>{t.title}</div>
@@ -1486,7 +1492,9 @@ function GoalsTab({ c, trainerId }) {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <div className="label">// GOAL / OBJECTIVE</div>
+      <div className="label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <BrandIcon name="Mountain" size={14} color="var(--c-amber)" glow /> // GOAL / OBJECTIVE
+      </div>
       <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
         <FieldLabel label="GOAL TITLE">
           <input value={title} onChange={e => onChange(() => setTitle(e.target.value))} placeholder="e.g. Run a 5k in under 25 minutes" style={fieldSt}/>
@@ -1520,6 +1528,9 @@ function GoalsTab({ c, trainerId }) {
 // ── SETTINGS ──────────────────────────────────────────────────────
 function SettingsTab({ c, trainerId, onSaved, onArchived }) {
   const isManaged = !!c.managed;
+  const [name, setName]             = React.useState(c.name ?? '');
+  const [email, setEmail]           = React.useState(c.email ?? '');
+  const [dob, setDob]               = React.useState(c.date_of_birth ?? '');
   const [credits, setCredits]       = React.useState(c.credits ?? 0);
   const [cStatus, setCStatus]       = React.useState(c.client_status ?? 'online');
   const [subDue, setSubDue]         = React.useState(c.subscription_due ?? '');
@@ -1533,11 +1544,14 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
   const saveSettings = async () => {
     if (saving) return;
     setSaving(true);
-    const updates = { credits, client_status: cStatus, subscription_due: subDue || null, timezone: tz };
+    const details = { name: name.trim() || c.name, email: email.trim(), date_of_birth: dob || null };
     if (isManaged) {
-      await supabase.from('managed_clients').update({ credits, client_status: cStatus }).eq('id', c.id);
+      let { error } = await supabase.from('managed_clients')
+        .update({ ...details, credits, client_status: cStatus }).eq('id', c.id);
+      // Fallback if migration 044 (managed dob) isn't applied yet.
+      if (error) { const { date_of_birth, ...rest } = details; await supabase.from('managed_clients').update({ ...rest, credits, client_status: cStatus }).eq('id', c.id); }
     } else {
-      await supabase.from('profiles').update(updates).eq('id', c.id);
+      await supabase.from('profiles').update({ ...details, credits, client_status: cStatus, subscription_due: subDue || null, timezone: tz }).eq('id', c.id);
     }
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
     onSaved?.();
@@ -1563,6 +1577,20 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
+      {/* Client details */}
+      <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>
+        <div className="label" style={{ marginBottom: 2 }}>// CLIENT DETAILS</div>
+        <FieldLabel label="NAME">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" style={fieldSt}/>
+        </FieldLabel>
+        <FieldLabel label="EMAIL">
+          <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="client@email.com" style={fieldSt}/>
+        </FieldLabel>
+        <FieldLabel label="DATE OF BIRTH">
+          <input value={dob} onChange={e => setDob(e.target.value)} type="date" style={fieldSt}/>
+        </FieldLabel>
+      </div>
+
       {/* Credits */}
       <div className="card" style={{ padding: 14 }}>
         <div className="label" style={{ marginBottom: 10 }}>// IN-PERSON CREDITS</div>
@@ -1611,23 +1639,22 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
       </button>
 
       {/* Password reset */}
-      {!isManaged && (
-        <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>
-          <div className="label">// PASSWORD RESET</div>
-          <FieldLabel label="CLIENT EMAIL">
-            <input value={resetEmail} onChange={e => setResetEmail(e.target.value)} type="email" placeholder="client@email.com" style={fieldSt}/>
-          </FieldLabel>
-          <button onClick={sendReset} disabled={!resetEmail.trim()} style={{
-            all: 'unset', cursor: resetEmail.trim() ? 'pointer' : 'default', padding: '11px', borderRadius: 10,
-            background: 'var(--bg-3)', border: '1px solid var(--line-strong)',
-            color: resetSent ? 'var(--accent)' : 'var(--text)',
-            fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textAlign: 'center',
-            opacity: resetEmail.trim() ? 1 : 0.45,
-          }}>
-            {resetSent ? '✓ RESET EMAIL SENT' : 'SEND PASSWORD RESET'}
-          </button>
-        </div>
-      )}
+      <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>
+        <div className="label">// PASSWORD RESET</div>
+        <FieldLabel label="CLIENT EMAIL">
+          <input value={resetEmail} onChange={e => setResetEmail(e.target.value)} type="email" placeholder="client@email.com" style={fieldSt}/>
+        </FieldLabel>
+        <button onClick={sendReset} disabled={!resetEmail.trim()} style={{
+          all: 'unset', cursor: resetEmail.trim() ? 'pointer' : 'default', padding: '11px', borderRadius: 10,
+          background: 'var(--bg-3)', border: '1px solid var(--line-strong)',
+          color: resetSent ? 'var(--accent)' : 'var(--text)',
+          fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textAlign: 'center',
+          opacity: resetEmail.trim() ? 1 : 0.45,
+        }}>
+          {resetSent ? '✓ RESET CODE SENT' : 'SEND PASSWORD RESET CODE'}
+        </button>
+        {isManaged && <Mono>Sends only once the client has created their account.</Mono>}
+      </div>
 
       {/* Archive */}
       <button onClick={archiveClient} style={{
@@ -1639,6 +1666,91 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
       }}>
         {archiveConfirm ? 'CONFIRM ARCHIVE — TAP AGAIN' : 'ARCHIVE CLIENT'}
       </button>
+    </div>
+  );
+}
+
+// ── VAULT (client documents) ──────────────────────────────────────
+const VAULT_BUCKET = 'client-vault';
+function fmtBytes(n) {
+  if (!n) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1048576) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1048576).toFixed(1)} MB`;
+}
+function VaultTab({ c, trainerId }) {
+  const [docs, setDocs] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+  const fileRef = React.useRef(null);
+
+  const reload = React.useCallback(() => {
+    supabase.from('client_documents').select('*').eq('client_id', c.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setDocs(data || []));
+  }, [c.id]);
+  React.useEffect(() => { reload(); }, [reload]);
+
+  const upload = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    if (f.size > 20 * 1024 * 1024) { setErr('File too large (max 20MB).'); return; }
+    setErr(null); setBusy(true);
+    const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${trainerId}/${c.id}/${Date.now()}-${safe}`;
+    const { error: upErr } = await supabase.storage.from(VAULT_BUCKET).upload(path, f, { contentType: f.type || 'application/octet-stream' });
+    if (upErr) { setBusy(false); setErr(upErr.message || 'Upload failed.'); return; }
+    const { error: dbErr } = await supabase.from('client_documents')
+      .insert({ client_id: c.id, trainer_id: trainerId, name: f.name, path, size_bytes: f.size });
+    setBusy(false);
+    if (dbErr) { setErr(dbErr.message); return; }
+    toast('Document added');
+    reload();
+  };
+
+  const openDoc = async (doc) => {
+    const { data } = await supabase.storage.from(VAULT_BUCKET).createSignedUrl(doc.path, 120);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+  };
+
+  const removeDoc = async (doc) => {
+    await supabase.storage.from(VAULT_BUCKET).remove([doc.path]);
+    await supabase.from('client_documents').delete().eq('id', doc.id);
+    reload();
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8 }}>
+        Private document vault — attach consent forms, PAR-Qs, contracts or any file for {c.name.split(' ')[0]}. Only you (and the client) can access these.
+      </div>
+      <input ref={fileRef} type="file" onChange={upload} style={{ display: 'none' }} />
+      <button onClick={() => !busy && fileRef.current?.click()} className="btn-primary"
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.6 : 1 }}>
+        <IconPlus size={14} /> {busy ? 'UPLOADING…' : 'ATTACH DOCUMENT'}
+      </button>
+      {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)' }}>{err}</div>}
+
+      {docs === null ? <Mono>LOADING…</Mono> : docs.length === 0 ? (
+        <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+          <Mono>NO DOCUMENTS YET</Mono>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {docs.map(doc => (
+            <div key={doc.id} className="card" style={{ padding: '11px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <BrandIcon name="Paper & Quill" size={22} color="var(--accent)" style={{ flexShrink: 0 }} />
+              <button onClick={() => openDoc(doc)} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 2 }}>
+                  {new Date(doc.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{doc.size_bytes ? ` · ${fmtBytes(doc.size_bytes)}` : ''}
+                </div>
+              </button>
+              <button onClick={() => removeDoc(doc)} aria-label="Delete document" style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}><IconX2 size={13}/></button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
