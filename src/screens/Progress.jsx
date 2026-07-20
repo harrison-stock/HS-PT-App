@@ -39,10 +39,12 @@ const BUCKET_LABEL = { chest: 'Chest', back: 'Back', legs: 'Legs', shoulders: 'S
 const BUCKET_ORDER = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core', 'other'];
 const bucketFor = (name) => MUSCLE_BUCKET[muscleGroupsFor(name)[0]] || 'other';
 
+const fmtDuration = (s) => s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`;
+
 async function loadWeightData(userId) {
   const { data: sessions } = await supabase
     .from('workout_sessions')
-    .select(`id, completed_at, logged_sets ( session_id, exercise_id, set_index, actual_weight_kg, actual_reps, section_exercises ( id, name, workout_sections ( kind ) ) )`)
+    .select(`id, completed_at, logged_sets ( session_id, exercise_id, set_index, actual_weight_kg, actual_reps, actual_time_secs, section_exercises ( id, name, workout_sections ( kind ) ) )`)
     .eq('client_id', userId)
     .not('completed_at', 'is', null)
     .order('completed_at', { ascending: false });
@@ -60,31 +62,40 @@ async function loadWeightData(userId) {
       if (!exMap.has(se.id)) exMap.set(se.id, { id: se.id, name: se.name, category: bucket, sessMap: new Map() });
       const ex = exMap.get(se.id);
       if (!ex.sessMap.has(sess.id)) ex.sessMap.set(sess.id, { d, completedAt: sess.completed_at, sets: [] });
-      ex.sessMap.get(sess.id).sets.push({ w: parseFloat(ls.actual_weight_kg) || 0, r: ls.actual_reps || 0 });
+      ex.sessMap.get(sess.id).sets.push({ w: parseFloat(ls.actual_weight_kg) || 0, r: ls.actual_reps || 0, t: parseInt(ls.actual_time_secs) || 0 });
     }
   }
 
   const exs = [];
   for (const ex of exMap.values()) {
     const sessArr = [...ex.sessMap.values()].sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt));
+    const allSets = sessArr.flatMap(sg => sg.sets);
+    // A timed/cardio exercise has clocked work and no load — chart time, not kg.
+    const timed = allSets.some(s => s.t > 0) && !allSets.some(s => s.w > 0);
     const history = sessArr.map(sg => {
       const maxW = sg.sets.reduce((m, s) => Math.max(m, s.w), 0);
+      const maxT = sg.sets.reduce((m, s) => Math.max(m, s.t), 0);
       const atMax = sg.sets.find(s => s.w === maxW) || sg.sets[0];
-      const setSummary = sg.sets.map(s => `${s.w || 'BW'}${s.w ? 'kg' : ''}×${s.r}`).join(', ');
-      return { d: sg.d, date: sg.completedAt, w: maxW, r: atMax?.r || 0, sets: sg.sets,
+      const setSummary = timed
+        ? sg.sets.map(s => fmtDuration(s.t)).join(', ')
+        : sg.sets.map(s => `${s.w || 'BW'}${s.w ? 'kg' : ''}×${s.r}`).join(', ');
+      return { d: sg.d, date: sg.completedAt, w: maxW, r: atMax?.r || 0, t: maxT, sets: sg.sets,
         label: `${ex.name} — ${sg.sets.length} set${sg.sets.length === 1 ? '' : 's'} · ${setSummary}` };
     });
     const best = history.reduce((b, h) => h.w > b.w ? h : b, history[0] || { w: 0, r: 0 });
     const prevBest = history.length > 1 ? history.slice(0, -1).reduce((b, h) => h.w > b.w ? h : b, history[0]) : null;
     const last = history[history.length - 1] || { w: 0, r: 0 };
-    const isPR = !!prevBest && last.w > prevBest.w;
-    const allSets = sessArr.flatMap(sg => sg.sets);
+    const isPR = !timed && !!prevBest && last.w > prevBest.w;
     const maxR = allSets.reduce((b, s) => s.r > b.r ? s : b, allSets[0] || { r: 0, w: 0 });
+    const bestT = allSets.reduce((m, s) => Math.max(m, s.t), 0);
     exs.push({
-      id: ex.id, name: ex.name, category: ex.category, muscle: BUCKET_LABEL[ex.category] || '',
+      id: ex.id, name: ex.name, category: ex.category, muscle: BUCKET_LABEL[ex.category] || '', timed,
       pr: isPR,
-      maxWeight: { value: best.w, unit: 'kg', reps: best.r, delta: isPR ? `+${(last.w - prevBest.w).toFixed(1)}kg` : null },
+      maxWeight: timed
+        ? { value: fmtDuration(bestT), unit: '', reps: null, delta: null }
+        : { value: best.w, unit: 'kg', reps: best.r, delta: isPR ? `+${(last.w - prevBest.w).toFixed(1)}kg` : null },
       maxReps: { value: maxR.r, weight: maxR.w },
+      bestTime: bestT,
       history,
     });
   }
@@ -1221,11 +1232,20 @@ function ExerciseSummaryCard({ e, onClick }) {
           <IconChevronRight size={16} style={{ color: 'var(--text-3)' }} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <PRStat label="MAX WEIGHT" value={`${e.maxWeight.value}${e.maxWeight.unit}`} sub={`× ${e.maxWeight.reps} reps`} delta={e.maxWeight.delta} accent={zc} />
-          <PRStat label="MAX REPS" value={e.maxReps.value} sub={`@ ${e.maxReps.weight}kg`} delta={null} accent={zc} />
+          {e.timed ? (
+            <>
+              <PRStat label="BEST TIME" value={e.maxWeight.value} sub="per set" delta={null} accent={zc} />
+              <PRStat label="SESSIONS" value={e.history.length} sub="logged" delta={null} accent={zc} />
+            </>
+          ) : (
+            <>
+              <PRStat label="MAX WEIGHT" value={e.maxWeight.value === 0 ? '—' : `${e.maxWeight.value}${e.maxWeight.unit}`} sub={`× ${e.maxWeight.reps} reps`} delta={e.maxWeight.delta} accent={zc} />
+              <PRStat label="MAX REPS" value={e.maxReps.value || '—'} sub={`@ ${e.maxReps.weight}kg`} delta={null} accent={zc} />
+            </>
+          )}
         </div>
         <div style={{ marginTop: 12 }}>
-          <MiniLine data={e.history.map((h) => h.w)} color={zc} />
+          <MiniLine data={e.history.map((h) => e.timed ? h.t : h.w)} color={zc} />
         </div>
       </div>
     </button>
@@ -1662,7 +1682,7 @@ function ExerciseDrill({ ex, onBack }) {
   const cat = null;
   const zc = ZONE_COLOR_ALL[ex.category] || 'var(--accent)';
   const chartSeries = filterByRange(
-    ex.history.map((h) => ({ date: h.date, v: view === 'weight' ? h.w : h.r, label: h.label })),
+    ex.history.map((h) => ({ date: h.date, v: ex.timed ? h.t : (view === 'weight' ? h.w : h.r), label: h.label })),
     range,
   );
 
@@ -1675,6 +1695,20 @@ function ExerciseDrill({ ex, onBack }) {
         <div className="h-bold" style={{ fontSize: 22, marginBottom: 14 }}>{ex.name.toUpperCase()}</div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          {ex.timed ? (
+            <>
+              <div style={{ padding: 12, borderRadius: 10, background: `color-mix(in srgb, ${zc} 16%, transparent)`, border: `1px solid ${zc}` }}>
+                <div className="label" style={{ color: zc, marginBottom: 4 }}>BEST TIME</div>
+                <div className="h-bold" style={{ fontSize: 22, color: zc }}>{fmtDuration(ex.bestTime)}</div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>PER SET</div>
+              </div>
+              <div style={{ padding: 12, borderRadius: 10, background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
+                <div className="label" style={{ color: zc, marginBottom: 4 }}>SESSIONS</div>
+                <div className="h-bold" style={{ fontSize: 22, color: zc }}>{ex.history.length}</div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>LOGGED</div>
+              </div>
+            </>
+          ) : (<>
           <button onClick={() => setView('weight')} style={{
             all: 'unset', cursor: 'pointer',
             padding: 12, borderRadius: 10,
@@ -1684,7 +1718,7 @@ function ExerciseDrill({ ex, onBack }) {
           }}>
             <div className="label" style={{ color: zc, marginBottom: 4 }}>MAX WEIGHT</div>
             <div className="h-bold" style={{ fontSize: 22, color: zc }}>
-              {ex.maxWeight.value}<span style={{ fontSize: 12, color: 'var(--text-2)', marginLeft: 4 }}>{ex.maxWeight.unit}</span>
+              {ex.maxWeight.value === 0 ? '—' : ex.maxWeight.value}<span style={{ fontSize: 12, color: 'var(--text-2)', marginLeft: 4 }}>{ex.maxWeight.value === 0 ? '' : ex.maxWeight.unit}</span>
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>× {ex.maxWeight.reps} REPS</div>
           </button>
@@ -1697,17 +1731,18 @@ function ExerciseDrill({ ex, onBack }) {
           }}>
             <div className="label" style={{ color: zc, marginBottom: 4 }}>MAX REPS</div>
             <div className="h-bold" style={{ fontSize: 22, color: zc }}>
-              {ex.maxReps.value}
+              {ex.maxReps.value || '—'}
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>@ {ex.maxReps.weight}KG</div>
           </button>
+          </>)}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 10, flexWrap: 'wrap' }}>
-          <div className="label">// {view === 'weight' ? 'WEIGHT (KG)' : 'REPS'} OVER TIME</div>
+          <div className="label">// {ex.timed ? 'TIME (SECS)' : view === 'weight' ? 'WEIGHT (KG)' : 'REPS'} OVER TIME</div>
           <RangeSeg range={range} onChange={setRange} color={zc} />
         </div>
-        <MetricChart series={chartSeries} unit={view === 'weight' ? 'kg' : 'reps'} color={zc} height={320} />
+        <MetricChart series={chartSeries} unit={ex.timed ? 's' : (view === 'weight' ? 'kg' : 'reps')} color={zc} height={320} />
       </div>
 
       <div className="label" style={{ margin: '4px 4px 8px' }}>// SESSION HISTORY · ALL SETS</div>
