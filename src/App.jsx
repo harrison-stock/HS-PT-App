@@ -428,7 +428,7 @@ function BottomNav({ screen, go, isTrainer }) {
     { id: 'workouts',  label: 'TRAIN',    brand: 'Calendar' },
     { id: 'progress',  label: 'PROGRESS', brand: 'Graph (Ascending)' },
     { id: 'resources', label: 'LIBRARY',  brand: 'Book' },
-    { id: 'body',      label: 'BODY',     brand: 'Flexed Bicep' },
+    { id: 'body',      label: 'HEATMAP',  brand: 'Flexed Bicep' },
   ];
 
   return (
