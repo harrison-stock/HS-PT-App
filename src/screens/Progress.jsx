@@ -397,13 +397,11 @@ function buildCustomMetrics(defs) {
   return out;
 }
 
-function RangeSeg({ range, onChange }) {
+function RangeSeg({ range, onChange, color }) {
   return (
-    <div className="seg" style={{ display: 'inline-flex' }}>
-      {[['1m', '1M'], ['3m', '3M'], ['12m', '12M']].map(([r, l]) =>
-        <button key={r} className={range === r ? 'active' : ''} onClick={() => onChange(r)}>{l}</button>
-      )}
-    </div>
+    <Segmented color={color}
+      options={[{ value: '1m', label: '1M' }, { value: '3m', label: '3M' }, { value: '12m', label: '12M' }]}
+      value={range} onChange={onChange} />
   );
 }
 
@@ -1617,6 +1615,36 @@ export function SideSlider({ side, onChange }) {
   );
 }
 
+// Reusable segmented control with a sliding pill (same feel as SideSlider).
+// `options`: [{ value, label }]. `color` tints the active pill + label.
+export function Segmented({ options, value, onChange, color = 'var(--accent)', width, size = 'md' }) {
+  const idx = Math.max(0, options.findIndex(o => o.value === value));
+  const pad = size === 'sm' ? '6px 10px' : '7px 12px';
+  const fs = size === 'sm' ? 9.5 : 10.5;
+  return (
+    <div style={{
+      position: 'relative', display: 'flex', width: width || 'auto',
+      background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 999, padding: 3,
+    }}>
+      <div style={{
+        position: 'absolute', top: 3, bottom: 3, left: 3, width: `calc(${100 / options.length}% - ${6 / options.length}px)`,
+        borderRadius: 999, background: `color-mix(in srgb, ${color} 16%, transparent)`, border: `1px solid ${color}`,
+        transform: `translateX(${idx * 100}%)`,
+        transition: 'transform .3s cubic-bezier(.34,1.56,.64,1)',
+        boxShadow: `0 0 calc(8px * var(--glow)) color-mix(in srgb, ${color} 45%, transparent)`,
+      }} />
+      {options.map(o => (
+        <button key={o.value} onClick={() => onChange(o.value)} style={{
+          all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: pad, whiteSpace: 'nowrap',
+          position: 'relative', zIndex: 1,
+          fontFamily: 'JetBrains Mono', fontSize: fs, fontWeight: 700, letterSpacing: '0.1em',
+          color: value === o.value ? color : 'var(--text-3)', transition: 'color .2s ease',
+        }}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
 // Decorative outline strokes — drawn under heat regions for definition
 function FrontSilhouette() {
   return (
@@ -1677,7 +1705,7 @@ function ExerciseDrill({ ex, onBack }) {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 10, flexWrap: 'wrap' }}>
           <div className="label">// {view === 'weight' ? 'WEIGHT (KG)' : 'REPS'} OVER TIME</div>
-          <RangeSeg range={range} onChange={setRange} />
+          <RangeSeg range={range} onChange={setRange} color={zc} />
         </div>
         <MetricChart series={chartSeries} unit={view === 'weight' ? 'kg' : 'reps'} color={zc} height={320} />
       </div>

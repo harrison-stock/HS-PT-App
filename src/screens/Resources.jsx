@@ -125,8 +125,8 @@ export function Resources({ go, userId, isTrainer }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
         <ResTab big active={tab === 'recipes' || tab === 'favourites'} onClick={() => setTab('recipes')} icon={<IconFork size={18} />} label={`RECIPES · ${recipesLoading ? '…' : recipeList.length}`} />
         <ResTab big active={tab === 'guides'} onClick={() => setTab('guides')} icon={<IconBolt size={18} />} label={`GUIDES · ${guidesLoading ? '…' : guideList.length}`} />
-        <ResTab active={tab === 'exercises'} onClick={() => setTab('exercises')} icon={<IconDumbbell size={14} />} label={`EXERCISES · ${exercises === null ? '…' : exercises.length}`} />
-        <ResTab active={tab === 'vault'} onClick={() => setTab('vault')} icon={<IconVaultDoc size={14} />} label={`VAULT · ${vaultDocs === null ? '…' : vaultDocs.length}`} />
+        <ResTab big active={tab === 'exercises'} onClick={() => setTab('exercises')} icon={<IconDumbbell size={18} />} label={`EXERCISES · ${exercises === null ? '…' : exercises.length}`} />
+        <ResTab big active={tab === 'vault'} onClick={() => setTab('vault')} icon={<IconVaultDoc size={18} />} label={`VAULT · ${vaultDocs === null ? '…' : vaultDocs.length}`} />
       </div>
 
       {/* Coach: new recipe / guide */}

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { loadMuscleVolume } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { Hex, HexBackButton } from '../components/hex'
-import { BodyMap, Progress, SideSlider } from './Progress'
+import { BodyMap, Progress, SideSlider, Segmented } from './Progress'
 import { InjuryThread } from './InjuryThread'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
 import { injuryTitle } from '../lib/injuries'
@@ -1107,11 +1107,8 @@ function BodyTab({ c, trainerId }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <SideSlider side={side} onChange={(s) => { setSide(s); setPicked(null); }} />
         {!isInjuryMode && (
-          <div className="seg" style={{ display: 'inline-flex' }}>
-            {[['1m', '1M'], ['3m', '3M'], ['12m', '12M']].map(([r, l]) =>
-              <button key={r} className={range === r ? 'active' : ''} onClick={() => setRange(r)}>{l}</button>
-            )}
-          </div>
+          <Segmented value={range} onChange={setRange}
+            options={[{ value: '1m', label: '1M' }, { value: '3m', label: '3M' }, { value: '12m', label: '12M' }]} />
         )}
       </div>
 

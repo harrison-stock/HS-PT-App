@@ -3,13 +3,22 @@ import { loadMuscleVolume } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { MUSCLE_LABELS } from '../data/index'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
-import { BodyMap, SideSlider } from './Progress'
+import { BodyMap, SideSlider, Segmented } from './Progress'
 import { InjuryThread } from './InjuryThread'
 import { IconPlus, IconX2, IconChevronRight } from '../components/icons'
 import { SEV_COLOR, SEV_LABEL, SEV_VAL, LAT_LABEL, injuryTitle, loadInjuries, reportInjury } from '../lib/injuries'
 import { notify } from '../lib/notifications'
 
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 };
+
+// Distinct brand colour per muscle — only used to highlight a *clicked* muscle;
+// the heatmap itself stays a single accent hue.
+const MUSCLE_TINT = {
+  chest: '#3F84D9', upperBack: '#F39E1F', lats: '#F39E1F', lowerBack: '#F39E1F', traps: '#F39E1F', neck: '#F39E1F',
+  shoulders: '#EE6A6A', biceps: '#9D7CE0', triceps: '#9D7CE0', forearms: '#9D7CE0', hands: '#9D7CE0',
+  abs: '#8086A3', obliques: '#8086A3',
+  quads: '#E0A5B8', hamstrings: '#E0A5B8', glutes: '#E0A5B8', calves: '#E0A5B8', adductors: '#E0A5B8',
+};
 
 const labelFor = (g) => REGION_LABELS[g] || MUSCLE_LABELS[g] || g.replace(/([A-Z])/g, ' $1').trim();
 
@@ -23,13 +32,14 @@ export function Body({ userId, trainerId, go }) {
     <div className="scroller" style={{ padding: '0 16px 28px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
       <div style={{ marginBottom: 14 }}>
         <div className="label">// ANATOMY</div>
-        <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>BODY MAP</div>
+        <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>MUSCLE HEATMAP</div>
       </div>
 
-      {/* View switch — large, primary */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-        <ViewTab active={view === 'worked'}   onClick={() => setView('worked')}>MUSCLES WORKED</ViewTab>
-        <ViewTab active={view === 'injuries'} onClick={() => setView('injuries')}>INJURIES</ViewTab>
+      {/* View switch — sliding segmented */}
+      <div style={{ marginBottom: 10 }}>
+        <Segmented value={view} onChange={setView} width="100%"
+          options={[{ value: 'worked', label: 'MUSCLES WORKED' }, { value: 'injuries', label: 'INJURIES' }]}
+          color={view === 'injuries' ? 'var(--c-coral)' : 'var(--accent)'} />
       </div>
 
       {/* Front / back — compact sliding toggle */}
@@ -67,13 +77,8 @@ function WorkedView({ userId, side, go }) {
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div className="label">// HEATMAP · LAST {range.toUpperCase()}</div>
-        <div className="seg" style={{ padding: 3 }}>
-          {['7d', '30d', '90d'].map(r => (
-            <button key={r} className={range === r ? 'active' : ''} onClick={() => setRange(r)} style={{ padding: '5px 9px', fontSize: 9 }}>
-              {r.toUpperCase()}
-            </button>
-          ))}
-        </div>
+        <Segmented value={range} onChange={setRange} size="sm"
+          options={[{ value: '7d', label: '7D' }, { value: '30d', label: '30D' }, { value: '90d', label: '90D' }]} />
       </div>
 
       {data === null ? (
@@ -83,7 +88,8 @@ function WorkedView({ userId, side, go }) {
       ) : (
         <>
           <div className="card" style={{ padding: 16, marginBottom: 12, background: 'radial-gradient(60% 80% at 50% 30%, rgba(0,245,255,0.06), transparent 70%), var(--bg-2)' }}>
-            <BodyMap side={side} intensity={intensity} picked={picked} onPick={setPicked} data={vol} labels={MUSCLE_LABELS} heatColor="var(--accent)" />
+            <BodyMap side={side} intensity={intensity} picked={picked} onPick={setPicked} data={vol} labels={MUSCLE_LABELS} heatColor="var(--accent)"
+              tintFor={(g) => g === picked ? (MUSCLE_TINT[g] || 'var(--accent-2)') : 'var(--accent)'} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
               <Mono>LOW</Mono>
               <div style={{ flex: 1, height: 6, borderRadius: 999, margin: '0 10px',
@@ -224,13 +230,13 @@ function InjuriesView({ userId, trainerId, side }) {
                 {single ? injuryTitle({ muscle_group: single.g, laterality: single.a }).toUpperCase() : `${picked.size} REGIONS SELECTED`}
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                <button onClick={() => setPicked(new Set())} style={{ all: 'unset', cursor: 'pointer', fontSize: 9, color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontWeight: 700, border: '1px solid var(--line)', borderRadius: 6, padding: '5px 9px' }}>CLEAR</button>
+                <button onClick={() => setPicked(new Set())} style={{ all: 'unset', cursor: 'pointer', fontSize: 10, color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontWeight: 700, border: '1px solid var(--line)', borderRadius: 8, padding: '10px 14px' }}>CLEAR</button>
                 {!reporting && (
                   <button onClick={() => setReporting(true)} style={{
-                    all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-                    fontSize: 9, color: 'var(--c-coral)', fontFamily: 'JetBrains Mono', fontWeight: 700,
-                    border: '1px solid color-mix(in srgb, var(--c-coral) 50%, transparent)', borderRadius: 6, padding: '5px 9px',
-                  }}><IconPlus size={10}/> REPORT INJURY</button>
+                    all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                    fontSize: 10, color: 'var(--c-coral)', fontFamily: 'JetBrains Mono', fontWeight: 700,
+                    border: '1px solid color-mix(in srgb, var(--c-coral) 50%, transparent)', borderRadius: 8, padding: '10px 14px',
+                  }}><IconPlus size={11}/> REPORT INJURY</button>
                 )}
               </div>
             </div>

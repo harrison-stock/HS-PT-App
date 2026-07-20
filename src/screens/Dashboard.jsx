@@ -261,7 +261,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
       <ProgrammeRoadmap userId={userId} onOpen={() => setShowReport(true)} />
       {showReport && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'calc(env(safe-area-inset-top, 0px) + 14px) 16px 40px' }}>
             <ProgrammeReport clientId={userId} clientName={user?.name || ''} embedded onClose={() => setShowReport(false)} />
           </div>
         </div>
