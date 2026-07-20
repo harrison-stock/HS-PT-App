@@ -1238,10 +1238,10 @@ function InjuryForm({ group, side, onSave, onClose, defaultSide }) {
 
 // ── DATA ─────────────────────────────────────────────────────────
 function DataTab({ c }) {
-  // The coach sees exactly what the client sees in their Metrics tab. Cap the
-  // width on desktop so the charts stay readable rather than stretching edge-to-edge.
+  // The coach sees the client's Metrics view, using the full page width so the
+  // larger charts and side-by-side exercise cards have room to breathe.
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto' }}>
+    <div style={{ width: '100%' }}>
       <Progress userId={c.id} go={() => {}} embedded />
     </div>
   );
