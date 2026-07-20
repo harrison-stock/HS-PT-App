@@ -401,7 +401,7 @@ function ResumeWorkoutPrompt({ snap, onResume, onDiscard }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(6,10,12,0.66)', backdropFilter: 'blur(6px)', display: 'grid', placeItems: 'center', padding: 28, animation: 'fadeIn .15s ease' }}>
       <div className="card" style={{ width: '100%', maxWidth: 320, padding: 22, textAlign: 'center', background: 'var(--bg-2)' }}>
         <div style={{ margin: '0 auto 14px', display: 'grid', placeItems: 'center' }}>
-          <BrandIcon name="Pause" size={58} color="var(--accent)" glow/>
+          <BrandIcon name="Play and Pause" size={62} color="var(--accent)" glow/>
         </div>
         <div className="h-bold" style={{ fontSize: 19, marginBottom: 8 }}>CONTINUE YOUR WORKOUT?</div>
         <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.55, marginBottom: 18 }}>

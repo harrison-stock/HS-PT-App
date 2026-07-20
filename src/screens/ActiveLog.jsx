@@ -724,7 +724,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
           <div style={{ textAlign: 'center', width: '100%', maxWidth: 300 }}>
             <div style={{ display: 'grid', placeItems: 'center', margin: '0 auto 18px' }}>
-              <BrandIcon name="Pause" size={76} color="var(--accent)" glow />
+              <BrandIcon name="Play and Pause" size={82} color="var(--accent)" glow />
             </div>
             <div className="label" style={{ color: 'var(--accent)', marginBottom: 6 }}>// SESSION PAUSED</div>
             <div className="h-bold" style={{ fontSize: 30, marginBottom: 6, color: '#eceff4' }}>PAUSED</div>
@@ -863,7 +863,9 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
             </button>
             {onSuperset && ex.ss == null &&
             <button onClick={onSuperset} aria-label="Superset with another exercise" title="Superset" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
-              <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--accent-2)', fontSize: 14, fontWeight: 700 }}>⛓</Hex>
+              <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+              </Hex>
             </button>}
             <button onClick={onHistory} aria-label="Prior progress" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
@@ -1387,12 +1389,10 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
             return (
               <div key={ph.id}>
                 {/* Zone header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, padding: '0 2px' }}>
-                  <Hex size={22} square style={{
-                    background: `color-mix(in srgb, ${ph.accent} 18%, transparent)`,
-                    border: `1px solid color-mix(in srgb, ${ph.accent} 45%, transparent)`,
-                    color: ph.accent
-                  }}>{(PHASE_ICON[ph.id] || PHASE_ICON._default)(11)}</Hex>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6, padding: '0 2px' }}>
+                  <span style={{ display: 'grid', placeItems: 'center', width: 30, height: 28, color: ph.accent }}>
+                    {(PHASE_ICON[ph.id] || PHASE_ICON._default)(28)}
+                  </span>
                   <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: ph.accent }}>
                     {ph.label.toUpperCase()}
                   </span>

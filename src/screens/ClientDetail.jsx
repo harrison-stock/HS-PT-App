@@ -117,6 +117,63 @@ const relDays = (iso) => {
   return `${Math.floor(n / 7)} weeks ago`;
 };
 
+function MetricMini({ label, value }) {
+  return (
+    <div>
+      <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.1em' }}>{label}</div>
+      <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', marginTop: 2 }}>{value}</div>
+    </div>
+  );
+}
+
+// Programme progress — how far the client is through their assigned programme.
+function ProgrammeProgressCard({ clientId, onTab }) {
+  const [info, setInfo] = React.useState(undefined);
+  React.useEffect(() => {
+    let alive = true;
+    supabase.from('client_workouts')
+      .select('status, scheduled_date, programme_days(week_index, programme_phases(name, phase_index, weeks, programmes(id, name)))')
+      .eq('client_id', clientId).order('scheduled_date', { ascending: true })
+      .then(({ data }) => {
+        if (!alive) return;
+        const rows = data || [];
+        if (!rows.length) { setInfo(null); return; }
+        // Pick the programme of the most recent workout.
+        const prog = rows.map(r => r.programme_days?.programme_phases?.programmes).filter(Boolean).slice(-1)[0];
+        if (!prog) { setInfo(null); return; }
+        const mine = rows.filter(r => r.programme_days?.programme_phases?.programmes?.id === prog.id);
+        const total = mine.length;
+        const done = mine.filter(r => r.status === 'completed').length;
+        const today = new Date().toISOString().slice(0, 10);
+        const current = [...mine].reverse().find(r => r.scheduled_date <= today) || mine[0];
+        const phase = current?.programme_days?.programme_phases;
+        setInfo({ name: prog.name, total, done, pct: total ? Math.round(done / total * 100) : 0, phaseName: phase?.name || null });
+      });
+    return () => { alive = false; };
+  }, [clientId]);
+
+  if (info === undefined || info === null) return null;
+  return (
+    <button onClick={() => onTab('report')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
+      <div className="card" style={{ padding: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+          <div className="label">// PROGRAMME ROADMAP</div>
+          <Mono>{info.done}/{info.total} SESSIONS</Mono>
+        </div>
+        <div className="h-bold" style={{ fontSize: 15 }}>{info.name}</div>
+        {info.phaseName && <Mono style={{ marginTop: 2 }}>CURRENT · {info.phaseName.toUpperCase()}</Mono>}
+        <div style={{ marginTop: 10, height: 8, borderRadius: 999, background: 'var(--bg-3)', overflow: 'hidden' }}>
+          <div style={{ width: `${info.pct}%`, height: '100%', borderRadius: 999, background: 'linear-gradient(90deg, var(--accent), var(--accent-2))', boxShadow: '0 0 calc(6px * var(--glow)) var(--accent-glow)' }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+          <Mono>{info.pct}% COMPLETE</Mono>
+          <Mono style={{ color: 'var(--accent)' }}>VIEW REPORT →</Mono>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function OverviewTab({ c, go, onClose, onTab }) {
   const [d, setD] = React.useState(null);
   const todayD = React.useMemo(() => { const x = new Date(); x.setHours(0, 0, 0, 0); return x; }, []);
@@ -258,7 +315,15 @@ function OverviewTab({ c, go, onClose, onTab }) {
                   )}
                 </div>
                 {weights.length >= 2
-                  ? <div style={{ marginTop: 6 }}><Sparkline values={weights} color="var(--accent)" /></div>
+                  ? <>
+                      <div style={{ marginTop: 6 }}><Sparkline values={weights} color="var(--accent)" /></div>
+                      <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
+                        <MetricMini label="START" value={`${weights[0]}kg`} />
+                        <MetricMini label="LOW" value={`${Math.min(...weights)}kg`} />
+                        <MetricMini label="HIGH" value={`${Math.max(...weights)}kg`} />
+                        <MetricMini label="ENTRIES" value={weights.length} />
+                      </div>
+                    </>
                   : <Mono style={{ marginTop: 6 }}>Not enough weigh-ins to chart yet</Mono>}
               </div>
               <div style={{ paddingTop: 10, borderTop: '1px solid var(--line)' }}>
@@ -268,19 +333,28 @@ function OverviewTab({ c, go, onClose, onTab }) {
                     {bodyfats.length ? <>{bodyfats[bodyfats.length - 1]}<span style={{ fontSize: 10, color: 'var(--text-3)' }}>%</span></> : <span style={{ color: 'var(--text-3)', fontSize: 11 }}>No data</span>}
                   </div>
                 </div>
-                {bodyfats.length >= 2 && <div style={{ marginTop: 6 }}><Sparkline values={bodyfats} color="var(--c-amber)" height={32} /></div>}
+                {bodyfats.length >= 2 && <>
+                  <div style={{ marginTop: 6 }}><Sparkline values={bodyfats} color="var(--c-amber)" height={32} /></div>
+                  <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
+                    <MetricMini label="START" value={`${bodyfats[0]}%`} />
+                    <MetricMini label="LOW" value={`${Math.min(...bodyfats)}%`} />
+                    <MetricMini label="HIGH" value={`${Math.max(...bodyfats)}%`} />
+                    <MetricMini label="ENTRIES" value={bodyfats.length} />
+                  </div>
+                </>}
               </div>
             </div>
           )}
         </div>
       </button>
 
+      {/* Programme roadmap */}
+      <ProgrammeProgressCard clientId={c.id} onTab={onTab} />
+
       {/* Goal & countdown */}
       <button onClick={() => onTab('goals')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
         <div className="card" style={{ padding: 14 }}>
-          <div className="label" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <BrandIcon name="Mountain" size={14} color="var(--c-amber)" glow /> // GOAL &amp; COUNTDOWN
-          </div>
+          <div className="label" style={{ marginBottom: 8 }}>// GOAL &amp; COUNTDOWN</div>
           {!d ? <Mono>LOADING…</Mono> : goal ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -293,8 +367,10 @@ function OverviewTab({ c, go, onClose, onTab }) {
               </div>
               {daysToGoal != null && (
                 <div style={{ textAlign: 'center', flexShrink: 0 }}>
-                  <div className="h-bold" style={{ fontSize: 26, lineHeight: 1, color: daysToGoal < 0 ? 'var(--c-coral)' : 'var(--accent)' }}>{Math.abs(daysToGoal)}</div>
-                  <Mono style={{ marginTop: 3 }}>{daysToGoal < 0 ? 'DAYS OVER' : 'DAYS LEFT'}</Mono>
+                  <Hex size={54} style={{ background: `color-mix(in srgb, ${daysToGoal < 0 ? 'var(--c-coral)' : 'var(--c-amber)'} 16%, var(--bg-3))`, border: `1px solid color-mix(in srgb, ${daysToGoal < 0 ? 'var(--c-coral)' : 'var(--c-amber)'} 40%, transparent)`, color: daysToGoal < 0 ? 'var(--c-coral)' : 'var(--c-amber)', fontFamily: 'Orbitron', fontWeight: 800, fontSize: 15 }}>
+                    {Math.abs(daysToGoal)}
+                  </Hex>
+                  <Mono style={{ marginTop: 4 }}>{daysToGoal < 0 ? 'DAYS OVER' : 'DAYS LEFT'}</Mono>
                 </div>
               )}
             </div>

@@ -1,4 +1,5 @@
 import React from 'react'
+import { supabase } from '../lib/supabase'
 import { loadRecipes, scaleQty, fmtQty } from '../lib/recipes'
 import { loadGuides } from '../lib/guides'
 import { loadFavourites, setFavourite } from '../lib/favourites'
@@ -23,11 +24,17 @@ export function Resources({ go, userId, isTrainer }) {
   const [favs, setFavs] = React.useState(() => new Set());
   const [exercises, setExercises] = React.useState(null);   // glossary
   const [openExercise, setOpenExercise] = React.useState(null);
+  const [vaultDocs, setVaultDocs] = React.useState(null);   // client's own documents
 
   const refreshRecipes = React.useCallback(() => { loadRecipes().then(setRecipes); }, []);
   const refreshGuides  = React.useCallback(() => { loadGuides().then(setGuides); }, []);
   React.useEffect(() => { refreshRecipes(); refreshGuides(); loadExercises().then(setExercises); }, [refreshRecipes, refreshGuides]);
   React.useEffect(() => { loadFavourites(userId).then(setFavs); }, [userId]);
+  React.useEffect(() => {
+    if (!userId) { setVaultDocs([]); return; }
+    supabase.from('client_documents').select('*').eq('client_id', userId)
+      .order('created_at', { ascending: false }).then(({ data }) => setVaultDocs(data || []));
+  }, [userId]);
 
   const toggleFav = (id, type) => {
     const makeFav = !favs.has(id);
@@ -101,7 +108,7 @@ export function Resources({ go, userId, isTrainer }) {
 
       {/* Search */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
+        display: tab === 'vault' ? 'none' : 'flex', alignItems: 'center', gap: 8,
         background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10,
         padding: '8px 12px', marginBottom: 14
       }}>
@@ -114,11 +121,12 @@ export function Resources({ go, userId, isTrainer }) {
         }} />
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        <ResTab active={tab === 'recipes' || tab === 'favourites'} onClick={() => setTab('recipes')} icon={<IconFlame size={14} />} label={`RECIPES · ${recipesLoading ? '…' : recipeList.length}`} />
-        <ResTab active={tab === 'guides'} onClick={() => setTab('guides')} icon={<IconBolt size={14} />} label={`GUIDES · ${guidesLoading ? '…' : guideList.length}`} />
+      {/* Tabs — 2×2 grid (recipes + guides on top, exercises + vault below) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+        <ResTab big active={tab === 'recipes' || tab === 'favourites'} onClick={() => setTab('recipes')} icon={<IconFork size={18} />} label={`RECIPES · ${recipesLoading ? '…' : recipeList.length}`} />
+        <ResTab big active={tab === 'guides'} onClick={() => setTab('guides')} icon={<IconBolt size={18} />} label={`GUIDES · ${guidesLoading ? '…' : guideList.length}`} />
         <ResTab active={tab === 'exercises'} onClick={() => setTab('exercises')} icon={<IconDumbbell size={14} />} label={`EXERCISES · ${exercises === null ? '…' : exercises.length}`} />
+        <ResTab active={tab === 'vault'} onClick={() => setTab('vault')} icon={<IconVaultDoc size={14} />} label={`VAULT · ${vaultDocs === null ? '…' : vaultDocs.length}`} />
       </div>
 
       {/* Coach: new recipe / guide */}
@@ -217,7 +225,10 @@ export function Resources({ go, userId, isTrainer }) {
         })()
       )}
 
-      {filtered.length === 0 && query && tab !== 'favourites' && tab !== 'exercises' && !(tab === 'recipes' && recipesLoading) && sourceList.length > 0 &&
+      {/* Client vault — documents shared by the coach */}
+      {tab === 'vault' && <VaultView docs={vaultDocs} />}
+
+      {filtered.length === 0 && query && tab !== 'favourites' && tab !== 'exercises' && tab !== 'vault' && !(tab === 'recipes' && recipesLoading) && sourceList.length > 0 &&
       <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}>
           <div style={{ fontSize: 13 }}>No {tab} match "{query}"</div>
         </div>
@@ -346,16 +357,16 @@ function ExerciseGlossaryDetail({ e, onClose, isFav, onToggleFav }) {
   );
 }
 
-function ResTab({ active, onClick, icon, label }) {
+function ResTab({ active, onClick, icon, label, big }) {
   return (
     <button onClick={onClick} style={{
-      flex: 1, minWidth: 0, padding: '10px 6px',
+      minWidth: 0, padding: big ? '18px 8px' : '11px 6px',
       background: active ? 'var(--accent-soft)' : 'var(--bg-2)',
       border: '1px solid ' + (active ? 'var(--accent)' : 'var(--line)'),
-      borderRadius: 10, cursor: 'pointer',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+      borderRadius: 12, cursor: 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: big ? 8 : 5,
       color: active ? 'var(--accent)' : 'var(--text-2)',
-      fontFamily: 'JetBrains Mono', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.06em',
+      fontFamily: 'JetBrains Mono', fontSize: big ? 12.5 : 10, fontWeight: 700, letterSpacing: '0.06em',
       textTransform: 'uppercase',
       boxShadow: active ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none'
     }}>
@@ -363,6 +374,54 @@ function ResTab({ active, onClick, icon, label }) {
       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
     </button>);
 
+}
+
+function IconFork({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3v6a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V3M8 11v10M16 3c-1.5 0-2.5 1.5-2.5 4s1 4 2.5 4v10" />
+    </svg>
+  );
+}
+
+function IconVaultDoc({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" />
+    </svg>
+  );
+}
+
+// Client-side document vault — read-only view of documents the coach attached.
+function VaultView({ docs }) {
+  const open = async (doc) => {
+    const { data } = await supabase.storage.from('client-vault').createSignedUrl(doc.path, 120);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener');
+  };
+  if (docs === null) return <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>;
+  if (docs.length === 0) return (
+    <div className="card" style={{ padding: 28, textAlign: 'center' }}>
+      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
+        NO DOCUMENTS<br/><span style={{ fontSize: 9 }}>Your coach hasn’t shared any documents with you yet</span>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      {docs.map(doc => (
+        <button key={doc.id} onClick={() => open(doc)} className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left', border: '1px solid var(--line)' }}>
+          <span style={{ color: 'var(--accent)', flexShrink: 0 }}><IconVaultDoc size={22} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 2 }}>
+              {new Date(doc.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </div>
+          </div>
+          <IconChevronRight size={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function RecipeCard({ r, onOpen, isFav, onToggleFav, onEdit }) {
