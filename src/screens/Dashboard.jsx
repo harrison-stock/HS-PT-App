@@ -4,6 +4,7 @@ import { HEX_RATIO, HexShape, Hex } from '../components/hex'
 import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
 import { FormFill } from './FormFill'
+import { ProgrammeReport } from './ProgrammeReport'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 
 function useLiveClock() {
@@ -80,6 +81,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
   const [todayWorkout, setTodayWorkout] = React.useState(null);
   const [workoutLoading, setWorkoutLoading] = React.useState(true);
   const [formTask, setFormTask] = React.useState(null);
+  const [showReport, setShowReport] = React.useState(false);
   const [trainerId, setTrainerId] = React.useState(null);
   const now = useLiveClock();
 
@@ -255,8 +257,15 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
       {/* Tasks */}
       <TasksSection tasks={tasks} onToggle={toggleTask} go={go} />
 
-      {/* Programme roadmap */}
-      <ProgrammeRoadmap userId={userId} />
+      {/* Programme roadmap — tap through to the progress report */}
+      <ProgrammeRoadmap userId={userId} onOpen={() => setShowReport(true)} />
+      {showReport && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+            <ProgrammeReport clientId={userId} clientName={user?.name || ''} embedded onClose={() => setShowReport(false)} />
+          </div>
+        </div>
+      )}
 
       {/* At-a-glance training strip (7/30-day) */}
       <TrainingStrip userId={userId} />
@@ -566,7 +575,7 @@ async function loadRoadmap(userId) {
   };
 }
 
-function ProgrammeRoadmap({ userId }) {
+function ProgrammeRoadmap({ userId, onOpen }) {
   const [roadmap, setRoadmap] = React.useState(undefined);
   React.useEffect(() => {
     if (!userId) { setRoadmap(null); return; }
@@ -669,6 +678,15 @@ function ProgrammeRoadmap({ userId }) {
           })}
         </div>
       </div>
+
+      {onOpen && (
+        <button onClick={onOpen} style={{
+          all: 'unset', cursor: 'pointer', marginTop: 4, width: '100%', boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          padding: '9px', borderRadius: 8, border: '1px solid color-mix(in srgb, var(--accent) 45%, var(--line))',
+          color: 'var(--accent)', fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+        }}>VIEW PROGRESS REPORT →</button>
+      )}
     </div>);
 
 }
