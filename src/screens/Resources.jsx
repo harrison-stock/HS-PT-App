@@ -360,7 +360,7 @@ function ExerciseGlossaryDetail({ e, onClose, isFav, onToggleFav }) {
 function ResTab({ active, onClick, icon, label, big }) {
   return (
     <button onClick={onClick} style={{
-      minWidth: 0, padding: big ? '18px 8px' : '11px 6px',
+      minWidth: 0, padding: big ? '12px 10px' : '11px 6px',
       background: active ? 'var(--accent-soft)' : 'var(--bg-2)',
       border: '1px solid ' + (active ? 'var(--accent)' : 'var(--line)'),
       borderRadius: 12, cursor: 'pointer',

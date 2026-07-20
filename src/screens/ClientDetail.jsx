@@ -132,13 +132,12 @@ function ProgrammeProgressCard({ clientId, onTab }) {
   React.useEffect(() => {
     let alive = true;
     supabase.from('client_workouts')
-      .select('status, scheduled_date, programme_days(week_index, programme_phases(name, phase_index, weeks, programmes(id, name)))')
+      .select('status, scheduled_date, programme_days(week_index, programme_phases(id, name, phase_index, weeks, programmes(id, name)))')
       .eq('client_id', clientId).order('scheduled_date', { ascending: true })
       .then(({ data }) => {
         if (!alive) return;
         const rows = data || [];
         if (!rows.length) { setInfo(null); return; }
-        // Pick the programme of the most recent workout.
         const prog = rows.map(r => r.programme_days?.programme_phases?.programmes).filter(Boolean).slice(-1)[0];
         if (!prog) { setInfo(null); return; }
         const mine = rows.filter(r => r.programme_days?.programme_phases?.programmes?.id === prog.id);
@@ -146,8 +145,21 @@ function ProgrammeProgressCard({ clientId, onTab }) {
         const done = mine.filter(r => r.status === 'completed').length;
         const today = new Date().toISOString().slice(0, 10);
         const current = [...mine].reverse().find(r => r.scheduled_date <= today) || mine[0];
-        const phase = current?.programme_days?.programme_phases;
-        setInfo({ name: prog.name, total, done, pct: total ? Math.round(done / total * 100) : 0, phaseName: phase?.name || null });
+        const currentPhaseId = current?.programme_days?.programme_phases?.id;
+        // Group into phases for the milestone track.
+        const pMap = new Map();
+        mine.forEach(r => {
+          const ph = r.programme_days?.programme_phases;
+          if (!ph) return;
+          if (!pMap.has(ph.id)) pMap.set(ph.id, { id: ph.id, name: ph.name, idx: ph.phase_index ?? 0, total: 0, done: 0 });
+          const p = pMap.get(ph.id);
+          p.total += 1;
+          if (r.status === 'completed') p.done += 1;
+        });
+        const phases = [...pMap.values()].sort((a, b) => a.idx - b.idx).map(p => ({
+          ...p, complete: p.total > 0 && p.done === p.total, current: p.id === currentPhaseId,
+        }));
+        setInfo({ name: prog.name, total, done, pct: total ? Math.round(done / total * 100) : 0, phases });
       });
     return () => { alive = false; };
   }, [clientId]);
@@ -156,16 +168,37 @@ function ProgrammeProgressCard({ clientId, onTab }) {
   return (
     <button onClick={() => onTab('report')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
       <div className="card" style={{ padding: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
           <div className="label">// PROGRAMME ROADMAP</div>
           <Mono>{info.done}/{info.total} SESSIONS</Mono>
         </div>
-        <div className="h-bold" style={{ fontSize: 15 }}>{info.name}</div>
-        {info.phaseName && <Mono style={{ marginTop: 2 }}>CURRENT · {info.phaseName.toUpperCase()}</Mono>}
-        <div style={{ marginTop: 10, height: 8, borderRadius: 999, background: 'var(--bg-3)', overflow: 'hidden' }}>
-          <div style={{ width: `${info.pct}%`, height: '100%', borderRadius: 999, background: 'linear-gradient(90deg, var(--accent), var(--accent-2))', boxShadow: '0 0 calc(6px * var(--glow)) var(--accent-glow)' }} />
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+        <div className="h-bold" style={{ fontSize: 15, marginBottom: 14 }}>{info.name}</div>
+
+        {/* Phase milestone track */}
+        {info.phases.length > 0 && (
+          <div style={{ position: 'relative', margin: '4px 4px 8px' }}>
+            <div style={{ position: 'absolute', left: 14, right: 14, top: 13, height: 0, borderTop: '2px dashed var(--line-strong)' }} />
+            <div style={{ position: 'absolute', left: 14, top: 13, height: 0, borderTop: '2px solid var(--accent)', width: `calc((100% - 28px) * ${info.pct / 100})`, boxShadow: '0 0 calc(6px * var(--glow)) var(--accent-glow)' }} />
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between' }}>
+              {info.phases.map((p, i) => (
+                <div key={p.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: `${100 / info.phases.length}%` }}>
+                  <Hex size={26} square style={{
+                    background: p.complete || p.current ? 'var(--accent)' : 'var(--bg-3)',
+                    border: p.complete || p.current ? '0' : '1.5px solid var(--line-strong)',
+                    color: 'var(--on-accent)',
+                    boxShadow: p.current ? '0 0 calc(9px * var(--glow)) var(--accent-glow)' : 'none',
+                  }}>
+                    {p.complete && <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="var(--on-accent)" strokeWidth="2.5"><path d="M2 6l3 3 5-6" /></svg>}
+                  </Hex>
+                  <div className="mono" style={{ fontSize: 8, letterSpacing: '0.08em', color: p.complete || p.current ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700, marginTop: 6 }}>P{p.idx + 1}</div>
+                  <div style={{ fontSize: 9, marginTop: 1, textAlign: 'center', lineHeight: 1.15, color: p.current ? 'var(--text)' : 'var(--text-3)', fontFamily: 'JetBrains Mono' }}>{p.name}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
           <Mono>{info.pct}% COMPLETE</Mono>
           <Mono style={{ color: 'var(--accent)' }}>VIEW REPORT →</Mono>
         </div>
@@ -348,9 +381,6 @@ function OverviewTab({ c, go, onClose, onTab }) {
         </div>
       </button>
 
-      {/* Programme roadmap */}
-      <ProgrammeProgressCard clientId={c.id} onTab={onTab} />
-
       {/* Goal & countdown */}
       <button onClick={() => onTab('goals')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
         <div className="card" style={{ padding: 14 }}>
@@ -389,18 +419,8 @@ function OverviewTab({ c, go, onClose, onTab }) {
         onSave={saveNote('coach_notes')}
       />
 
-      {/* Progress photo */}
-      <button onClick={() => onTab('data')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-        <div className="card" style={{ padding: 14 }}>
-          <div className="label" style={{ marginBottom: 8 }}>// PROGRESS PHOTOS</div>
-          {!d ? <Mono>LOADING…</Mono> : d.photoCount > 0 ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="h-bold" style={{ fontSize: 18 }}>{d.photoCount}<span style={{ fontSize: 11, color: 'var(--text-3)' }}> photo{d.photoCount === 1 ? '' : 's'}</span></div>
-              {d.lastPhoto && <Mono>LATEST · {new Date(d.lastPhoto).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</Mono>}
-            </div>
-          ) : <Mono>{c.name.split(' ')[0]} hasn’t uploaded any photos.</Mono>}
-        </div>
-      </button>
+      {/* Programme roadmap with phase milestones */}
+      <ProgrammeProgressCard clientId={c.id} onTab={onTab} />
 
       {/* Profile */}
       <div className="card" style={{ padding: 14 }}>
@@ -537,6 +557,8 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
   const [showAssign, setShowAssign] = React.useState(false);
   const [showImport, setShowImport] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
+  const [builderProg, setBuilderProg] = React.useState(null);
+  const [moving, setMoving] = React.useState(null); // a workout being drag-moved (id)
 
   const loadWorkouts = React.useCallback(() => {
     const start = new Date(anchor);
@@ -548,6 +570,31 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
   }, [c.id, anchor, weeks]);
 
   React.useEffect(() => { loadWorkouts(); }, [loadWorkouts]);
+
+  // Move a workout to another date (drag-drop between calendar cells).
+  const moveWorkout = async (id, newDate) => {
+    setWorkouts(prev => prev.map(w => w.id === id ? { ...w, scheduled_date: newDate } : w));
+    await supabase.from('client_workouts').update({ scheduled_date: newDate }).eq('id', id);
+    onChanged?.();
+  };
+  const deleteWorkout = async (id) => {
+    setWorkouts(prev => prev.filter(w => w.id !== id));
+    await supabase.from('client_workouts').delete().eq('id', id);
+    onChanged?.();
+  };
+
+  // Unique programmes assigned in the visible range (for the header link).
+  const assignedProgs = React.useMemo(() => {
+    const m = new Map();
+    workouts.forEach(w => { const p = w.programme_days?.programme_phases?.programmes; if (p) m.set(p.id, p); });
+    return [...m.values()];
+  }, [workouts]);
+
+  if (builderProg) {
+    const prog = (programmes || []).find(p => p.id === builderProg);
+    if (prog) return <ProgrammeBuilder programme={prog} trainerId={trainerId} onClose={() => { setBuilderProg(null); loadWorkouts(); }} />;
+    setBuilderProg(null);
+  }
 
   if (showAssign) return (
     <AssignWorkout
@@ -574,6 +621,21 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
+      {/* Assigned programme(s) — tap to open in the builder */}
+      {assignedProgs.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span className="label">// ASSIGNED PROGRAMME</span>
+          {assignedProgs.map(p => (
+            <button key={p.id} onClick={() => setBuilderProg(p.id)} className="mono" style={{
+              all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--accent)',
+              padding: '5px 10px', borderRadius: 999, background: 'var(--accent-soft)',
+              border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)',
+            }}>{p.name} <IconChevronRight size={11}/></button>
+          ))}
+        </div>
+      )}
+
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={() => setShowAssign(true)} className="btn-primary"
@@ -604,7 +666,9 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ minWidth: 760, display: 'grid', gap: 10 }}>
           {Array.from({ length: weeks }, (_, wk) => (
-            <CalendarWeek key={wk} start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()} wMap={wMap} onSelect={setEditing} />
+            <CalendarWeek key={wk} start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()}
+              wMap={wMap} onSelect={setEditing} onMove={moveWorkout} onDelete={deleteWorkout}
+              moving={moving} setMoving={setMoving} />
           ))}
         </div>
       </div>
@@ -618,8 +682,9 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
   );
 }
 
-function CalendarWeek({ start, wMap, onSelect }) {
+function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, moving, setMoving }) {
   const today = ymd(new Date());
+  const [dragOver, setDragOver] = React.useState(null);
   const DOW = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
   // Label any new month that begins in this week (the 1st, or the week's first
   // day if the month rolled over mid-week before it) so the boundary is obvious.
@@ -655,12 +720,17 @@ function CalendarWeek({ start, wMap, onSelect }) {
           const isToday = ds === today;
           const firstOfMonth = d.getDate() === 1;
           const ws = wMap[ds] || [];
+          const isDragOver = dragOver === ds;
           return (
-            <div key={i} style={{
+            <div key={i}
+              onDragOver={onMove ? (e) => { e.preventDefault(); setDragOver(ds); } : undefined}
+              onDragLeave={onMove ? () => setDragOver(d => d === ds ? null : d) : undefined}
+              onDrop={onMove ? (e) => { e.preventDefault(); setDragOver(null); if (moving && moving.date !== ds) onMove(moving.id, ds); setMoving(null); } : undefined}
+              style={{
               minHeight: 150, borderRadius: 10, padding: 8,
-              background: isToday ? 'var(--accent-soft)' : 'var(--bg-2)',
-              border: `1px solid ${isToday ? 'var(--accent)' : 'var(--line)'}`,
-              borderLeft: firstOfMonth ? '3px solid var(--accent)' : `1px solid ${isToday ? 'var(--accent)' : 'var(--line)'}`,
+              background: isDragOver ? 'color-mix(in srgb, var(--accent) 14%, var(--bg-2))' : isToday ? 'var(--accent-soft)' : 'var(--bg-2)',
+              border: `1px ${isDragOver ? 'dashed' : 'solid'} ${isDragOver || isToday ? 'var(--accent)' : 'var(--line)'}`,
+              borderLeft: firstOfMonth ? '3px solid var(--accent)' : `1px solid ${isDragOver || isToday ? 'var(--accent)' : 'var(--line)'}`,
             }}>
               <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: isToday ? 'var(--accent)' : 'var(--text-3)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
                 <span>{DOW[i]}</span>
@@ -669,7 +739,9 @@ function CalendarWeek({ start, wMap, onSelect }) {
                 </span>
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
-                {ws.map(w => <WorkoutCell key={w.id} w={w} onClick={() => onSelect(w)} />)}
+                {ws.map(w => <WorkoutCell key={w.id} w={w} onClick={() => onSelect(w)}
+                  onDelete={onDelete ? () => onDelete(w.id) : undefined}
+                  onDragStart={() => setMoving({ id: w.id, date: ds })} onDragEnd={() => setMoving(null)} />)}
               </div>
             </div>
           );
@@ -679,7 +751,7 @@ function CalendarWeek({ start, wMap, onSelect }) {
   );
 }
 
-function WorkoutCell({ w, onClick }) {
+function WorkoutCell({ w, onClick, onDelete, onDragStart, onDragEnd }) {
   const day = w.programme_days;
   const phase = day?.programme_phases;
   const done = w.status === 'completed';
@@ -688,19 +760,28 @@ function WorkoutCell({ w, onClick }) {
   const shown = sections.slice(0, 2);
   const shownEx = shown.reduce((n, s) => n + (s.section_exercises?.length || 0), 0);
   const more = totalEx - shownEx;
+  const [confirmDel, setConfirmDel] = React.useState(false);
 
   return (
-    <div onClick={onClick} style={{
-      borderRadius: 8, padding: 8, background: 'var(--bg-1)', cursor: onClick ? 'pointer' : 'default',
+    <div onClick={onClick}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart} onDragEnd={onDragEnd}
+      style={{
+      borderRadius: 8, padding: 8, background: 'var(--bg-1)', cursor: onClick ? 'pointer' : 'default', position: 'relative',
       border: `1px solid ${done ? 'color-mix(in srgb, var(--accent) 45%, var(--line))' : 'var(--line-strong)'}`,
       borderLeft: `2px solid ${done ? 'var(--accent)' : 'var(--c-amber)'}`,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: done ? 'var(--accent)' : 'var(--c-amber)', flexShrink: 0 }}/>
-        <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
           {(phase?.name || 'WORKOUT').toUpperCase()}
         </span>
-        {done && <span style={{ marginLeft: 'auto', color: 'var(--accent)', fontSize: 9 }}>✓</span>}
+        {done && <span style={{ color: 'var(--accent)', fontSize: 9 }}>✓</span>}
+        {onDelete && (
+          <button onClick={(e) => { e.stopPropagation(); if (confirmDel) onDelete(); else setConfirmDel(true); }}
+            aria-label="Remove workout" title={confirmDel ? 'Tap again to remove' : 'Remove'}
+            style={{ all: 'unset', cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px', borderRadius: 4, color: confirmDel ? 'var(--c-coral)' : 'var(--text-3)', background: confirmDel ? 'color-mix(in srgb, var(--c-coral) 14%, transparent)' : 'transparent' }}>✕</button>
+        )}
       </div>
       {shown.map((s, i) => (
         <div key={i} style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6, padding: '5px 6px', marginBottom: 4 }}>

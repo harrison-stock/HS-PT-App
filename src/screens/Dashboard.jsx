@@ -96,7 +96,9 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
       .select('*')
       .eq('client_id', userId)
       .then(({ data }) => {
-        const rows = data || [];
+        const todayStr = new Date().toISOString().slice(0, 10);
+        // A completed task lingers only for the day it was done, then drops off.
+        const rows = (data || []).filter(t => !t.completed_at || t.completed_at.slice(0, 10) >= todayStr);
         rows.sort((a, b) => {
           if (!!a.completed_at !== !!b.completed_at) return a.completed_at ? 1 : -1;
           return (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1;
