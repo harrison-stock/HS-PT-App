@@ -1223,10 +1223,10 @@ function TaskTemplatesTab({ trainerId }) {
           <div>
             <div className="label" style={{ marginBottom: 6 }}>ICON (OPTIONAL)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 34, height: 34, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
+              <div style={{ width: 48, height: 48, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 10, background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
                 {icon && hasBrandIcon(icon)
-                  ? <BrandIcon name={icon} size={20} color={TT_COLOR[kind] || 'var(--accent)'} glow />
-                  : <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>—</span>}
+                  ? <BrandIcon name={icon} size={32} color={TT_COLOR[kind] || 'var(--accent)'} glow />
+                  : <span className="mono" style={{ fontSize: 13, color: 'var(--text-3)' }}>—</span>}
               </div>
               <select value={icon} onChange={e => setIcon(e.target.value)} style={{ ...ttInputSt, appearance: 'auto', flex: 1 }}>
                 <option value="">Default ({kind})</option>
@@ -1253,7 +1253,7 @@ function TaskTemplatesTab({ trainerId }) {
             return (
               <div key={t.id} className="card" style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, borderLeft: `2px solid ${col}` }}>
                 {t.icon && hasBrandIcon(t.icon)
-                  ? <BrandIcon name={t.icon} size={20} color={col} style={{ flexShrink: 0 }}/>
+                  ? <BrandIcon name={t.icon} size={26} color={col} style={{ flexShrink: 0 }}/>
                   : <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }}/>}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>

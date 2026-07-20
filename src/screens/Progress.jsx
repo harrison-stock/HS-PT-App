@@ -786,6 +786,7 @@ const fmtTickVal = (v) => Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'k' : (N
 // `series`: ascending [{ date: ISO, v: number, label?: string }].
 export function MetricChart({ series, unit = '', color = 'var(--accent)', height = 280 }) {
   const [hover, setHover] = React.useState(null);
+  const uid = React.useId();
   if (!series || series.length < 2) {
     return <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', padding: '28px 0', textAlign: 'center' }}>LOG MORE DATA TO SEE A TREND</div>;
   }
@@ -808,7 +809,7 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
   // Choose ~5 evenly-spaced x labels by index.
   const nX = Math.min(5, series.length);
   const xIdx = Array.from({ length: nX }, (_, i) => Math.round(i * (series.length - 1) / (nX - 1)));
-  const gid = 'mc' + React.useId().replace(/[:]/g, '');
+  const gid = 'mc' + uid.replace(/[:]/g, '');
   const hp = hover != null ? pts[hover] : null;
 
   return (
