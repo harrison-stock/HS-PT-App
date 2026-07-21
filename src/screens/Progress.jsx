@@ -552,7 +552,7 @@ function BodyMetricDetail({ met, onBack, onLog }) {
       position: 'absolute', inset: 0, zIndex: 60, background: 'var(--bg-1)',
       display: 'flex', flexDirection: 'column'
     }}>
-      <div style={{ padding: '54px 16px 12px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--line)' }}>
+      <div style={{ padding: 'max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 16px 12px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--line)' }}>
         <HexBackButton onClick={onBack} size={36} />
         <div>
           <div className="label">// METRIC</div>

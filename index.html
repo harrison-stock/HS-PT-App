@@ -3,6 +3,27 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <script>
+    // On phones, lock the zoom to a fixed scale. The app is designed at a fixed
+    // width, so pinch-zoom and iOS's focus-zoom (which fires when you tap an
+    // input with <16px text) both make the layout jump. maximum-scale=1 +
+    // user-scalable=no pins it. Runs inline (before the app bundle) so it
+    // applies even if the app's JS is still loading. Desktop/tablet keep the
+    // default zoomable meta.
+    (function () {
+      try {
+        var mm = window.matchMedia;
+        var coarse = !!(mm && mm('(pointer: coarse)').matches);
+        var touch = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+        var uaMobile = /Android|iPhone|iPad|iPod|Mobile|Silk|Windows Phone/i.test(navigator.userAgent || '');
+        var phone = Math.min(window.innerWidth || 0, window.innerHeight || 0) < 820;
+        if (phone && (coarse || uaMobile || touch)) {
+          var vp = document.querySelector('meta[name="viewport"]');
+          if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+        }
+      } catch (e) {}
+    })();
+  </script>
   <meta name="theme-color" content="#0a0e11" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />

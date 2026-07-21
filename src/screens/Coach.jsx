@@ -1121,7 +1121,7 @@ function AssignAdhocSheet({ workout, clients, trainerId, onClose }) {
       )}
 
       {!done && (
-        <div style={{ padding: '12px 18px 28px', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+        <div style={{ padding: '12px 18px calc(env(safe-area-inset-bottom, 0px) + 28px)', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
           <button onClick={assign} disabled={!clientId || !dayId || !date || saving} className="btn-primary"
             style={{ width: '100%', opacity: clientId && dayId && date ? 1 : 0.4, pointerEvents: clientId && dayId && date ? 'auto' : 'none' }}>
             {saving ? 'ASSIGNING…' : 'ASSIGN WORKOUT →'}
@@ -1540,7 +1540,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
       </div>
 
       {!inviteUrl && (
-        <div style={{ padding: '12px 18px 28px', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+        <div style={{ padding: '12px 18px calc(env(safe-area-inset-bottom, 0px) + 28px)', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
           <button
             onClick={create}
             disabled={!clientName.trim() || saving}
@@ -1719,7 +1719,7 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
         )}
       </div>
 
-      <div style={{ padding: '12px 18px 28px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ padding: '12px 18px calc(env(safe-area-inset-bottom, 0px) + 28px)', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             className="btn-ghost"
@@ -1771,7 +1771,7 @@ function SheetShell({ onClose, children }) {
         display: 'flex', flexDirection: 'column',
       }}>
         <div style={{
-          padding: '54px 18px 4px',
+          padding: 'max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 18px 4px',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <HexBackButton onClick={onClose} size={36} />

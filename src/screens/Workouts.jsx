@@ -389,7 +389,7 @@ function YearView({ workouts, onClose }) {
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(7,7,12,0.6)', backdropFilter: 'blur(6px)', animation: 'fadeIn .2s ease' }}>
       <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', inset: 0, background: 'var(--bg-1)', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
-        <div style={{ padding: '54px 16px 12px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ padding: 'max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 16px 12px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <HexBackButton onClick={onClose} size={34} />
           <div style={{ flex: 1 }}>
             <div className="label">// TRAINING YEAR</div>
@@ -747,7 +747,7 @@ function SectionDetail({ s, onBack }) {
       animation: 'slideRight .25s ease',
     }}>
       <div style={{
-        padding: '54px 18px 12px',
+        padding: 'max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 18px 12px',
         display: 'grid', gridTemplateColumns: '40px 1fr 40px', alignItems: 'center', gap: 8,
         borderBottom: '1px solid var(--line)',
       }}>
