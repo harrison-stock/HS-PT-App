@@ -41,6 +41,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const [dbLoading, setDbLoading] = React.useState(!!dayId);
   const [loadError, setLoadError] = React.useState(false);
   const [dayIntro, setDayIntro] = React.useState('');
+  const [dayTitle, setDayTitle] = React.useState('');
   const [sectionIntros, setSectionIntros] = React.useState({}); // phase id → coach's slide text
   const sessionStartRef = React.useRef(new Date().toISOString());
 
@@ -201,6 +202,10 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           else setLoadError(true);
           setDayIntro(data.intro || '');
           setSectionIntros(intros);
+          // Workout name (migration 045) — fetched separately so an un-migrated
+          // DB degrades gracefully rather than failing the whole load.
+          supabase.from('programme_days').select('title').eq('id', dayId).maybeSingle()
+            .then(({ data: t }) => { if (t) setDayTitle(t.title || ''); });
         } else {
           setLoadError(true);
           if (error) console.error('load workout', error);
@@ -414,6 +419,14 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   };
   const openAddExercise = (pos) => { addPosRef.current = pos || 'after'; setAddingEx(true); };
 
+  // Remove an exercise from the session (client-driven, from the hex menu).
+  // Keeps at least one exercise so the rail never empties, and steps the
+  // active slide back one so we don't land past the end.
+  const deleteExercise = (exId) => {
+    setExercises((prev) => prev.length <= 1 ? prev : prev.filter((e) => e.id !== exId));
+    setActiveIdx((i) => Math.max(0, i - 1));
+  };
+
   // ── Superset link / unlink (during the session) ───────────────
   // Split a superset back into standalone exercises.
   const unsupersetGroup = (ssVal) => {
@@ -467,6 +480,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   // Build the rail: exercises (consecutive supersets merged into one card),
   // with a section-end divider slide at each phase boundary.
   const railItems = [];
+  // Intro slide first — the session opens on the coach's brief before any
+  // exercise, so "start workout" lands on the intro page, not the pulse raiser.
+  if (dayIntro && exercises.length) railItems.push({ type: 'intro' });
   for (let i = 0; i < exercises.length;) {
     const e = exercises[i];
     let last = e;
@@ -600,13 +616,14 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         WebkitOverflowScrolling: 'touch'
       }}>
         {railItems.map((it, i) =>
+        it.type === 'intro' ?
+        <IntroSlide key={`intro`} title={dayTitle} intro={dayIntro} onContinue={() => setActiveIdx(i + 1)} /> :
         it.type === 'finish' ?
         <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
         it.type === 'divider' ?
         <SectionDivider key={`d${i}`} phaseId={it.phaseId} nextPhaseId={it.nextPhaseId} exercises={exercises} slideText={sectionIntros[it.nextPhaseId]} onContinue={() => setActiveIdx(i + 1)} /> :
         it.type === 'superset' ?
         <SupersetCard key={`ss${it.group[0].id}`} group={it.group}
-          intro={it.exIdx === 0 ? dayIntro : ''}
           onComplete={(exId, si) => completeSet(exId, si)}
           onUpdate={(exId, si, p) => updateSet(exId, si, p)}
           onAddSet={(exId, kind) => addSet(exId, kind)}
@@ -617,7 +634,6 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           onComment={dayId ? (exId) => setCommentForId(exId) : null}
           onHistory={(exId) => setHistoryForId(exId)} /> :
         <ExerciseCard key={it.ex.id} ex={it.ex} idx={it.exIdx} total={exercises.length}
-        intro={it.exIdx === 0 ? dayIntro : ''}
         onComplete={(si) => completeSet(it.ex.id, si)}
         onUpdate={(si, p) => updateSet(it.ex.id, si, p)}
         onTitle={() => setAltsForId(it.ex.id)}
@@ -625,6 +641,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         onDelSet={() => delSet(it.ex.id)}
         onAddExercise={openAddExercise}
         onSuperset={() => setSupersetForId(it.ex.id)}
+        onDelete={exercises.length > 1 ? () => deleteExercise(it.ex.id) : null}
         onCompleteAll={() => completeAllSets(it.ex.id)}
         onComment={dayId ? () => setCommentForId(it.ex.id) : null}
         onHistory={() => setHistoryForId(it.ex.id)} />
@@ -680,6 +697,12 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         {activeItem.type !== 'finish' && (() => {
           const goNext = () => { if (activeIdx < lastIdx) { setActiveIdx(activeIdx + 1); } else { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} setComplete(true); } };
           const goPrev = () => activeIdx > 0 && setActiveIdx(activeIdx - 1);
+          // Intro page — one clear call to action into the workout.
+          if (activeItem.type === 'intro') return (
+            <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={goNext}>
+              START WORKOUT <IconChevronRight size={14} />
+            </button>
+          );
           // The card right before the finish slide is the last piece of work —
           // its forward action reads CONTINUE. With several cards to move
           // between, navigation is a pair of arrows instead of one wide button.
@@ -719,10 +742,10 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       </div>
 
       {/* Alternatives sheet */}
-      {addingEx && <ExercisePicker onClose={() => setAddingEx(false)} onPick={addExercise} />}
+      {addingEx && <ExercisePicker title="ADD EXERCISE" onClose={() => setAddingEx(false)} onPick={addExercise} />}
 
       {/* Superset picker — link the chosen exercise into a superset */}
-      {supersetForId && <ExercisePicker onClose={() => setSupersetForId(null)} onPick={supersetPick} />}
+      {supersetForId && <ExercisePicker title="ADD SUPERSET" onClose={() => setSupersetForId(null)} onPick={supersetPick} />}
 
       {altsFor && <AlternativesSheet ex={altsFor} onClose={() => setAltsForId(null)} onPick={swapExercise} />}
 
@@ -829,10 +852,11 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
 }
 
 // ── EXERCISE CARD (one per swipe page) ───────────────────────────
-function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onSuperset, onCompleteAll, onHistory, onComment, intro }) {
+function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onSuperset, onDelete, onCompleteAll, onHistory, onComment, intro }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   const [addChoose, setAddChoose] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(false);
   return (
     <div style={{
       flex: '0 0 100%', width: '100%', height: '100%',
@@ -897,6 +921,18 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
             <button onClick={onSuperset} aria-label="Superset with another exercise" title="Superset" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+              </Hex>
+            </button>}
+            {onDelete &&
+            <button onClick={() => { if (confirmDel) { onDelete(); } else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 2600); } }}
+              aria-label={confirmDel ? 'Tap again to remove exercise' : 'Remove exercise'} title={confirmDel ? 'Tap again to confirm' : 'Remove exercise'}
+              style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+              <Hex size={30} square style={{
+                background: confirmDel ? 'color-mix(in srgb, var(--c-coral) 16%, transparent)' : 'var(--bg-2)',
+                border: `1px solid ${confirmDel ? 'var(--c-coral)' : 'var(--line-strong)'}`,
+                color: confirmDel ? 'var(--c-coral)' : 'var(--text-2)'
+              }}>
+                {confirmDel ? <IconCheck size={14} sw={3} /> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>}
               </Hex>
             </button>}
             <button onClick={onHistory} aria-label="Prior progress" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
@@ -1238,6 +1274,35 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
 // Celebratory interstitial shown when one phase ends and the next begins.
 // The coach's per-section slide text (set in the programme builder) wins;
 // the stock blurbs are only a fallback.
+// ── INTRO SLIDE ──────────────────────────────────────────────────
+// Opening page of a session: the coach's brief for the day, shown before
+// the pulse raiser so "start workout" lands here first. Advancing is
+// handled by the bottom action bar's CONTINUE button.
+function IntroSlide({ title, intro, onContinue }) {
+  return (
+    <div style={{
+      flex: '0 0 100%', width: '100%', height: '100%',
+      scrollSnapAlign: 'center', padding: '0 14px', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column'
+    }}>
+      <div className="scroller" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', paddingBottom: 10 }}>
+        <div style={{ display: 'grid', placeItems: 'center', color: 'var(--accent)', marginBottom: 24 }}>
+          <BrandIcon name="Weightlifting" size={120} color="var(--accent)" glow />
+        </div>
+        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color: 'var(--accent)', marginBottom: 10 }}>
+          // TODAY'S WORKOUT
+        </div>
+        <div className="h-bold" style={{ fontSize: 26, marginBottom: intro ? 18 : 6 }}>
+          {title ? title.toUpperCase() : "LET'S GO"}
+        </div>
+        {intro
+          ? <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--text-2)', maxWidth: 320, whiteSpace: 'pre-line' }}>{intro}</div>
+          : <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300 }}>Take a moment to get set, then continue to your pulse raiser.</div>}
+      </div>
+    </div>);
+
+}
+
 function SectionDivider({ phaseId, nextPhaseId, exercises, slideText, onContinue }) {
   const phase = PHASES.find((p) => p.id === phaseId) || {};
   const next = PHASES.find((p) => p.id === nextPhaseId) || {};

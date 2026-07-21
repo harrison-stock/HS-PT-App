@@ -1538,6 +1538,8 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
   const [duplicating, setDuplicating] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
+  const dayIdsRef = React.useRef([]);
+  const [unassigningId, setUnassigningId] = React.useState(null); // clientId awaiting confirm / in-flight
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1553,6 +1555,7 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
       if (!days?.length) { if (!cancelled) setAssignedClients([]); return; }
 
       const dayIds = days.map(d => d.id);
+      dayIdsRef.current = dayIds;
       const { data: workouts } = await supabase
         .from('client_workouts')
         .select('client_id')
@@ -1561,16 +1564,32 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
       if (!workouts?.length) { if (!cancelled) setAssignedClients([]); return; }
 
       const uniqueIds = [...new Set(workouts.map(w => w.client_id))];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name')
-        .in('id', uniqueIds);
+      // Names come from real profiles or coach-managed clients.
+      const [{ data: profiles }, { data: managed }] = await Promise.all([
+        supabase.from('profiles').select('id, name').in('id', uniqueIds),
+        supabase.from('managed_clients').select('id, name').in('id', uniqueIds),
+      ]);
+      const byId = new Map();
+      (profiles || []).forEach(r => byId.set(r.id, r.name));
+      (managed || []).forEach(r => { if (!byId.has(r.id)) byId.set(r.id, r.name); });
+      const merged = uniqueIds.map(id => ({ id, name: byId.get(id) || 'Unnamed' }));
 
-      if (!cancelled) setAssignedClients(profiles || []);
+      if (!cancelled) setAssignedClients(merged);
     }
     loadClients();
     return () => { cancelled = true; };
   }, [p.id]);
+
+  // Unassign a client: remove the programme's workouts from their schedule.
+  const unassignClient = async (clientId) => {
+    if (unassigningId !== clientId) { setUnassigningId(clientId); setTimeout(() => setUnassigningId(cur => cur === clientId ? null : cur), 2600); return; }
+    const dayIds = dayIdsRef.current;
+    if (dayIds.length) {
+      await supabase.from('client_workouts').delete().eq('client_id', clientId).in('day_id', dayIds);
+    }
+    setAssignedClients(cur => (cur || []).filter(c => c.id !== clientId));
+    setUnassigningId(null);
+  };
 
   const handleDuplicate = async () => {
     setDuplicating(true);
@@ -1637,11 +1656,13 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
           <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', padding: '8px 0' }}>No clients assigned yet.</div>
         ) : (
           <div style={{ display: 'grid', gap: 6 }}>
-            {assignedClients.map(c => (
+            {assignedClients.map(c => {
+              const confirming = unassigningId === c.id;
+              return (
               <div key={c.id} style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '10px 14px', background: 'var(--bg-2)',
-                border: '1px solid var(--line)', borderRadius: 10,
+                border: `1px solid ${confirming ? 'color-mix(in srgb, var(--c-coral) 50%, var(--line))' : 'var(--line)'}`, borderRadius: 10,
               }}>
                 <div style={{
                   width: 28, height: 28, borderRadius: '50%',
@@ -1649,9 +1670,21 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
                   display: 'grid', placeItems: 'center',
                   color: 'var(--accent)', fontWeight: 800, fontSize: 11,
                 }}>{(c.name || '?')[0].toUpperCase()}</div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name || 'Unnamed'}</div>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{c.name || 'Unnamed'}</div>
+                <button onClick={() => unassignClient(c.id)} className="mono" title="Unassign client"
+                  style={{
+                    all: 'unset', cursor: 'pointer', flexShrink: 0,
+                    padding: confirming ? '5px 9px' : '5px', borderRadius: 7,
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+                    color: 'var(--c-coral)',
+                    border: `1px solid ${confirming ? 'var(--c-coral)' : 'transparent'}`,
+                    background: confirming ? 'color-mix(in srgb, var(--c-coral) 12%, transparent)' : 'transparent',
+                  }}>
+                  {confirming ? 'UNASSIGN?' : <IconX2 size={14} />}
+                </button>
               </div>
-            ))}
+            );})}
           </div>
         )}
       </div>

@@ -650,8 +650,8 @@ function ProgrammeRoadmap({ userId, onOpen }) {
                   </> :
 
                   <Hex size={26} square style={{
-                    background: isDone ? 'var(--accent)' : 'var(--bg-3)',
-                    border: isDone ? '0' : '1.5px solid var(--line-strong)',
+                    background: isDone ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 10%, transparent)',
+                    border: isDone ? '0' : '2px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong))',
                     color: 'var(--on-accent)'
                   }}>
                       {isDone &&

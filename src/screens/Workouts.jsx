@@ -87,7 +87,7 @@ function shapeWorkout(row) {
     dayId: day.id,
     date: row.scheduled_date,
     status: row.status,
-    name: `${phase?.name || 'Workout'} · ${dayLabel}`,
+    name: day.title ? day.title : `${phase?.name || 'Workout'} · ${dayLabel}`,
     tag: programme?.tag || 'STRENGTH',
     phase: programme?.name || '',
     duration,
@@ -146,7 +146,7 @@ export function Workouts({ go, openPreview, userId }) {
       .order('scheduled_date');
 
     (async () => {
-      let { data, error } = await query('id, day_of_week, notes, image_url', 'id, kind, title, sort_order, icon');
+      let { data, error } = await query('id, day_of_week, notes, image_url, title', 'id, kind, title, sort_order, icon');
       // Fallback if migration 041 (cover photo) isn't applied yet.
       if (error) ({ data, error } = await query('id, day_of_week, notes', 'id, kind, title, sort_order, icon'));
       // Fallback if migration 037 (per-section icon) isn't applied yet.
