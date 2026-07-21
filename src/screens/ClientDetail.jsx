@@ -291,9 +291,10 @@ function OverviewTab({ c, go, onClose, onTab }) {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      {/* Assume control — compact */}
+      {/* Assume control — compact. Available for real (signed-up) clients and
+          for in-person managed clients (who have no app and are coach-logged). */}
       <div>
-      {!c.managed ? (
+      {(!c.managed || c.client_status === 'in_person') ? (
         <button onClick={() => { onClose(); go('clientview', { clientId: c.id, clientName: c.name, screen: 'dashboard' }); }}
           className="mono" style={{
             all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7,

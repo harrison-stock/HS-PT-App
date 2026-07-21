@@ -1349,11 +1349,14 @@ function ScheduleRow({ s, client, onPick }) {
 function InviteSheet({ trainerId, onClose, onCreated }) {
   const [clientName,  setClientName]  = React.useState('');
   const [clientEmail, setClientEmail] = React.useState('');
+  const [coaching,    setCoaching]    = React.useState('online'); // online | in_person | hybrid
   const [saving,      setSaving]      = React.useState(false);
   const [inviteUrl,   setInviteUrl]   = React.useState(null);
   const [emailed,     setEmailed]     = React.useState(false);
   const [copied,      setCopied]      = React.useState(false);
   const [error,       setError]       = React.useState(null);
+
+  const inPersonOnly = coaching === 'in_person';
 
   const create = async () => {
     if (!clientName.trim() || saving) return;
@@ -1371,17 +1374,27 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
         .limit(1).maybeSingle();
       if (existing) {
         mc = existing;
-        await supabase.from('managed_clients').update({ name: clientName.trim() }).eq('id', mc.id);
+        await supabase.from('managed_clients').update({ name: clientName.trim(), client_status: coaching }).eq('id', mc.id);
       }
     }
     if (!mc) {
       const { data: created, error: mcErr } = await supabase
         .from('managed_clients')
-        .insert({ trainer_id: trainerId, name: clientName.trim(), email: clientEmail.trim() })
+        .insert({ trainer_id: trainerId, name: clientName.trim(), email: clientEmail.trim() || null, client_status: coaching })
         .select('id')
         .single();
       if (mcErr || !created) { setSaving(false); setError(mcErr?.message || 'Could not add client'); return; }
       mc = created;
+    }
+
+    // In-person-only clients don't use the app — no invite/email needed. Create
+    // the managed record and finish; the coach logs their progress via "assume
+    // control" from the client's page.
+    if (inPersonOnly) {
+      setSaving(false);
+      onCreated?.();
+      onClose();
+      return;
     }
 
     // Create an invite linked to this managed client (for the client to sign up later)
@@ -1440,6 +1453,21 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               </div>
             )}
             <div>
+              <div className="label" style={{ marginBottom: 7 }}>// COACHING TYPE</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                {[['online', 'ONLINE'], ['in_person', 'IN-PERSON'], ['hybrid', 'HYBRID']].map(([v, lbl]) => (
+                  <button key={v} onClick={() => setCoaching(v)} style={{
+                    all: 'unset', cursor: 'pointer', textAlign: 'center',
+                    padding: '10px 6px', borderRadius: 8, fontSize: 9,
+                    fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '0.06em',
+                    background: coaching === v ? 'var(--accent-soft)' : 'var(--bg-3)',
+                    border: `1px solid ${coaching === v ? 'var(--accent)' : 'var(--line)'}`,
+                    color: coaching === v ? 'var(--accent)' : 'var(--text-3)',
+                  }}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+            <div>
               <div className="label" style={{ marginBottom: 7 }}>// CLIENT NAME</div>
               <input
                 value={clientName} onChange={e => setClientName(e.target.value)}
@@ -1448,10 +1476,10 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               />
             </div>
             <div>
-              <div className="label" style={{ marginBottom: 7 }}>// CLIENT EMAIL (OPTIONAL)</div>
+              <div className="label" style={{ marginBottom: 7 }}>// CLIENT EMAIL {inPersonOnly ? '(NOT NEEDED)' : '(OPTIONAL)'}</div>
               <input
                 type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)}
-                placeholder="client@email.com"
+                placeholder={inPersonOnly ? 'No app access — leave blank' : 'client@email.com'}
                 style={inviteInputSt}
               />
             </div>
@@ -1459,7 +1487,9 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6,
               padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8,
             }}>
-              Add an email and we'll send them an invite to join — they set a password and connect to you automatically. You'll also get a one-time link to share manually if you prefer.
+              {inPersonOnly
+                ? 'In-person clients don\'t need the app. We\'ll add them to your roster and you can log their progress yourself via "assume control" on their page — no email or sign-up required.'
+                : 'Add an email and we\'ll send them an invite to join — they set a password and connect to you automatically. You\'ll also get a one-time link to share manually if you prefer.'}
             </div>
           </>
         ) : (
@@ -1516,7 +1546,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
             disabled={!clientName.trim() || saving}
             className="btn-primary"
             style={{ width: '100%', opacity: clientName.trim() ? 1 : 0.4, pointerEvents: clientName.trim() ? 'auto' : 'none' }}>
-            {saving ? 'CREATING…' : 'CREATE INVITE LINK →'}
+            {saving ? 'CREATING…' : inPersonOnly ? 'ADD CLIENT →' : 'CREATE INVITE LINK →'}
           </button>
         </div>
       )}
