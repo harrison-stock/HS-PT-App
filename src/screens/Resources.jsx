@@ -703,6 +703,13 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
           </div>
           )}
 
+          {/* Intro — the coach's personal note, before the method */}
+          {r.intro && (
+            <div style={{ marginBottom: 14, padding: '12px 14px', borderRadius: 10, background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 30%, var(--line))' }}>
+              <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-line', fontFamily: "'JetBrains Mono', monospace" }}>{r.intro}</div>
+            </div>
+          )}
+
           {/* Method */}
           {steps.length > 0 && <>
           <div className="label" style={{ margin: '4px 4px 8px' }}>// METHOD</div>

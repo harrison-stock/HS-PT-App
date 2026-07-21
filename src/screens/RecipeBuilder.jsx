@@ -8,9 +8,11 @@ import { toast } from '../lib/toast'
 
 const TAGS = ['BREAKFAST', 'LUNCH', 'DINNER', 'POST-WORKOUT', 'SNACK'];
 const MACRO_C = { protein: '#F39E1F', carbs: '#46BBC0', fats: '#EE6A6A' };
+const round1 = (n) => Math.round((n || 0) * 10) / 10;
 
 const emptyDraft = () => ({
   id: null, title: '', tag: 'LUNCH', time: '', img: '', baseServings: 4,
+  intro: '',
   protein: '', carbs: '', fats: '',
   ingredients: [{ qty: '', unit: 'g', name: '' }],
   steps: [''],
@@ -41,7 +43,19 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
     if (url) { set({ img: url }); toast('Photo uploaded'); }
     else { console.error('recipe image upload', error); toast(`Upload failed${error?.message ? ` — ${error.message}` : ''}`, { kind: 'error' }); }
   };
-  const kcal = kcalFromMacros(d);
+  // Macros can be entered PER SERVING or for the WHOLE BATCH (divided down by
+  // servings). Stored value is always per serving.
+  const [macroBasis, setMacroBasis] = React.useState('serving');
+  const servings = Math.max(1, parseInt(d.baseServings) || 1);
+  const perServ = (v) => { const n = parseFloat(v); if (isNaN(n)) return 0; return macroBasis === 'batch' ? n / servings : n; };
+  const perServingMacros = { protein: perServ(d.protein), carbs: perServ(d.carbs), fats: perServ(d.fats) };
+  const switchBasis = (mode) => {
+    if (mode === macroBasis) return;
+    const conv = (v) => { const n = parseFloat(v); if (isNaN(n)) return v; return String(mode === 'batch' ? +(n * servings).toFixed(1) : +(n / servings).toFixed(1)); };
+    set({ protein: conv(d.protein), carbs: conv(d.carbs), fats: conv(d.fats) });
+    setMacroBasis(mode);
+  };
+  const kcal = kcalFromMacros(perServingMacros);
   const canSave = d.title.trim() !== '' && !saving;
 
   // Ingredients
@@ -57,7 +71,8 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
-    const res = await saveRecipe(trainerId, d);
+    // Persist macros per serving regardless of the entry basis.
+    const res = await saveRecipe(trainerId, { ...d, protein: perServingMacros.protein, carbs: perServingMacros.carbs, fats: perServingMacros.fats });
     setSaving(false);
     if (!res.error) { toast(d.id ? 'Recipe updated' : 'Recipe added'); onSaved(); }
     else toast('Could not save recipe', { kind: 'error' });
@@ -139,17 +154,38 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
           </FieldLabel>
         </Section>
 
-        {/* Macros per serving */}
-        <Section label="// MACROS · PER SERVING">
+        {/* Macros — entered per serving or for the whole batch */}
+        <Section label="// MACROS">
+          <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
+            {[['serving', 'PER SERVING'], ['batch', 'WHOLE BATCH']].map(([v, lbl]) => (
+              <button key={v} onClick={() => switchBasis(v)} className="mono" style={{
+                all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 8,
+                fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
+                background: macroBasis === v ? 'var(--accent-soft)' : 'var(--bg-3)',
+                border: `1px solid ${macroBasis === v ? 'var(--accent)' : 'var(--line)'}`,
+                color: macroBasis === v ? 'var(--accent)' : 'var(--text-3)',
+              }}>{lbl}</button>
+            ))}
+          </div>
+          <Mono style={{ marginBottom: 2 }}>
+            {macroBasis === 'batch'
+              ? `Enter totals for the whole batch — we divide by ${servings} serving${servings > 1 ? 's' : ''}.`
+              : 'Enter the macros for a single serving.'}
+          </Mono>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             {['protein', 'carbs', 'fats'].map(k => (
-              <FieldLabel key={k} label={k.toUpperCase() + ' (G)'}>
+              <FieldLabel key={k} label={`${k.toUpperCase()} (G)${macroBasis === 'batch' ? ' · TOTAL' : ''}`}>
                 <input value={d[k]} onChange={e => set({ [k]: e.target.value.replace(/[^\d.]/g, '') })}
                   inputMode="decimal" placeholder="0"
                   style={{ ...fieldSt, color: MACRO_C[k], fontWeight: 700, textAlign: 'center' }}/>
               </FieldLabel>
             ))}
           </div>
+          {macroBasis === 'batch' && (
+            <Mono style={{ textAlign: 'center', color: 'var(--text-2)' }}>
+              ≈ {round1(perServingMacros.protein)}P · {round1(perServingMacros.carbs)}C · {round1(perServingMacros.fats)}F per serving
+            </Mono>
+          )}
           <div style={{
             marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             padding: '10px', borderRadius: 10, background: 'var(--bg-3)', border: '1px solid var(--line)',
@@ -178,6 +214,13 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
           </div>
           <button onClick={addIng} style={addRowSt}><IconPlus size={12}/> ADD INGREDIENT</button>
           <Mono style={{ marginTop: 4 }}>Leave qty blank for "to taste" items (e.g. salt &amp; pepper).</Mono>
+        </Section>
+
+        {/* Intro — a personal note shown before the method */}
+        <Section label="// INTRO (OPTIONAL)">
+          <textarea value={d.intro} onChange={e => set({ intro: e.target.value })} rows={3}
+            placeholder="A personal intro — why you love this one, when to eat it, a swap tip…"
+            style={{ ...fieldSt, resize: 'vertical', lineHeight: 1.6 }}/>
         </Section>
 
         {/* Method */}
@@ -248,7 +291,7 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
 
 function hydrate(r) {
   return {
-    id: r.id, title: r.title, tag: r.tag, time: String(r.time || ''),
+    id: r.id, title: r.title, tag: r.tag, time: String(r.time || ''), intro: r.intro || '',
     img: r.img && !r.img.includes('photo-1490645935967') ? r.img : '',
     baseServings: r.baseServings || 4,
     protein: String(r.protein ?? ''), carbs: String(r.carbs ?? ''), fats: String(r.fats ?? ''),

@@ -36,6 +36,7 @@ export function shapeRecipe(row) {
     trainerId: row.trainer_id,
     title: row.title,
     tag: row.tag,
+    intro: row.intro || '',
     time: row.time_mins,
     img: row.img_url || 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=600&q=70',
     baseServings: row.base_servings || 1,
@@ -68,6 +69,7 @@ export async function saveRecipe(trainerId, draft) {
     trainer_id: trainerId,
     title: draft.title.trim(),
     tag: draft.tag,
+    intro: draft.intro?.trim() || '',
     time_mins: parseInt(draft.time) || 0,
     img_url: draft.img?.trim() || '',
     base_servings: Math.max(1, parseInt(draft.baseServings) || 1),
@@ -78,12 +80,16 @@ export async function saveRecipe(trainerId, draft) {
     updated_at: new Date().toISOString(),
   };
 
+  // Strip intro and retry if the column isn't there yet (migration 048).
+  const { intro, ...noIntro } = payload;
   let recipeId = draft.id;
   if (recipeId) {
-    const { error } = await supabase.from('recipes').update(payload).eq('id', recipeId);
+    let { error } = await supabase.from('recipes').update(payload).eq('id', recipeId);
+    if (error) ({ error } = await supabase.from('recipes').update(noIntro).eq('id', recipeId));
     if (error) return { error };
   } else {
-    const { data, error } = await supabase.from('recipes').insert(payload).select('id').single();
+    let { data, error } = await supabase.from('recipes').insert(payload).select('id').single();
+    if (error) ({ data, error } = await supabase.from('recipes').insert(noIntro).select('id').single());
     if (error || !data) return { error: error || new Error('Insert failed') };
     recipeId = data.id;
   }
