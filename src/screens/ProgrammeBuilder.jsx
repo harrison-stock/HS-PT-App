@@ -9,6 +9,8 @@ import { exerciseMatches } from '../lib/exerciseSearch'
 import { ICON_LIBRARY, SectionGlyph, sanitizeSvg } from '../lib/svgIcon'
 import { uploadWorkoutPhoto } from '../lib/workoutPhotos'
 import { RoadmapTrack } from '../components/Roadmap'
+import { FileDrop } from '../components/FileDrop'
+import { toast } from '../lib/toast'
 
 const IMG_FALLBACK = 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70';
 const TAGS = ['STRENGTH','ONBOARD','REHAB','ENDURANCE','HYBRID','SPORT'];
@@ -819,14 +821,20 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
     const newPhaseList = [];
     for (let i = 0; i < phases.length; i++) {
       const ph = phases[i];
+      const img = ph.image_url || null;
       if (ph.id) {
-        await supabase.from('programme_phases').update({ name: ph.name, focus: ph.focus, weeks: ph.weeks, phase_index: i }).eq('id', ph.id);
-        newPhaseList.push({ id: ph.id, name: ph.name, focus: ph.focus, weeks: ph.weeks });
+        // Include image_url when set; fall back if the column isn't there yet.
+        let { error } = await supabase.from('programme_phases').update({ name: ph.name, focus: ph.focus, weeks: ph.weeks, phase_index: i, image_url: img }).eq('id', ph.id);
+        if (error) await supabase.from('programme_phases').update({ name: ph.name, focus: ph.focus, weeks: ph.weeks, phase_index: i }).eq('id', ph.id);
+        newPhaseList.push({ id: ph.id, name: ph.name, focus: ph.focus, weeks: ph.weeks, image_url: ph.image_url || '' });
       } else {
-        const { data } = await supabase.from('programme_phases')
-          .insert({ programme_id: progId, phase_index: i, name: ph.name, focus: ph.focus, weeks: ph.weeks })
+        let { data, error } = await supabase.from('programme_phases')
+          .insert({ programme_id: progId, phase_index: i, name: ph.name, focus: ph.focus, weeks: ph.weeks, image_url: img })
           .select('id').single();
-        newPhaseList.push({ id: data?.id || null, name: ph.name, focus: ph.focus, weeks: ph.weeks });
+        if (error) ({ data } = await supabase.from('programme_phases')
+          .insert({ programme_id: progId, phase_index: i, name: ph.name, focus: ph.focus, weeks: ph.weeks })
+          .select('id').single());
+        newPhaseList.push({ id: data?.id || null, name: ph.name, focus: ph.focus, weeks: ph.weeks, image_url: ph.image_url || '' });
       }
     }
 
@@ -931,6 +939,11 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
                 <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em' }}>
                   {ph.weeks === 1 ? '1 WEEK' : `${ph.weeks} WEEKS`}
                 </div>
+              </div>
+              {/* Optional cover photo for this phase */}
+              <div style={{ marginTop: 10 }}>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 6 }}>COVER PHOTO</div>
+                <PhaseCover trainerId={trainerId} url={ph.image_url} onChange={(url) => updPhase(i, { image_url: url })} />
               </div>
             </div>
           ))}
@@ -1666,6 +1679,29 @@ function CellVal({ value, unit }) {
       {unit && <span style={{ fontSize:8, color:'var(--text-3)', letterSpacing:'0.08em' }}>{unit}</span>}
     </span>
   );
+}
+
+// Per-phase cover photo — drag/drop or tap; uploads to the public workout-photos
+// bucket and returns a URL stored on the phase.
+function PhaseCover({ trainerId, url, onChange }) {
+  const [busy, setBusy] = React.useState(false);
+  const upload = async (files) => {
+    const file = files[0];
+    if (!file) return;
+    setBusy(true);
+    const { url: u, error } = await uploadWorkoutPhoto(trainerId, file);
+    setBusy(false);
+    if (u) { onChange(u); toast('Cover photo added'); }
+    else { toast('Upload failed — please try again', { kind: 'error' }); }
+  };
+  if (url) {
+    return (
+      <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', aspectRatio: '16/6', background: `url('${url}') center/cover, var(--bg-3)` }}>
+        <button onClick={() => onChange('')} aria-label="Remove cover" style={{ all: 'unset', cursor: 'pointer', position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 7, display: 'grid', placeItems: 'center', background: 'rgba(10,15,20,0.7)', color: '#fff' }}><IconX2 size={12}/></button>
+      </div>
+    );
+  }
+  return <FileDrop onFiles={upload} accept="image/*" busy={busy} height={72} label="DRAG & DROP OR TAP" hint="Optional" />;
 }
 
 // ── STYLES ────────────────────────────────────────────────────────

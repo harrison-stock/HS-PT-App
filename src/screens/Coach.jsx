@@ -434,7 +434,7 @@ function shapeProgramme(p) {
     phases: phases.length,
     clients: 0,
     lastEdited: relativeTime(p.updated_at),
-    phaseList: phases.map(ph => ({ id: ph.id, name: ph.name, focus: ph.focus, weeks: ph.weeks })),
+    phaseList: phases.map(ph => ({ id: ph.id, name: ph.name, focus: ph.focus, weeks: ph.weeks, image_url: ph.image_url || '' })),
   };
 }
 
