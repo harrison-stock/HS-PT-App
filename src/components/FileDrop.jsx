@@ -31,7 +31,13 @@ export function FileDrop({ onFiles, accept = 'image/*', multiple = false, busy =
       }}
     >
       <input ref={inputRef} type="file" accept={accept} multiple={multiple} style={{ display: 'none' }}
-        onChange={(e) => { const f = e.target.files; e.target.value = ''; handleFiles(f); }} />
+        onChange={(e) => {
+          // Snapshot the files BEFORE clearing the input — resetting value wipes
+          // the live FileList, so reading it after would give nothing.
+          const picked = Array.from(e.target.files || []);
+          e.target.value = '';
+          handleFiles(picked);
+        }} />
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={over ? 'var(--accent)' : 'var(--text-3)'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M17 8l-5-5-5 5" /><path d="M12 3v12" />
       </svg>
