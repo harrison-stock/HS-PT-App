@@ -50,7 +50,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   // the phone locks or the browser throttles timers in the background.
   const clockBaseRef = React.useRef(null);
   React.useEffect(() => {
-    if (paused) { clockBaseRef.current = null; return; }
+    // Freeze the clock while paused or once the session is complete (results
+    // screen) — the elapsed time should stop the moment they finish.
+    if (paused || complete) { clockBaseRef.current = null; return; }
     const tick = () => {
       if (clockBaseRef.current == null) return;
       setSessionTime(Math.max(0, Math.round((Date.now() - clockBaseRef.current) / 1000)));
@@ -62,7 +64,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
     const onVis = () => { if (document.visibilityState === 'visible') tick(); };
     document.addEventListener('visibilitychange', onVis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
-  }, [paused, dbLoading]);
+  }, [paused, dbLoading, complete]);
   // Dismiss the rest card with a short slide-out before unmounting it.
   const endRest = React.useCallback((showTimesUp = false) => {
     setResting((r) => {
@@ -76,14 +78,26 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
     });
   }, []);
 
+  // Chime when a rest timer runs out, so the client knows their next set is
+  // ready without watching the screen. Loaded once; played on natural expiry.
+  const restChimeRef = React.useRef(null);
+  React.useEffect(() => {
+    try { const a = new Audio('/sounds/rest-complete.mp3'); a.preload = 'auto'; restChimeRef.current = a; } catch (e) {}
+  }, []);
+  const playRestChime = React.useCallback(() => {
+    const a = restChimeRef.current;
+    if (!a) return;
+    try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }, []);
+
   React.useEffect(() => {
     if (!resting || restLeaving || paused) return;
     const t = setInterval(() => setRestTime((s) => {
-      if (s <= 1) { endRest(true); return 0; }
+      if (s <= 1) { playRestChime(); endRest(true); return 0; }
       return s - 1;
     }), 1000);
     return () => clearInterval(t);
-  }, [resting, restLeaving, paused, endRest]);
+  }, [resting, restLeaving, paused, endRest, playRestChime]);
   // Auto-dismiss the "time's up" banner
   React.useEffect(() => {
     if (!timesUp) return;
@@ -1027,11 +1041,11 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
             </div>
           </div>
           {/* header row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 56px 36px', gap: 8, padding: '6px 12px', fontSize: 9, color: 'var(--text-3)' }} className="mono">
-            <span style={{ letterSpacing: '0.1em' }}>SET</span>
-            <span style={{ letterSpacing: '0.1em' }}>{ex.banded ? 'BAND' : ex.sets[0]?.kg != null ? 'KG' : 'TYPE'}</span>
-            <span style={{ letterSpacing: '0.1em' }}>{ex.sets[0]?.time ? 'TIME' : 'REPS'}{ex.unilateral ? '/SIDE' : ''}</span>
-            <span style={{ letterSpacing: '0.04em' }}>DIFFICULTY</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)' }} className="mono">
+            <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
+            <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{ex.banded ? 'BAND' : ex.sets[0]?.kg != null ? 'KG' : 'TYPE'}</span>
+            <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{ex.sets[0]?.time ? 'TIME' : 'REPS'}{ex.unilateral ? '/SIDE' : ''}</span>
+            <span style={{ letterSpacing: '0', whiteSpace: 'nowrap' }}>DIFFICULTY</span>
             <span />
           </div>
           {(() => {
@@ -1298,11 +1312,11 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
         <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '0 12px 8px' }}>TEMPO · {e.tempo}</div>
       )}
       {/* Set table */}
-      <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 56px 36px', gap: 8, padding: '6px 12px', fontSize: 9, color: 'var(--text-3)', borderTop: '1px solid var(--line)' }} className="mono">
-        <span style={{ letterSpacing: '0.1em' }}>SET</span>
-        <span style={{ letterSpacing: '0.1em' }}>{e.banded ? 'BAND' : e.sets[0]?.kg != null ? 'KG' : 'TYPE'}</span>
-        <span style={{ letterSpacing: '0.1em' }}>{e.sets[0]?.time ? 'TIME' : 'REPS'}{e.unilateral ? '/SIDE' : ''}</span>
-        <span style={{ letterSpacing: '0.04em' }}>DIFFICULTY</span>
+      <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)', borderTop: '1px solid var(--line)' }} className="mono">
+        <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
+        <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{e.banded ? 'BAND' : e.sets[0]?.kg != null ? 'KG' : 'TYPE'}</span>
+        <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{e.sets[0]?.time ? 'TIME' : 'REPS'}{e.unilateral ? '/SIDE' : ''}</span>
+        <span style={{ letterSpacing: '0', whiteSpace: 'nowrap' }}>DIFFICULTY</span>
         <span />
       </div>
       {(() => { let wn = 0; return (e.sets || []).map((s, i) => {
@@ -1848,7 +1862,7 @@ function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, onComplete
   const type = SET_TYPE[set.kind];
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: '32px 1fr 1fr 56px 36px', gap: 8,
+      display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8,
       padding: '7px 12px', alignItems: 'center',
       background: set.active ? 'rgba(70,187,192,0.05)' : type ? `color-mix(in srgb, ${type.color} 6%, transparent)` : 'transparent',
       borderTop: '1px solid var(--line)',
@@ -1930,7 +1944,7 @@ function RepsCell({ set, onChange }) {
     const clean = raw.replace(/[^\d.]/g, '');
     if (clean === '') { onChange(''); return; }
     const n = parseFloat(clean);
-    onChange(isNaN(n) ? '' : n);
+    onChange(isNaN(n) ? '' : Math.min(999, n)); // hard cap at 999
   };
   return (
     <input
@@ -2003,7 +2017,7 @@ function CalcKeypad({ value, unit = 'kg', mode = 'weight', onClose, onApply }) {
     let n = evalExpr(expr);
     if (isNaN(n)) n = 0;
     if (isWeight && asLb) n = Math.round(n * 0.45359237 * 2) / 2; // lb → kg, nearest 0.5
-    onApply(Math.max(0, n));
+    onApply(Math.max(0, Math.min(999, n))); // hard cap at 999
   };
 
   // Hardware-keyboard support — type digits/operators directly (desktop),
@@ -2065,7 +2079,7 @@ function CalcKeypad({ value, unit = 'kg', mode = 'weight', onClose, onApply }) {
           <Key label="." onClick={() => push('.')} />
           <Key label="0" onClick={() => push('0')} />
           <Key label="⌫" onClick={back} tint="var(--text-2)" />
-          <Key label="=" onClick={apply} tint="var(--accent-2)" big />
+          <Key label="=" onClick={apply} tint="var(--accent-2)" />
         </div>
       </div>
     </div>,

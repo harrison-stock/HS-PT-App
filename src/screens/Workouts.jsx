@@ -627,22 +627,15 @@ function PreviewBody({ w, sections, expanded, onToggle, onOpenSection, onClose, 
 function SectionAccordion({ s, index, expanded, onToggle, onOpen }) {
   const color = sectionColor(s.kind);
   return (
-    <div style={{
-      background: 'var(--bg-2)', borderRadius: 14, overflow: 'hidden',
-      border: `1px solid color-mix(in srgb, ${color} 55%, var(--line))`,
-      boxShadow: `0 0 calc(14px * var(--glow)) color-mix(in srgb, ${color} 32%, transparent), inset 0 0 0 1px color-mix(in srgb, ${color} 14%, transparent)`,
-    }}>
+    <div style={{ borderRadius: 14, overflow: 'hidden', borderTop: '1px solid var(--line)' }}>
       <button onClick={onToggle} style={{
         all: 'unset', cursor: 'pointer', width: '100%',
-        padding: '14px 16px',
+        padding: '12px 2px',
         display: 'grid', gridTemplateColumns: '34px 1fr auto', gap: 12, alignItems: 'center',
       }}>
-        <Hex size={30} square style={{
-          background: `color-mix(in srgb, ${color} 16%, transparent)`,
-          border: `1px solid color-mix(in srgb, ${color} 38%, transparent)`,
-          color,
-          filter: `drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, ${color} 55%, transparent))`,
-        }}><SectionGlyph icon={s.icon} kind={s.kind} size={15} color={color} /></Hex>
+        <span style={{ display: 'grid', placeItems: 'center', width: 30, height: 28, color }}>
+          <SectionGlyph icon={s.icon} kind={s.kind} size={22} color={color} />
+        </span>
         <div style={{ minWidth: 0 }}>
           <div className="h-bold" style={{ fontSize: 15, lineHeight: 1.2, color: color }}>{s.title}</div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 3 }}>
@@ -654,7 +647,7 @@ function SectionAccordion({ s, index, expanded, onToggle, onOpen }) {
         </div>
       </button>
 
-      <div style={{ padding: '0 16px 12px' }}>
+      <div style={{ padding: '0 2px 10px' }}>
         <div style={{ display: 'grid', gap: 2 }}>
           {ssLabels(s.items).map((lbl, i) => {
             const e = s.items[i];
@@ -680,7 +673,7 @@ function SectionAccordion({ s, index, expanded, onToggle, onOpen }) {
       </div>
 
       {expanded && (
-        <div style={{ padding: '0 16px 14px', borderTop: '1px solid var(--line)', animation: 'slideUp .2s ease' }}>
+        <div style={{ padding: '0 2px 14px', borderTop: '1px solid var(--line)', animation: 'slideUp .2s ease' }}>
           {s.intro && (
             <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.55, padding: '12px 0', whiteSpace: 'pre-line', fontFamily: "'JetBrains Mono', monospace" }}>
               {s.intro}
