@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { loadMuscleVolume } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { Hex, HexBackButton } from '../components/hex'
+import { RoadmapTrack, computeRoadmap } from '../components/Roadmap'
 import { BodyMap, Progress, SideSlider, Segmented } from './Progress'
 import { InjuryThread } from './InjuryThread'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
@@ -159,21 +160,23 @@ function ProgrammeProgressCard({ clientId, onTab }) {
       // Show ALL of the programme's phases (so edits to the programme reflect
       // here even before the new phases are assigned).
       const { data: allPhases } = await supabase.from('programme_phases')
-        .select('id, name, phase_index').eq('programme_id', prog.id).order('phase_index', { ascending: true });
+        .select('id, name, phase_index, weeks').eq('programme_id', prog.id).order('phase_index', { ascending: true });
       if (!alive) return;
       const source = (allPhases && allPhases.length) ? allPhases
-        : [...pMap.keys()].map((id, i) => ({ id, name: `Phase ${i + 1}`, phase_index: i }));
+        : [...pMap.keys()].map((id, i) => ({ id, name: `Phase ${i + 1}`, phase_index: i, weeks: 1 }));
       const phases = source.map(ph => {
         const c = pMap.get(ph.id) || { total: 0, done: 0 };
-        return { id: ph.id, name: ph.name, idx: ph.phase_index ?? 0, total: c.total, done: c.done,
+        return { id: ph.id, name: ph.name, idx: ph.phase_index ?? 0, weeks: ph.weeks || 1, total: c.total, done: c.done,
           complete: c.total > 0 && c.done === c.total, current: ph.id === currentPhaseId };
       });
-      setInfo({ name: prog.name, total, done, pct: total ? Math.round(done / total * 100) : 0, phases });
+      const startDate = mine.map(r => r.scheduled_date).filter(Boolean).sort()[0] || null;
+      setInfo({ name: prog.name, total, done, startDate, phases });
     })();
     return () => { alive = false; };
   }, [clientId]);
 
   if (info === undefined || info === null) return null;
+  const pct = Math.round(computeRoadmap(info.phases, info.startDate).progress * 100);
   return (
     <button onClick={() => onTab('report')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
       <div className="card" style={{ padding: 14 }}>
@@ -183,32 +186,13 @@ function ProgrammeProgressCard({ clientId, onTab }) {
         </div>
         <div className="h-bold" style={{ fontSize: 15, marginBottom: 14 }}>{info.name}</div>
 
-        {/* Phase milestone track */}
+        {/* Phase milestone track (weeks-based; hexes at each phase's end) */}
         {info.phases.length > 0 && (
-          <div style={{ position: 'relative', margin: '4px 4px 8px' }}>
-            <div style={{ position: 'absolute', left: 14, right: 14, top: 13, height: 0, borderTop: '2px dashed var(--line-strong)' }} />
-            <div style={{ position: 'absolute', left: 14, top: 13, height: 0, borderTop: '2px solid var(--accent)', width: `calc((100% - 28px) * ${info.pct / 100})`, boxShadow: '0 0 calc(6px * var(--glow)) var(--accent-glow)' }} />
-            <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between' }}>
-              {info.phases.map((p, i) => (
-                <div key={p.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: `${100 / info.phases.length}%` }}>
-                  <Hex size={26} square style={{
-                    background: p.complete || p.current ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 10%, transparent)',
-                    border: p.complete || p.current ? '0' : '2px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong))',
-                    color: 'var(--on-accent)',
-                    boxShadow: p.current ? '0 0 calc(9px * var(--glow)) var(--accent-glow)' : 'none',
-                  }}>
-                    {p.complete && <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="var(--on-accent)" strokeWidth="2.5"><path d="M2 6l3 3 5-6" /></svg>}
-                  </Hex>
-                  <div className="mono" style={{ fontSize: 8, letterSpacing: '0.08em', color: p.complete || p.current ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700, marginTop: 6 }}>P{p.idx + 1}</div>
-                  <div style={{ fontSize: 9, marginTop: 1, textAlign: 'center', lineHeight: 1.15, color: p.current ? 'var(--text)' : 'var(--text-3)', fontFamily: 'JetBrains Mono' }}>{p.name}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <RoadmapTrack phases={info.phases} startDate={info.startDate} />
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
-          <Mono>{info.pct}% COMPLETE</Mono>
+          <Mono>{pct}% COMPLETE</Mono>
           <Mono style={{ color: 'var(--accent)' }}>VIEW REPORT →</Mono>
         </div>
       </div>
@@ -744,7 +728,7 @@ function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, moving, setMovi
             }}>
               <div className="mono" style={{ textAlign: 'center', color: isToday ? 'var(--accent)' : 'var(--text-3)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
                 <div style={{ fontSize: 9, letterSpacing: '0.1em', fontWeight: 700 }}>{DOW[i]}</div>
-                <div className="h-bold" style={{ fontSize: 18, color: isToday ? 'var(--accent)' : 'var(--text)' }}>{d.getDate()}</div>
+                <div className="h-bold" style={{ fontSize: 18, whiteSpace: 'nowrap', color: isToday ? 'var(--accent)' : 'var(--text)' }}>{d.getDate()}</div>
                 <div style={{ fontSize: 8, letterSpacing: '0.06em' }}>{MONTHS[d.getMonth()]}</div>
               </div>
               <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
