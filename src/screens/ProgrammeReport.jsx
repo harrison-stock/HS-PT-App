@@ -76,7 +76,7 @@ export function ProgrammeReport({ clientId, clientName, onClose, embedded = fals
                 <Mono style={{ marginTop: 6 }}>{fmtDate(prog.first)} → {fmtDate(prog.last)}</Mono>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 14 }}>
                   <Stat label="SESSIONS" value={report?.sessionCount ?? prog.sessions} />
-                  <Stat label="DURATION" value={report ? Math.max(1, Math.round(report.spanDays / 7)) : '—'} unit="wk" />
+                  <Stat label="DURATION" value={report?.spanDays != null ? Math.max(1, Math.round(report.spanDays / 7)) : '—'} unit="wk" />
                   <Stat label="EXERCISES" value={report?.exercises?.length ?? '—'} />
                 </div>
               </div>

@@ -86,8 +86,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   }, []);
   const playRestChime = React.useCallback(() => {
     const a = restChimeRef.current;
-    if (!a) return;
-    try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+    if (a) { try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+    // Buzz too, so a muted / pocketed phone still signals the next set.
+    try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch (e) {}
   }, []);
 
   React.useEffect(() => {
@@ -1177,7 +1178,7 @@ function PhaseDoneSlide({ phaseId }) {
         <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color, marginBottom: 10 }}>
           ✓ {(phase.label || 'COOLDOWN').toUpperCase()} COMPLETE
         </div>
-        <div className="h-bold" style={{ fontSize: 26, marginBottom: 18 }}>NICELY DONE</div>
+        <div className="h-bold" style={{ fontSize: 26, marginBottom: 18 }}>GREAT JOB!</div>
         <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300 }}>
           That's every block finished. Continue to wrap up your session.
         </div>

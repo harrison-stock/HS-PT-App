@@ -1,4 +1,5 @@
 import React from 'react'
+import { Hex } from '../components/hex'
 
 // Tiny global toast bus — no dependencies, no context wiring at call sites.
 // Call `toast('Saved')` from anywhere; mount a single <ToastHost/> in App.
@@ -50,12 +51,10 @@ export function ToastHost() {
             boxShadow: `0 8px 30px rgba(0,0,0,0.4), 0 0 calc(14px * var(--glow)) color-mix(in srgb, ${meta.color} 30%, transparent)`,
             animation: 'sheetUp .28s cubic-bezier(.22,.61,.36,1)',
           }}>
-            <span style={{
-              flexShrink: 0, width: 20, height: 20, borderRadius: '50%',
-              display: 'grid', placeItems: 'center',
-              background: meta.color, color: 'var(--on-accent)',
+            <Hex size={20} square style={{
+              flexShrink: 0, background: meta.color, color: 'var(--on-accent)',
               fontSize: 11, fontWeight: 800,
-            }}>{meta.glyph}</span>
+            }}>{meta.glyph}</Hex>
             <span className="mono" style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.02em', color: 'var(--text)' }}>
               {t.message}
             </span>

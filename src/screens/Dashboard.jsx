@@ -264,7 +264,8 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       {/* Programme roadmap — tap through to the progress report */}
       <ProgrammeRoadmap userId={userId} onOpen={() => setShowReport(true)} />
       {showReport && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column',
+          top: impersonating ? 'calc(env(safe-area-inset-top, 0px) + 45px)' : 0 }}>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'calc(env(safe-area-inset-top, 0px) + 14px) 16px 40px' }}>
             <ProgrammeReport clientId={userId} clientName={user?.name || ''} embedded onClose={() => setShowReport(false)} />
           </div>
