@@ -2,6 +2,8 @@ import React from 'react'
 import { Hex, HexBackButton } from '../components/hex'
 import { IconPlus, IconX2, IconCheck } from '../components/icons'
 import { saveRecipe, deleteRecipe, kcalFromMacros, scaleQty, fmtQty } from '../lib/recipes'
+import { uploadGuideImage } from '../lib/guides'
+import { FileDrop } from '../components/FileDrop'
 import { toast } from '../lib/toast'
 
 const TAGS = ['BREAKFAST', 'LUNCH', 'DINNER', 'POST-WORKOUT', 'SNACK'];
@@ -23,6 +25,16 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
   const [previewServings, setPreviewServings] = React.useState(recipe?.baseServings || 4);
 
   const set = (patch) => setD(prev => ({ ...prev, ...patch }));
+  const [imgBusy, setImgBusy] = React.useState(false);
+  const uploadImg = async (files) => {
+    const file = files[0];
+    if (!file) return;
+    setImgBusy(true);
+    const { url, error } = await uploadGuideImage(trainerId, file);
+    setImgBusy(false);
+    if (url) { set({ img: url }); toast('Photo uploaded'); }
+    else { toast('Photo upload failed — please try again', { kind: 'error' }); }
+  };
   const kcal = kcalFromMacros(d);
   const canSave = d.title.trim() !== '' && !saving;
 
@@ -109,8 +121,15 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
               <Stepper value={base} min={1} max={12} onChange={v => { set({ baseServings: v }); setPreviewServings(v); }}/>
             </FieldLabel>
           </div>
-          <FieldLabel label="IMAGE URL (OPTIONAL)">
-            <input value={d.img} onChange={e => set({ img: e.target.value })} placeholder="https://…" style={fieldSt}/>
+          <FieldLabel label="PHOTO (OPTIONAL)">
+            {d.img
+              ? (
+                <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', aspectRatio: '16/9', background: `url('${d.img}') center/cover, var(--bg-3)` }}>
+                  <button onClick={() => set({ img: '' })} aria-label="Remove photo" style={{ all: 'unset', cursor: 'pointer', position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'rgba(10,15,20,0.7)', color: '#fff' }}><IconX2 size={13}/></button>
+                </div>
+              )
+              : <FileDrop onFiles={uploadImg} accept="image/*" busy={imgBusy} label="DRAG & DROP OR TAP TO ADD A PHOTO" hint="JPG / PNG" />}
+            <input value={d.img} onChange={e => set({ img: e.target.value })} placeholder="…or paste an image URL" style={{ ...fieldSt, marginTop: 8 }}/>
           </FieldLabel>
         </Section>
 

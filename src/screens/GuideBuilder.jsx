@@ -3,6 +3,7 @@ import { Hex, HexBackButton } from '../components/hex'
 import { IconCheck, IconPlay } from '../components/icons'
 import { GUIDE_KINDS, GUIDE_CATEGORIES, saveGuide, deleteGuide, uploadGuideImage } from '../lib/guides'
 import { videoThumb } from '../lib/exercises'
+import { FileDrop } from '../components/FileDrop'
 import { toast } from '../lib/toast'
 
 const emptyDraft = () => ({ id: null, title: '', kind: 'ARTICLE', category: 'TECHNIQUE', minutes: '', img: '', video: '', link: '', body: '' });
@@ -100,11 +101,13 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
               </div>
             )}
             <Field label="COVER IMAGE">
-              <input value={d.img} onChange={e => set({ img: e.target.value })} placeholder="https://… or upload below" style={fieldSt}/>
-              <input ref={imgInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickImg}/>
-              <button onClick={() => imgInput.current?.click()} className="btn-ghost" style={{ width: '100%', marginTop: 8, fontSize: 11 }}>
-                {uploading ? 'UPLOADING…' : 'UPLOAD IMAGE'}
-              </button>
+              {!preview && <FileDrop onFiles={(files) => pickImg({ target: { files, value: '' } })} accept="image/*" busy={uploading} label="DRAG & DROP OR TAP TO UPLOAD" hint="JPG / PNG" />}
+              <input value={d.img} onChange={e => set({ img: e.target.value })} placeholder="…or paste an image URL" style={{ ...fieldSt, marginTop: preview ? 0 : 8 }}/>
+              {preview && (
+                <button onClick={() => set({ img: '' })} className="btn-ghost" style={{ width: '100%', marginTop: 8, fontSize: 11, color: 'var(--c-coral)', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))' }}>
+                  REMOVE IMAGE
+                </button>
+              )}
             </Field>
 
             {d.id && (

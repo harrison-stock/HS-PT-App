@@ -4,6 +4,7 @@ import { loadMuscleVolume } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { Hex, HexBackButton } from '../components/hex'
 import { RoadmapTrack, computeRoadmap } from '../components/Roadmap'
+import { FileDrop } from '../components/FileDrop'
 import { BodyMap, Progress, SideSlider, Segmented } from './Progress'
 import { WorkedView } from './Body'
 import { InjuryThread } from './InjuryThread'
@@ -43,7 +44,7 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go,
     { id: 'report',    label: 'REPORT'    },
     { id: 'tasks',     label: 'TASKS'     },
     { id: 'goals',     label: 'GOALS'     },
-    { id: 'vault',     label: 'VAULT'     },
+    { id: 'vault',     label: 'DOCUMENTS' },
     { id: 'settings',  label: 'SETTINGS'  },
   ];
 
@@ -1882,20 +1883,21 @@ function VaultTab({ c, trainerId }) {
   }, [c.id]);
   React.useEffect(() => { reload(); }, [reload]);
 
-  const upload = async (e) => {
-    const f = e.target.files?.[0]; e.target.value = '';
-    if (!f) return;
-    if (f.size > 20 * 1024 * 1024) { setErr('File too large (max 20MB).'); return; }
+  const uploadFiles = async (files) => {
     setErr(null); setBusy(true);
-    const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path = `${trainerId}/${c.id}/${Date.now()}-${safe}`;
-    const { error: upErr } = await supabase.storage.from(VAULT_BUCKET).upload(path, f, { contentType: f.type || 'application/octet-stream' });
-    if (upErr) { setBusy(false); setErr(upErr.message || 'Upload failed.'); return; }
-    const { error: dbErr } = await supabase.from('client_documents')
-      .insert({ client_id: c.id, trainer_id: trainerId, name: f.name, path, size_bytes: f.size });
+    let failed = 0;
+    for (const f of files) {
+      if (f.size > 20 * 1024 * 1024) { failed++; setErr('Some files were over the 20MB limit.'); continue; }
+      const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${trainerId}/${c.id}/${Date.now()}-${safe}`;
+      const { error: upErr } = await supabase.storage.from(VAULT_BUCKET).upload(path, f, { contentType: f.type || 'application/octet-stream' });
+      if (upErr) { failed++; setErr(upErr.message || 'Upload failed.'); continue; }
+      const { error: dbErr } = await supabase.from('client_documents')
+        .insert({ client_id: c.id, trainer_id: trainerId, name: f.name, path, size_bytes: f.size });
+      if (dbErr) { failed++; setErr(dbErr.message); }
+    }
     setBusy(false);
-    if (dbErr) { setErr(dbErr.message); return; }
-    toast('Document added');
+    if (failed < files.length) toast(files.length - failed === 1 ? 'Document added' : 'Documents added');
     reload();
   };
 
@@ -1913,13 +1915,9 @@ function VaultTab({ c, trainerId }) {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8 }}>
-        Private document vault — attach consent forms, PAR-Qs, contracts or any file for {c.name.split(' ')[0]}. Only you (and the client) can access these.
+        Private documents — attach consent forms, PAR-Qs, contracts or any file for {c.name.split(' ')[0]}. Only you (and the client) can access these.
       </div>
-      <input ref={fileRef} type="file" onChange={upload} style={{ display: 'none' }} />
-      <button onClick={() => !busy && fileRef.current?.click()} className="btn-primary"
-        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.6 : 1 }}>
-        <IconPlus size={14} /> {busy ? 'UPLOADING…' : 'ATTACH DOCUMENT'}
-      </button>
+      <FileDrop onFiles={uploadFiles} accept="*/*" multiple busy={busy} label="DRAG & DROP OR TAP TO ADD DOCUMENTS" hint="PDF, images, docs · up to 20MB each" />
       {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)' }}>{err}</div>}
 
       {docs === null ? <Mono>LOADING…</Mono> : docs.length === 0 ? (

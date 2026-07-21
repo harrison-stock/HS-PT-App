@@ -8,6 +8,7 @@ import { BandPicker, BandChip, bandOf } from '../components/bands'
 import { exerciseMatches } from '../lib/exerciseSearch'
 import { ICON_LIBRARY, SectionGlyph, sanitizeSvg } from '../lib/svgIcon'
 import { uploadWorkoutPhoto } from '../lib/workoutPhotos'
+import { RoadmapTrack } from '../components/Roadmap'
 
 const IMG_FALLBACK = 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70';
 const TAGS = ['STRENGTH','ONBOARD','REHAB','ENDURANCE','HYBRID','SPORT'];
@@ -209,10 +210,18 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     if (!day || !phase?.id) return { error: 'Open the roadmap and save this day first.' };
     const ok = await saveDay();
     if (!ok) return { error: 'Could not save the current day.' };
+    // Cumulative weeks before each phase, so progression works across phase
+    // boundaries when copying to the whole programme.
+    const cumBefore = {};
+    let acc = 0;
+    (prog.phaseList || []).forEach(p => { cumBefore[p.id] = acc; acc += (p.weeks || 1); });
+    const srcAbs = (cumBefore[phase.id] || 0) + weekIdx;
     try {
       for (const t of targets) {
-        const content = progressDay(day, t.week - weekIdx, progression);
-        await writeDayContent(phase.id, t.week, t.dow, content);
+        const tPhaseId = t.phaseId || phase.id;
+        const tAbs = (cumBefore[tPhaseId] || 0) + t.week;
+        const content = progressDay(day, tAbs - srcAbs, progression);
+        await writeDayContent(tPhaseId, t.week, t.dow, content);
       }
       await supabase.from('programmes').update({ updated_at: new Date().toISOString() }).eq('id', prog.id);
       return { count: targets.length };
@@ -585,6 +594,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
       {showCopy && phase && (
         <CopySheet
           weeks={phase.weeks || 1} curWeek={weekIdx} curDow={dayIdx}
+          phases={prog.phaseList || []} curPhaseId={phase.id}
           onClose={() => setShowCopy(false)}
           onCopy={copyDayTo}
         />
@@ -595,10 +605,12 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
 
 // ── COPY DAY SHEET ───────────────────────────────────────────────
 const COPY_DOW = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-function CopySheet({ weeks, curWeek, curDow, onClose, onCopy }) {
+function CopySheet({ weeks, curWeek, curDow, phases = [], curPhaseId, onClose, onCopy }) {
   // Default: replicate this day to the same weekday across every other week.
+  const [scope, setScope]       = React.useState('phase'); // phase | programme
   const [selWeeks, setSelWeeks] = React.useState(() => Array.from({ length: weeks }, (_, i) => i).filter(i => i !== curWeek));
   const [selDows, setSelDows]   = React.useState([curDow]);
+  const multiPhase = phases.length > 1;
   const [wMode, setWMode]       = React.useState('none'); // none | kg | pct
   const [wStep, setWStep]       = React.useState(2.5);
   const [repStep, setRepStep]   = React.useState(0);
@@ -607,9 +619,18 @@ function CopySheet({ weeks, curWeek, curDow, onClose, onCopy }) {
 
   const toggle = (arr, set, v) => set(arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v].sort((a, b) => a - b));
 
-  // Build targets = selected weeks × selected days, minus the source slot.
+  // Build targets. "phase" = selected weeks × days in the current phase.
+  // "programme" = the selected weekday(s) across every week of every phase.
   const targets = [];
-  selWeeks.forEach(w => selDows.forEach(d => { if (!(w === curWeek && d === curDow)) targets.push({ week: w, dow: d }); }));
+  if (scope === 'programme') {
+    phases.forEach(p => {
+      for (let w = 0; w < (p.weeks || 1); w++) {
+        selDows.forEach(d => { if (!(p.id === curPhaseId && w === curWeek && d === curDow)) targets.push({ phaseId: p.id, week: w, dow: d }); });
+      }
+    });
+  } else {
+    selWeeks.forEach(w => selDows.forEach(d => { if (!(w === curWeek && d === curDow)) targets.push({ week: w, dow: d }); }));
+  }
 
   const run = async () => {
     if (!targets.length || busy) return;
@@ -649,6 +670,19 @@ function CopySheet({ weeks, curWeek, curDow, onClose, onCopy }) {
         ) : (
           <>
             <div className="scroller" style={{ padding: '6px 18px 14px', overflowY: 'auto', display: 'grid', gap: 16 }}>
+              {multiPhase && (
+                <div>
+                  <div className="label" style={{ marginBottom: 8 }}>SCOPE</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => setScope('phase')} style={{ ...cell(scope === 'phase'), flex: 1 }}>THIS PHASE</button>
+                    <button onClick={() => setScope('programme')} style={{ ...cell(scope === 'programme'), flex: 1 }}>WHOLE PROGRAMME</button>
+                  </div>
+                  {scope === 'programme' && (
+                    <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', marginTop: 5 }}>Copies to the selected weekday(s) in every week of every phase.</div>
+                  )}
+                </div>
+              )}
+              {scope === 'phase' && (
               <div>
                 <div className="label" style={{ marginBottom: 8 }}>WEEKS</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
@@ -660,6 +694,7 @@ function CopySheet({ weeks, curWeek, curDow, onClose, onCopy }) {
                 </div>
                 <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', marginTop: 5 }}>* current week — source slot is never overwritten</div>
               </div>
+              )}
 
               <div>
                 <div className="label" style={{ marginBottom: 8 }}>WEEKDAYS</div>
@@ -873,9 +908,8 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
                   background: 'var(--accent-soft)', border: '1px solid var(--accent)',
                   color: 'var(--accent)', fontFamily: 'Orbitron', fontWeight: 800, fontSize: 11,
                 }}>P{i+1}</span>
-                <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  <input value={ph.name} onChange={e => updPhase(i, { name: e.target.value })} placeholder="Name" style={phaseInputSt}/>
-                  <input value={ph.focus} onChange={e => updPhase(i, { focus: e.target.value })} placeholder="Focus" style={phaseInputSt}/>
+                <div style={{ flex: 1 }}>
+                  <input value={ph.name} onChange={e => updPhase(i, { name: e.target.value })} placeholder="Phase name (e.g. Hypertrophy)" style={phaseInputSt}/>
                 </div>
                 {phases.length > 1 && (
                   <button onClick={() => remPhase(i)} style={{
@@ -908,6 +942,14 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
           color: 'var(--accent)', fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.14em', fontWeight: 600,
           marginBottom: 18,
         }}>+ ADD PHASE</button>
+
+        {/* Live roadmap preview — updates as phases/weeks change */}
+        {phases.length > 0 && (
+          <div className="card" style={{ padding: 14, marginBottom: 18 }}>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: '0.12em', fontWeight: 600, marginBottom: 10 }}>// ROADMAP PREVIEW</div>
+            <RoadmapTrack phases={phases.map((ph, i) => ({ id: ph.id || `p${i}`, name: ph.name || `Phase ${i + 1}`, idx: i, weeks: ph.weeks }))} startDate={null} />
+          </div>
+        )}
 
         {/* Summary card */}
         <div className="card" style={{ padding: 14, marginBottom: 18, borderLeft: `2px solid ${tagColor}` }}>
