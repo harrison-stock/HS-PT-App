@@ -164,6 +164,13 @@ export function Login() {
             borderRadius: 8, letterSpacing: '0.04em', lineHeight: 1.5,
           }}>
             {resetMsg}
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)', color: 'var(--text-3)', fontSize: 10, lineHeight: 1.5 }}>
+              Didn't arrive within a couple of minutes? Check your spam/junk folder, then{' '}
+              <button type="button" onClick={sendReset} disabled={resetting} className="mono" style={{
+                all: 'unset', cursor: resetting ? 'default' : 'pointer',
+                color: 'var(--accent)', fontWeight: 700, textDecoration: 'underline', opacity: resetting ? 0.5 : 1,
+              }}>{resetting ? 'sending…' : 'send it again'}</button>.
+            </div>
           </div>
         )}
 
