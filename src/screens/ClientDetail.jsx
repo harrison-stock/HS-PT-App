@@ -1723,9 +1723,17 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
 
   const sendReset = async () => {
     if (!resetEmail.trim()) return;
-    await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-      redirectTo: window.location.origin,
-    });
+    const addr = resetEmail.trim();
+    // Prefer the Resend-backed function (built-in SMTP isn't configured); fall
+    // back to the default flow only if the function isn't available.
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('send-reset', {
+        body: { email: addr, redirectTo: window.location.origin },
+      });
+      if (fnErr || (data && data.error)) throw new Error('fallback');
+    } catch (_) {
+      await supabase.auth.resetPasswordForEmail(addr, { redirectTo: window.location.origin });
+    }
     setResetSent(true); setTimeout(() => setResetSent(false), 4000);
   };
 

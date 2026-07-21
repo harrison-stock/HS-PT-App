@@ -16,12 +16,30 @@ export function Login() {
   const [signedUp, setSignedUp] = React.useState(false)
   const [resetMsg, setResetMsg] = React.useState(null)
 
+  const [resetting, setResetting] = React.useState(false)
+
   const sendReset = async () => {
     if (!email.trim()) { setError('Enter your email above, then tap "Forgot password".'); return; }
-    setError(null); setResetMsg(null);
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin })
-    if (err) setError(err.message)
-    else setResetMsg(`A password reset link has been sent to ${email.trim()}.`)
+    if (resetting) return;
+    setError(null); setResetMsg(null); setResetting(true)
+    const addr = email.trim()
+    // Prefer the Resend-backed function (the project's built-in SMTP isn't
+    // configured, which is why the default flow errored). Fall back to the
+    // built-in method only if the function isn't available.
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('send-reset', {
+        body: { email: addr, redirectTo: window.location.origin },
+      })
+      if (!fnErr && data && !data.error) {
+        setResetMsg(`If an account exists for ${addr}, a reset link is on its way — check your inbox (and spam).`)
+        setResetting(false)
+        return
+      }
+    } catch (_) { /* fall through to built-in */ }
+    const { error: err } = await supabase.auth.resetPasswordForEmail(addr, { redirectTo: window.location.origin })
+    if (err) setError('Couldn\'t send a reset email right now. Please try again shortly, or contact your coach.')
+    else setResetMsg(`A password reset link has been sent to ${addr}.`)
+    setResetting(false)
   }
 
   const submit = async (e) => {
@@ -125,11 +143,10 @@ export function Login() {
         </div>
         <div>
           <div className="label" style={{ marginBottom: 7 }}>PASSWORD</div>
-          <input
-            type="password" value={password} onChange={e => setPassword(e.target.value)}
-            placeholder="••••••••" required minLength={6}
+          <PasswordField
+            value={password} onChange={e => setPassword(e.target.value)}
+            minLength={6}
             autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            style={inputStyle}
           />
           {mode === 'signin' && (
             <div style={{ textAlign: 'right', marginTop: 7 }}>
@@ -216,11 +233,11 @@ export function SetPassword({ onDone, onSignOut }) {
       <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'grid', gap: 14 }}>
         <div>
           <div className="label" style={{ marginBottom: 7 }}>NEW PASSWORD</div>
-          <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" required minLength={6} autoComplete="new-password" style={inputStyle} />
+          <PasswordField value={pw} onChange={e => setPw(e.target.value)} minLength={6} autoComplete="new-password" />
         </div>
         <div>
           <div className="label" style={{ marginBottom: 7 }}>CONFIRM PASSWORD</div>
-          <input type="password" value={pw2} onChange={e => setPw2(e.target.value)} placeholder="••••••••" required minLength={6} autoComplete="new-password" style={inputStyle} />
+          <PasswordField value={pw2} onChange={e => setPw2(e.target.value)} minLength={6} autoComplete="new-password" />
         </div>
         {error && (
           <div className="mono" style={{ fontSize: 11, color: 'var(--c-coral)', padding: '10px 12px', background: 'color-mix(in srgb, var(--c-coral) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--c-coral) 35%, transparent)', borderRadius: 8, letterSpacing: '0.04em', lineHeight: 1.5 }}>{error}</div>
@@ -234,6 +251,27 @@ export function SetPassword({ onDone, onSignOut }) {
           SIGN OUT
         </button>
       )}
+    </div>
+  )
+}
+
+// Password input with a peek (eye) toggle so users can check what they typed.
+function PasswordField({ value, onChange, placeholder = '••••••••', autoComplete, minLength = 6, required = true }) {
+  const [show, setShow] = React.useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type={show ? 'text' : 'password'} value={value} onChange={onChange}
+        placeholder={placeholder} required={required} minLength={minLength} autoComplete={autoComplete}
+        style={{ ...inputStyle, paddingRight: 46 }}
+      />
+      <button type="button" onClick={() => setShow(s => !s)}
+        aria-label={show ? 'Hide password' : 'Show password'} title={show ? 'Hide password' : 'Show password'}
+        style={{ all: 'unset', cursor: 'pointer', position: 'absolute', top: 0, bottom: 0, right: 4, width: 38, display: 'grid', placeItems: 'center', color: 'var(--text-3)' }}>
+        {show
+          ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>
+          : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
+      </button>
     </div>
   )
 }
