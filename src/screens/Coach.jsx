@@ -1684,7 +1684,7 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{ph.name}</div>
                 <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 3 }}>
-                  {ph.weeks} WK · {ph.focus.toUpperCase()}
+                  {ph.weeks} WK{ph.focus ? ` · ${ph.focus.toUpperCase()}` : ''}
                 </div>
               </div>
               <IconChevronRight size={14} style={{ color: 'var(--text-3)' }}/>
