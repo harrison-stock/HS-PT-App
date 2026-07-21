@@ -5,6 +5,7 @@ import { loadExerciseMuscleMap } from '../lib/exercises'
 import { Hex, HexBackButton } from '../components/hex'
 import { RoadmapTrack, computeRoadmap } from '../components/Roadmap'
 import { BodyMap, Progress, SideSlider, Segmented } from './Progress'
+import { WorkedView } from './Body'
 import { InjuryThread } from './InjuryThread'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
 import { injuryTitle } from '../lib/injuries'
@@ -32,8 +33,8 @@ const TASK_ICON  = { check: '✓', log: '◎', photo: '▣', form: '✎' };
 const TASK_COLOR = { check: 'var(--accent)', log: 'var(--c-amber)', photo: 'var(--c-blue)', form: 'var(--c-pink)' };
 
 // ── Main component ───────────────────────────────────────────────
-export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go }) {
-  const [tab, setTab] = React.useState('overview');
+export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go, initialTab }) {
+  const [tab, setTab] = React.useState(initialTab || 'overview');
   const TABS = [
     { id: 'overview',  label: 'OVERVIEW'  },
     { id: 'training',  label: 'TRAINING'  },
@@ -1240,74 +1241,45 @@ function BodyTab({ c, trainerId }) {
         <BigToggle active={!isInjuryMode} onClick={() => { setMode('worked');   setPicked(null); setEditPanel(null); }}>MUSCLES WORKED</BigToggle>
         <BigToggle active={isInjuryMode}  onClick={() => { setMode('injuries'); setPicked(null); }}>INJURIES</BigToggle>
       </div>
-      {/* Front / back + (trained) range filter on one row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+      {/* Front / back */}
+      <div style={{ marginTop: 2 }}>
         <SideSlider side={side} onChange={(s) => { setSide(s); setPicked(null); }} />
-        {!isInjuryMode && (
-          <Segmented value={range} onChange={setRange}
-            options={[{ value: '1m', label: '1M' }, { value: '3m', label: '3M' }, { value: '12m', label: '12M' }]} />
-        )}
       </div>
 
-      {/* Body map */}
-      <BodyMap
-        side={side}
-        data={isInjuryMode ? allGroupsData : workedData}
-        intensity={isInjuryMode ? injuryIntensity : workedIntensity}
-        picked={picked}
-        slugMap={isInjuryMode ? injurySlugMap : undefined}
-        perSide={isInjuryMode}
-        neutralBase={isInjuryMode}
-        tintFor={isInjuryMode ? injuryTint : workedTint}
-        zoomable
-        labels={REGION_LABELS}
-        onPick={isInjuryMode
-          ? (group, anat) => { const key = `${group}|${anat}`; setPicked(picked === key ? null : key); setEditPanel(null); setOpenId(null); }
-          : (group) => { setPicked(group === picked ? null : group); setEditPanel(null); setOpenId(null); }}
-        heatColor={isInjuryMode ? 'var(--c-coral)' : 'var(--accent)'}
-      />
+      {/* Worked view — mirrors the client's muscle heatmap exactly */}
+      {!isInjuryMode && <WorkedView userId={c.id} side={side} />}
 
-      {/* Legend */}
-      {isInjuryMode ? (
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {Object.entries(SEV_COLOR).map(([sev, col]) => (
-            <div key={sev} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <Dot color={col}/>
-              <Mono>{SEV_LABEL[sev]}</Mono>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Mono>LOW</Mono>
-          <div style={{
-            flex: 1, height: 6, borderRadius: 999,
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.05), color-mix(in srgb, var(--accent) 30%, transparent), var(--accent))',
-          }}/>
-          <Mono style={{ color: 'var(--accent)' }}>HIGH · TOTAL VOLUME</Mono>
-        </div>
-      )}
-
-      {!isInjuryMode && volume === null && <Mono>LOADING TRAINING VOLUME…</Mono>}
-      {!isInjuryMode && volume !== null && Object.keys(workedData).length === 0 && (
-        <EmptyState>No completed sessions in the last 30 days</EmptyState>
-      )}
-      </div>
-
-      <div className="body-col">
-      {/* Selected muscle — trained volume panel */}
-      {!isInjuryMode && picked && pickedVolume && (
-        <div className="card" style={{ padding: 14, borderColor: 'color-mix(in srgb, var(--accent) 40%, var(--line))' }}>
-          <div className="h-bold" style={{ fontSize: 14, marginBottom: 10 }}>{regionLabel(picked).toUpperCase()}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-            <KpiCard label="SETS"   value={pickedVolume.sets}   color="var(--accent)" />
-            <KpiCard label="REPS"   value={pickedVolume.reps}   color="var(--accent)" />
-            <KpiCard label="VOLUME" value={`${pickedVolume.kg.toLocaleString()}`} unit="kg" color="var(--accent)" />
+      {/* Injury body map + legend */}
+      {isInjuryMode && (
+        <>
+          <BodyMap
+            side={side}
+            data={allGroupsData}
+            intensity={injuryIntensity}
+            picked={picked}
+            slugMap={injurySlugMap}
+            perSide
+            neutralBase
+            tintFor={injuryTint}
+            zoomable
+            labels={REGION_LABELS}
+            onPick={(group, anat) => { const key = `${group}|${anat}`; setPicked(picked === key ? null : key); setEditPanel(null); setOpenId(null); }}
+            heatColor="var(--c-coral)"
+          />
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {Object.entries(SEV_COLOR).map(([sev, col]) => (
+              <div key={sev} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Dot color={col}/>
+                <Mono>{SEV_LABEL[sev]}</Mono>
+              </div>
+            ))}
           </div>
-          <Mono style={{ marginTop: 8 }}>LAST WORKED · {pickedVolume.lastWorked.toUpperCase()}</Mono>
-        </div>
+        </>
       )}
+      </div>
 
+      {isInjuryMode && (
+      <div className="body-col">
       {/* Open injury thread (add notes / resolve) */}
       {isInjuryMode && openInjury && (
         <InjuryThread injury={openInjury} authorId={trainerId}
@@ -1371,6 +1343,7 @@ function BodyTab({ c, trainerId }) {
         </>
       )}
       </div>
+      )}
     </div>
   );
 }

@@ -77,6 +77,7 @@ export default function App() {
   const [clientViewId, setClientViewId] = React.useState(() => {
     try { return sessionStorage.getItem('hs_cv_id') || null; } catch (e) { return null; }
   });
+  const [coachOpen, setCoachOpen] = React.useState(null); // { clientId, tab } → open a client's detail page
   const [clientViewName, setClientViewName] = React.useState(() => {
     try { return sessionStorage.getItem('hs_cv_name') || null; } catch (e) { return null; }
   });
@@ -307,13 +308,22 @@ export default function App() {
   // logger (where the session player owns the full screen).
   const showNav = screen !== 'log';
 
+  const exitClientView = () => { setClientViewId(null); setClientViewName(null); navigate('coach'); };
+  // From the assume-control view, jump straight to this client's admin settings.
+  const openClientSettings = () => {
+    const cid = clientViewId;
+    if (!cid) return;
+    setCoachOpen({ clientId: cid, tab: 'settings' });
+    exitClientView();
+  };
+
   let ScreenEl;
   if (screen === 'workouts')        ScreenEl = <Workouts go={navigate} openPreview={previewWorkoutId} userId={activeUserId}/>;
   else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={activeUserId} resume={logResume} edit={logEdit}/>;
   else if (screen === 'progress')   ScreenEl = <Progress go={navigate} userId={activeUserId}/>;
   else if (screen === 'body')       ScreenEl = <Body go={navigate} userId={activeUserId} trainerId={impersonating ? session.user.id : profile?.trainer_id}/>;
   else if (screen === 'resources')  ScreenEl = <Resources go={navigate} userId={session.user.id} isTrainer={navIsTrainer}/>;
-  else if (screen === 'coach')      ScreenEl = <Coach go={navigate} trainerId={session.user.id} unread={unread}/>;
+  else if (screen === 'coach')      ScreenEl = <Coach go={navigate} trainerId={session.user.id} unread={unread} openTarget={coachOpen} onOpenConsumed={() => setCoachOpen(null)}/>;
   else if (screen === 'programmes') ScreenEl = <Coach go={navigate} trainerId={session.user.id} only="programmes"/>;
   else if (screen === 'exercises')  ScreenEl = <Exercises trainerId={session.user.id}/>;
   else if (screen === 'forms')      ScreenEl = <Forms trainerId={session.user.id}/>;
@@ -338,9 +348,7 @@ export default function App() {
       onLogout={() => supabase.auth.signOut()}
     />
   );
-  else ScreenEl = <Dashboard go={navigate} user={dashUser} userId={activeUserId} impersonating={impersonating} unread={unread}/>;
-
-  const exitClientView = () => { setClientViewId(null); setClientViewName(null); navigate('coach'); };
+  else ScreenEl = <Dashboard go={navigate} user={dashUser} userId={activeUserId} impersonating={impersonating} unread={unread} onClientSettings={impersonating ? openClientSettings : undefined}/>;
 
   return (
     <div data-role={navIsTrainer ? 'trainer' : 'client'} style={{

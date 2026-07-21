@@ -74,7 +74,7 @@ function shapeTask(t) {
 }
 
 // Dashboard / Home screen
-export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
+export function Dashboard({ go, user, userId, impersonating, unread = 0, onClientSettings }) {
   const name = (user && user.name) || 'Athlete';
   const firstName = name.trim().split(/\s+/)[0];
   const initials = name.replace(/[^a-zA-Z0-9\s]/g, ' ').trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase() || 'U';
@@ -177,8 +177,9 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
               }}>{unread > 9 ? '9+' : unread}</span>
             )}
           </button>
-          <button onClick={() => { if (!impersonating) go('profile'); }} aria-label="Profile & settings"
-            style={{ all: 'unset', cursor: impersonating ? 'default' : 'pointer' }}>
+          <button onClick={() => { if (impersonating) { onClientSettings?.(); } else { go('profile'); } }}
+            aria-label={impersonating ? 'Client settings' : 'Profile & settings'}
+            style={{ all: 'unset', cursor: (impersonating && !onClientSettings) ? 'default' : 'pointer' }}>
             <Hex size={38} style={{
               background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
               color: 'var(--on-accent)', fontFamily: 'Orbitron', fontSize: 13, fontWeight: 800,
