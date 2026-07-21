@@ -10,6 +10,10 @@ import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
+// Stable, well-spread colour per client — hashing the whole id (not just the
+// first letter, which clustered same-initial names onto one colour).
+const hashStr = (s) => { let h = 0; for (let i = 0; i < (s || '').length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0; return h; };
+const accentFor = (key) => CLIENT_ACCENTS[hashStr(key) % CLIENT_ACCENTS.length];
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 function computeStreak(daysSet, lastDate) {
@@ -442,7 +446,7 @@ function shapeClient(p) {
   const name = p.name || 'Client';
   const parts = name.replace(/[^a-zA-Z0-9\s]/g, ' ').trim().split(/\s+/).filter(Boolean);
   const initials = parts.map(w => w[0] || '').slice(0, 2).join('').toUpperCase() || '?';
-  const accent = CLIENT_ACCENTS[name.charCodeAt(0) % CLIENT_ACCENTS.length];
+  const accent = accentFor(p.id || name);
   return {
     id: p.id,
     name,
@@ -467,7 +471,7 @@ function shapeManagedClient(mc) {
   const name = mc.name || 'Client';
   const parts = name.replace(/[^a-zA-Z0-9\s]/g, ' ').trim().split(/\s+/).filter(Boolean);
   const initials = parts.map(w => w[0] || '').slice(0, 2).join('').toUpperCase() || '?';
-  const accent = CLIENT_ACCENTS[name.charCodeAt(0) % CLIENT_ACCENTS.length];
+  const accent = accentFor(mc.id || name);
   return {
     id: mc.id, name, initials, accent,
     email: mc.email || '',
