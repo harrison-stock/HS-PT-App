@@ -29,11 +29,17 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
   const uploadImg = async (files) => {
     const file = files[0];
     if (!file) return;
+    // Camera RAW / unsupported formats won't display in a browser — steer the
+    // coach to a web format rather than uploading something that renders broken.
+    if (/\.(arw|cr2|cr3|nef|dng|raf|orf|rw2|tiff?)$/i.test(file.name || '')) {
+      toast('That’s a camera RAW file — please use a JPG or PNG', { kind: 'error' });
+      return;
+    }
     setImgBusy(true);
     const { url, error } = await uploadGuideImage(trainerId, file);
     setImgBusy(false);
     if (url) { set({ img: url }); toast('Photo uploaded'); }
-    else { toast('Photo upload failed — please try again', { kind: 'error' }); }
+    else { console.error('recipe image upload', error); toast(`Upload failed${error?.message ? ` — ${error.message}` : ''}`, { kind: 'error' }); }
   };
   const kcal = kcalFromMacros(d);
   const canSave = d.title.trim() !== '' && !saving;
