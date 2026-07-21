@@ -354,24 +354,24 @@ export default function App() {
     }}>
       {clientViewId && (
         <div onClick={exitClientView} style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300, minHeight: 44,
-          paddingTop: 'env(safe-area-inset-top)', cursor: 'pointer',
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300,
+          paddingTop: 'env(safe-area-inset-top, 0px)', cursor: 'pointer',
           background: `color-mix(in srgb, var(--c-amber) 22%, var(--bg-0))`,
           borderBottom: '1px solid color-mix(in srgb, var(--c-amber) 55%, transparent)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 14px',
         }}>
-          <div className="mono" style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--c-amber)', fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            ◉ VIEWING {clientViewName?.toUpperCase() || 'CLIENT'}'S APP
+          <div style={{ minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px' }}>
+            <div className="mono" style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--c-amber)', fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              ◉ VIEWING {clientViewName?.toUpperCase() || 'CLIENT'}'S APP
+            </div>
+            <span className="mono" style={{
+              flexShrink: 0, fontSize: 10, letterSpacing: '0.1em',
+              color: 'var(--on-accent)', fontWeight: 800, padding: '7px 14px', marginLeft: 10,
+              background: 'var(--c-amber)', borderRadius: 8,
+            }}>✕ EXIT</span>
           </div>
-          <span className="mono" style={{
-            flexShrink: 0, fontSize: 10, letterSpacing: '0.1em',
-            color: 'var(--on-accent)', fontWeight: 800, padding: '7px 14px', marginLeft: 10,
-            background: 'var(--c-amber)', borderRadius: 8,
-          }}>✕ EXIT</span>
         </div>
       )}
-      <div key={screen} className="screen-enter" style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', marginTop: clientViewId ? 48 : 0 }}>
+      <div key={screen} className="screen-enter" style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', marginTop: clientViewId ? 'calc(env(safe-area-inset-top, 0px) + 45px)' : 0 }}>
         <ErrorBoundary key={screen} onHome={() => navigate(homeScreen)}>
           {ScreenEl}
         </ErrorBoundary>

@@ -560,8 +560,24 @@ function mondayOf(d) {
 }
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+// True on phone-width screens, so the coach calendar can drop its 7-column
+// grid (which needs horizontal scrolling on a phone) for a vertical one-week
+// list — the same shape clients see.
+function useIsNarrow(bp = 760) {
+  const [narrow, setNarrow] = React.useState(() => typeof window !== 'undefined' && window.innerWidth < bp);
+  React.useEffect(() => {
+    const on = () => setNarrow(window.innerWidth < bp);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, [bp]);
+  return narrow;
+}
+
 function TrainingTab({ c, trainerId, programmes, onChanged }) {
+  const narrow = useIsNarrow();
   const [weeks, setWeeks]   = React.useState(4);
+  // On phones we only ever show a single week (vertical list).
+  const shownWeeks = narrow ? 1 : weeks;
   const [anchor, setAnchor] = React.useState(() => mondayOf(new Date()));
   const [workouts, setWorkouts] = React.useState([]);
   const [showAssign, setShowAssign] = React.useState(false);
@@ -572,12 +588,12 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
 
   const loadWorkouts = React.useCallback(() => {
     const start = new Date(anchor);
-    const end = new Date(anchor); end.setDate(end.getDate() + weeks * 7);
+    const end = new Date(anchor); end.setDate(end.getDate() + shownWeeks * 7);
     supabase.from('client_workouts')
       .select('id, scheduled_date, status, programme_days(id, day_of_week, week_index, programme_phases(id, name, phase_index, programme_id, programmes(id, name)), workout_sections(title, kind, sort_order, section_exercises(id)))')
       .eq('client_id', c.id).gte('scheduled_date', ymd(start)).lt('scheduled_date', ymd(end))
       .then(({ data }) => setWorkouts(data || []));
-  }, [c.id, anchor, weeks]);
+  }, [c.id, anchor, shownWeeks]);
 
   React.useEffect(() => { loadWorkouts(); }, [loadWorkouts]);
 
@@ -626,7 +642,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
   workouts.forEach(w => { (wMap[w.scheduled_date] = wMap[w.scheduled_date] || []).push(w); });
 
   const shift = (n) => setAnchor(a => { const x = new Date(a); x.setDate(x.getDate() + n * 7); return x; });
-  const rangeEnd = new Date(anchor); rangeEnd.setDate(rangeEnd.getDate() + weeks * 7 - 1);
+  const rangeEnd = new Date(anchor); rangeEnd.setDate(rangeEnd.getDate() + shownWeeks * 7 - 1);
   const fmtShort = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
   return (
@@ -661,27 +677,39 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
         <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', flex: 1, minWidth: 80 }}>
           {fmtShort(anchor)} – {fmtShort(rangeEnd)}
         </span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[1, 2, 4].map(n => (
-            <button key={n} onClick={() => setWeeks(n)} className="mono" style={{
-              all: 'unset', cursor: 'pointer', padding: '6px 10px', borderRadius: 7, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
-              background: weeks === n ? 'var(--accent)' : 'var(--bg-3)', color: weeks === n ? 'var(--on-accent)' : 'var(--text-3)',
-              border: `1px solid ${weeks === n ? 'var(--accent)' : 'var(--line)'}`,
-            }}>{n} WK</button>
-          ))}
-        </div>
+        {!narrow && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[1, 2, 4].map(n => (
+              <button key={n} onClick={() => setWeeks(n)} className="mono" style={{
+                all: 'unset', cursor: 'pointer', padding: '6px 10px', borderRadius: 7, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+                background: weeks === n ? 'var(--accent)' : 'var(--bg-3)', color: weeks === n ? 'var(--on-accent)' : 'var(--text-3)',
+                border: `1px solid ${weeks === n ? 'var(--accent)' : 'var(--line)'}`,
+              }}>{n} WK</button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Week grids (horizontally scrollable) */}
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <div style={{ minWidth: 760, display: 'grid', gap: 10 }}>
-          {Array.from({ length: weeks }, (_, wk) => (
-            <CalendarWeek key={wk} start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()}
-              wMap={wMap} onSelect={setEditing} onMove={moveWorkout} onDelete={deleteWorkout}
-              moving={moving} setMoving={setMoving} />
+      {/* Phones: a vertical one-week list (no horizontal scroll). Wider
+          screens: the multi-week 7-column grid with drag-to-move. */}
+      {narrow ? (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {Array.from({ length: shownWeeks }, (_, wk) => (
+            <CalendarWeek key={wk} vertical start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()}
+              wMap={wMap} onSelect={setEditing} onDelete={deleteWorkout} />
           ))}
         </div>
-      </div>
+      ) : (
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ minWidth: 760, display: 'grid', gap: 10 }}>
+            {Array.from({ length: shownWeeks }, (_, wk) => (
+              <CalendarWeek key={wk} start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()}
+                wMap={wMap} onSelect={setEditing} onMove={moveWorkout} onDelete={deleteWorkout}
+                moving={moving} setMoving={setMoving} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {showImport && (
         <ImportHistory clientId={c.id} clientName={c.name} trainerId={trainerId}
@@ -692,10 +720,44 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
   );
 }
 
-function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, moving, setMoving }) {
+function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, moving, setMoving, vertical = false }) {
   const today = ymd(new Date());
   const [dragOver, setDragOver] = React.useState(null);
   const DOW = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+  // Phone layout: a full-width vertical list, one day per row (mirrors the
+  // client's training calendar). Rest days show a subtle placeholder.
+  if (vertical) {
+    return (
+      <div style={{ display: 'grid', gap: 8 }}>
+        {Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(start); d.setDate(d.getDate() + i);
+          const ds = ymd(d);
+          const isToday = ds === today;
+          const ws = wMap[ds] || [];
+          return (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '56px 1fr', gap: 10, alignItems: 'stretch',
+              borderRadius: 10, padding: 10,
+              background: isToday ? 'var(--accent-soft)' : 'var(--bg-2)',
+              border: `1px solid ${isToday ? 'var(--accent)' : 'var(--line)'}`,
+            }}>
+              <div className="mono" style={{ textAlign: 'center', color: isToday ? 'var(--accent)' : 'var(--text-3)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
+                <div style={{ fontSize: 9, letterSpacing: '0.1em', fontWeight: 700 }}>{DOW[i]}</div>
+                <div className="h-bold" style={{ fontSize: 18, color: isToday ? 'var(--accent)' : 'var(--text)' }}>{d.getDate()}</div>
+                <div style={{ fontSize: 8, letterSpacing: '0.06em' }}>{MONTHS[d.getMonth()]}</div>
+              </div>
+              <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
+                {ws.length === 0
+                  ? <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', alignSelf: 'center', padding: '4px 2px' }}>REST DAY</div>
+                  : ws.map(w => <WorkoutCell key={w.id} w={w} onClick={() => onSelect(w)} onDelete={onDelete ? () => onDelete(w.id) : undefined} />)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   // Label any new month that begins in this week (the 1st, or the week's first
   // day if the month rolled over mid-week before it) so the boundary is obvious.
   const monthMarks = [];

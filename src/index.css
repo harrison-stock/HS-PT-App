@@ -134,7 +134,7 @@ body:has([data-role="trainer"]) {
 .grid-2-wide { display: grid; }
 
 /* Programme builder: phone-first, expands to fill a desktop screen. */
-.pb-topbar  { padding: 54px 14px 10px; }
+.pb-topbar  { padding: max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 14px 10px; }
 .pb-pickers { padding: 12px 14px 8px; }
 .pb-picker-grid { display: grid; gap: 12px; }
 .pb-body    { max-width: 720px; }
@@ -427,3 +427,38 @@ body:has([data-role="trainer"]) {
 
 /* No-tap highlight */
 button { -webkit-tap-highlight-color: transparent; }
+
+/* ── Mobile hardening ────────────────────────────────────────────────
+   Keep everything inside the viewport and let anything that can't shrink
+   scroll on its own axis rather than blowing out the page width. */
+
+/* Media never forces the layout wider than its column. */
+img, svg, video, canvas, picture, image { max-width: 100%; }
+
+/* Long unbroken strings (URLs, emails, IDs) wrap instead of overflowing. */
+.card, .scroller, p { overflow-wrap: break-word; }
+
+/* Horizontal-scroll rail for rows that would otherwise truncate — tab
+   strips, chip/segment rows, wide tables. Apply `hscroll` to the row. */
+.hscroll {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.hscroll::-webkit-scrollbar { display: none; }
+.hscroll > * { flex-shrink: 0; }
+
+/* Wide tables/code scroll within their own box, never the page. */
+table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+pre { max-width: 100%; overflow-x: auto; }
+
+/* On phones the app is designed at a fixed scale — stop the browser
+   auto-inflating text. Zoom itself is pinned via the viewport meta set in
+   main.jsx (maximum-scale=1), which also blocks iOS focus-zoom on inputs. */
+@media (pointer: coarse) and (max-width: 820px) {
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+}

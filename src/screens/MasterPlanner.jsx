@@ -93,7 +93,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 130, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '54px 14px 12px', background: 'var(--bg-1)', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+      <div style={{ padding: 'max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 14px 12px', background: 'var(--bg-1)', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <HexBackButton onClick={onClose} size={36}/>
           <div style={{ flex: 1, minWidth: 120 }}>
