@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
 import { ACTIVE_EXERCISES, PHASES, MUSCLE_LABELS } from '../data/index'
 import { muscleGroupsFor } from '../lib/muscleVolume'
@@ -502,9 +503,13 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       railItems.push({ type: 'divider', phaseId: last.phase, nextPhaseId: next.phase });
     }
   }
-  // Final "cooldown complete · ready to finish?" slide
+  // End of the session: a "block complete" transition (styled like the between-
+  // phase dividers) for the final phase, then a dedicated "ready to finish"
+  // slide — so the last block wraps up consistently before the finish CTA.
   if (exercises.length) {
-    railItems.push({ type: 'finish', phaseId: exercises[exercises.length - 1].phase });
+    const lastPhase = exercises[exercises.length - 1].phase;
+    railItems.push({ type: 'phasedone', phaseId: lastPhase });
+    railItems.push({ type: 'finish', phaseId: lastPhase });
   }
   // Resolve each phase's first rail index for the strip nav
   const railPhase = (it) => it.type === 'ex' ? it.ex.phase : it.type === 'superset' ? it.group[0].phase : null;
@@ -618,6 +623,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         {railItems.map((it, i) =>
         it.type === 'intro' ?
         <IntroSlide key={`intro`} title={dayTitle} intro={dayIntro} onContinue={() => setActiveIdx(i + 1)} /> :
+        it.type === 'phasedone' ?
+        <PhaseDoneSlide key={`pd${i}`} phaseId={it.phaseId} /> :
         it.type === 'finish' ?
         <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
         it.type === 'divider' ?
@@ -1125,6 +1132,46 @@ function ExerciseComment() {
 
 // ── FINAL SLIDE (after cooldown) ─────────────────────────────────
 // "Cooldown complete · ready to finish?" — last rail slide before results.
+// Terminal "block complete" slide — same treatment as the between-phase
+// dividers, shown for the final block before the finish CTA. Advancing is
+// handled by the bottom action bar's CONTINUE button.
+function PhaseDoneSlide({ phaseId }) {
+  const phase = PHASES.find((p) => p.id === phaseId) || {};
+  const color = phase.accent || 'var(--accent)';
+  const confetti = ['var(--c-amber)', 'var(--c-blue)', 'var(--c-coral)', 'var(--accent)', 'var(--c-pink)'];
+  return (
+    <div style={{
+      flex: '0 0 100%', width: '100%', height: '100%',
+      scrollSnapAlign: 'center', padding: '0 14px', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column'
+    }}>
+      <div className="scroller" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', paddingBottom: 10 }}>
+        <div style={{ position: 'relative', width: '100%', height: 0 }}>
+          {confetti.concat(confetti).map((c, i) => {
+            const seed = (i * 137.5) % 100;
+            return (
+              <span key={i} style={{
+                position: 'absolute', left: `${seed}%`, top: `${-90 - (i % 5) * 28}px`,
+                width: i % 2 ? 7 : 9, height: i % 3 ? 9 : 6,
+                background: c, borderRadius: 1, transform: `rotate(${seed * 3.6}deg)`, opacity: 0.85
+              }} />);
+          })}
+        </div>
+        <div style={{ display: 'grid', placeItems: 'center', color, marginBottom: 26 }}>
+          {(PHASE_ICON[phaseId] || PHASE_ICON._default)(140)}
+        </div>
+        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color, marginBottom: 10 }}>
+          ✓ {(phase.label || 'COOLDOWN').toUpperCase()} COMPLETE
+        </div>
+        <div className="h-bold" style={{ fontSize: 26, marginBottom: 18 }}>NICELY DONE</div>
+        <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300 }}>
+          That's every block finished. Continue to wrap up your session.
+        </div>
+      </div>
+    </div>);
+
+}
+
 function FinishSlide({ phaseId, onFinish }) {
   const phase = PHASES.find((p) => p.id === phaseId) || {};
   const confetti = ['var(--c-amber)', 'var(--c-blue)', 'var(--c-coral)', 'var(--accent)', 'var(--c-pink)'];
@@ -1155,7 +1202,7 @@ function FinishSlide({ phaseId, onFinish }) {
         }} />
 
         <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color: 'var(--accent-2)', marginBottom: 10 }}>
-          ✓ {(phase.label || 'COOLDOWN').toUpperCase()} COMPLETE
+          // WRAP UP
         </div>
         <div className="h-bold" style={{ fontSize: 28, marginBottom: 12 }}>READY TO FINISH?</div>
         <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300, marginBottom: 26 }}>
@@ -1875,31 +1922,29 @@ function BandCell({ band, done, onChange }) {
   );
 }
 
+// Reps — a plain type-in field. Prescribed values can be ranges ("8-12"); the
+// client overwrites them with the actual reps done. Stored as a number when it
+// parses (so volume/PR maths work), otherwise the raw text.
 function RepsCell({ set, onChange }) {
-  const [calcOpen, setCalcOpen] = React.useState(false);
-  // Seed the keypad with the numeric part of the current/prescribed reps
-  // (e.g. "8-12" → 8) so logging actual reps starts from a sensible value.
-  const seed = typeof set.reps === 'number'
-    ? set.reps
-    : (parseFloat(String(set.reps).match(/\d+(\.\d+)?/)?.[0]) || '');
+  const commit = (raw) => {
+    const clean = raw.replace(/[^\d.]/g, '');
+    if (clean === '') { onChange(''); return; }
+    const n = parseFloat(clean);
+    onChange(isNaN(n) ? '' : n);
+  };
   return (
-    <>
-      <button onClick={() => setCalcOpen(true)} style={{
-        all: 'unset', cursor: 'pointer', width: '100%',
-        display: 'flex', alignItems: 'baseline', gap: 4,
-      }}>
-        <span className="mono" style={{
-          fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
-          color: set.done ? 'var(--text-2)' : (set.reps ? 'var(--text)' : 'var(--text-3)'),
-          textDecoration: set.done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
-        }}>{set.reps || '0'}</span>
-      </button>
-      {calcOpen && (
-        <CalcKeypad value={seed} unit="reps" mode="reps"
-          onClose={() => setCalcOpen(false)}
-          onApply={(v) => { onChange(v); setCalcOpen(false); }} />
-      )}
-    </>);
+    <input
+      value={set.reps === '' || set.reps == null ? '' : set.reps}
+      onChange={(e) => commit(e.target.value)}
+      inputMode="numeric" placeholder="—" aria-label="Reps"
+      style={{
+        width: '100%', minWidth: 0, background: 'transparent', border: 0,
+        color: set.done ? 'var(--text-2)' : 'var(--text)',
+        fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
+        letterSpacing: '0.04em', outline: 'none',
+        textDecoration: set.done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
+      }}
+    />);
 
 }
 
@@ -1991,7 +2036,7 @@ function CalcKeypad({ value, unit = 'kg', mode = 'weight', onClose, onApply }) {
     }}>{label}</button>
   );
 
-  return (
+  return createPortal(
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', animation: 'fadeIn .15s ease' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 20px)', animation: 'sheetUp .26s cubic-bezier(.22,.61,.36,1)' }}>
         <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
@@ -2023,7 +2068,8 @@ function CalcKeypad({ value, unit = 'kg', mode = 'weight', onClose, onApply }) {
           <Key label="=" onClick={apply} tint="var(--accent-2)" big />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -2136,12 +2182,27 @@ const RPE_LABEL = (v) => (RPE_LEVELS.find((l) => l.n === v) || {}).label || '';
 
 function RpeCell({ value, done, onChange }) {
   const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState(null);
+  const btnRef = React.useRef(null);
   const color = value == null ? 'var(--text-3)' : RPE_COLOR(value);
   const short = value == null ? '—' : RPE_LABEL(value).slice(0, 3);
 
+  const toggle = () => {
+    if (open) { setOpen(false); return; }
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) {
+      const W = 184;
+      setPos({
+        left: Math.max(8, Math.min(r.right - W, window.innerWidth - W - 8)),
+        bottomUp: window.innerHeight - r.top + 8, // sit above the button
+      });
+    }
+    setOpen(true);
+  };
+
   return (
     <div style={{ position: 'relative', display: 'flex', justifyContent: 'flex-start' }}>
-      <button onClick={() => setOpen((o) => !o)} className="mono" style={{
+      <button ref={btnRef} onClick={toggle} className="mono" style={{
         background: value == null ? 'transparent' : `color-mix(in srgb, ${color} 14%, transparent)`,
         border: '1px solid ' + (value == null ? 'var(--line-strong)' : `color-mix(in srgb, ${color} 50%, transparent)`),
         borderStyle: value == null ? 'dashed' : 'solid',
@@ -2154,39 +2215,41 @@ function RpeCell({ value, done, onChange }) {
         <IconChevronRight size={9} style={{ transform: 'rotate(90deg)', opacity: 0.6 }} />
       </button>
 
-      {open &&
-      <>
-        {/* tap-away scrim */}
-        <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-        <div style={{
-          position: 'absolute', zIndex: 41, right: 0, bottom: 'calc(100% + 8px)',
-          width: 184, padding: 12, borderRadius: 12,
-          background: 'var(--bg-3)', border: '1px solid var(--line-strong)',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.45)'
-        }}>
-          <div style={{ marginBottom: 8 }}>
-            <span className="label">// DIFFICULTY</span>
+      {open && pos && createPortal(
+        <>
+          {/* tap-away scrim */}
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 400 }} />
+          <div style={{
+            position: 'fixed', zIndex: 401, left: pos.left, bottom: pos.bottomUp,
+            width: 184, padding: 12, borderRadius: 12,
+            background: 'var(--bg-3)', border: '1px solid var(--line-strong)',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.45)'
+          }}>
+            <div style={{ marginBottom: 8 }}>
+              <span className="label">// DIFFICULTY</span>
+            </div>
+            <div style={{ display: 'grid', gap: 4 }}>
+              {RPE_LEVELS.map((lvl) => {
+                const sel = value === lvl.n;
+                return (
+                  <button key={lvl.n} onClick={() => {onChange(lvl.n);setOpen(false);}}
+                  style={{
+                    all: 'unset', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '8px 10px', borderRadius: 8,
+                    background: sel ? `color-mix(in srgb, ${lvl.color} 18%, transparent)` : 'transparent',
+                    border: '1px solid ' + (sel ? `color-mix(in srgb, ${lvl.color} 50%, transparent)` : 'transparent')
+                  }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: lvl.color, flexShrink: 0, boxShadow: sel ? `0 0 6px ${lvl.color}` : 'none' }} />
+                    <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: sel ? lvl.color : 'var(--text-2)' }}>{lvl.label}</span>
+                    {sel && <IconCheck size={12} sw={3} style={{ marginLeft: 'auto', color: lvl.color }} />}
+                  </button>);
+              })}
+            </div>
           </div>
-          <div style={{ display: 'grid', gap: 4 }}>
-            {RPE_LEVELS.map((lvl) => {
-              const sel = value === lvl.n;
-              return (
-                <button key={lvl.n} onClick={() => {onChange(lvl.n);setOpen(false);}}
-                style={{
-                  all: 'unset', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 9,
-                  padding: '8px 10px', borderRadius: 8,
-                  background: sel ? `color-mix(in srgb, ${lvl.color} 18%, transparent)` : 'transparent',
-                  border: '1px solid ' + (sel ? `color-mix(in srgb, ${lvl.color} 50%, transparent)` : 'transparent')
-                }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 3, background: lvl.color, flexShrink: 0, boxShadow: sel ? `0 0 6px ${lvl.color}` : 'none' }} />
-                  <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: sel ? lvl.color : 'var(--text-2)' }}>{lvl.label}</span>
-                  {sel && <IconCheck size={12} sw={3} style={{ marginLeft: 'auto', color: lvl.color }} />}
-                </button>);
-            })}
-          </div>
-        </div>
-      </>}
+        </>,
+        document.body
+      )}
     </div>);
 
 }
