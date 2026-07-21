@@ -1421,11 +1421,11 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
                 ? <TimeStepper label="TIME" value={st.time||60} onChange={v => onUpdate({ time: v })} accent={accent}/>
                 : <RepsTextInput value={st.repsText||''} onChange={v => onUpdate({ repsText: v })} accent={accent}/>
               }
-              <Stepper label="WEIGHT" unit="kg" value={st.weight||0} min={0} max={400} step={2.5} onChange={v => onUpdate({ weight: v })} accent={accent}/>
+              <Stepper label="WEIGHT" unit="kg" value={st.weight||0} min={0} max={999} step={2.5} onChange={v => onUpdate({ weight: Math.min(999, v) })} accent={accent}/>
             </div>
           )}
           <div style={{ marginTop: 6 }}>
-            <TimeStepper label="REST" value={st.rest||0} onChange={v => onUpdate({ rest: v })} accent={accent} stepSec={15}/>
+            <TimeStepper label="REST" value={st.rest||0} onChange={v => onUpdate({ rest: Math.min(999, v) })} accent={accent} stepSec={15}/>
           </div>
           <div style={{ marginTop: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>

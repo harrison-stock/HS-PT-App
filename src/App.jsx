@@ -430,7 +430,7 @@ function BottomNav({ screen, go, isTrainer }) {
     { id: 'programmes', label: 'BUILD',     brand: 'Calendar' },
     { id: 'exercises',  label: 'EXERCISES', brand: 'Dumbbell' },
     { id: 'forms',      label: 'FORMS',     brand: 'Checklist' },
-    { id: 'resources',  label: 'RECIPES',   brand: 'Recipe' },
+    { id: 'resources',  label: 'RESOURCES', brand: 'Resources' },
   ] : [
     { id: 'dashboard', label: 'HOME',     brand: 'Home' },
     { id: 'workouts',  label: 'TRAIN',    brand: 'Calendar' },

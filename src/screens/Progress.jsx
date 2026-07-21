@@ -191,7 +191,8 @@ function TabPill({ active, onClick, icon, label }) {
       textTransform: 'uppercase',
       boxShadow: active ? '0 0 calc(10px * var(--glow)) var(--accent-glow)' : 'none'
     }}>
-      {icon}{label}
+      <span style={{ display: 'grid', placeItems: 'center', lineHeight: 0, flexShrink: 0 }}>{icon}</span>
+      <span style={{ lineHeight: 1 }}>{label}</span>
     </button>);
 
 }
@@ -232,13 +233,21 @@ function PhotosTab({ userId }) {
   const submit = async () => {
     if (taken === 0 || uploading) return;
     setUploading(true);
+    let failed = 0;
     for (const pose of PHOTO_POSES) {
       const s = shots[pose.id];
-      if (s) await uploadProgressPhoto(userId, pose.id, s.file);
+      if (s) {
+        const res = await uploadProgressPhoto(userId, pose.id, s.file);
+        if (res?.error) { failed++; console.error('progress photo upload', res.error); }
+      }
     }
-    setShots({ front: null, side: null, back: null });
     setUploading(false);
-    toast(taken === 1 ? 'Photo uploaded' : 'Photos uploaded');
+    if (failed === 0) {
+      setShots({ front: null, side: null, back: null });
+      toast(taken === 1 ? 'Photo uploaded' : 'Photos uploaded');
+    } else {
+      toast(`Couldn't save ${failed} photo${failed === 1 ? '' : 's'} — please try again`, { kind: 'error' });
+    }
     reload();
   };
 
