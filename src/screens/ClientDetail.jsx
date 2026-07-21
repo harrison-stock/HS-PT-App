@@ -3,7 +3,9 @@ import { supabase } from '../lib/supabase'
 import { loadMuscleVolume } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { Hex, HexBackButton } from '../components/hex'
+import { RoadmapTrack, computeRoadmap } from '../components/Roadmap'
 import { BodyMap, Progress, SideSlider, Segmented } from './Progress'
+import { WorkedView } from './Body'
 import { InjuryThread } from './InjuryThread'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
 import { injuryTitle } from '../lib/injuries'
@@ -31,8 +33,8 @@ const TASK_ICON  = { check: '✓', log: '◎', photo: '▣', form: '✎' };
 const TASK_COLOR = { check: 'var(--accent)', log: 'var(--c-amber)', photo: 'var(--c-blue)', form: 'var(--c-pink)' };
 
 // ── Main component ───────────────────────────────────────────────
-export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go }) {
-  const [tab, setTab] = React.useState('overview');
+export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go, initialTab }) {
+  const [tab, setTab] = React.useState(initialTab || 'overview');
   const TABS = [
     { id: 'overview',  label: 'OVERVIEW'  },
     { id: 'training',  label: 'TRAINING'  },
@@ -159,21 +161,23 @@ function ProgrammeProgressCard({ clientId, onTab }) {
       // Show ALL of the programme's phases (so edits to the programme reflect
       // here even before the new phases are assigned).
       const { data: allPhases } = await supabase.from('programme_phases')
-        .select('id, name, phase_index').eq('programme_id', prog.id).order('phase_index', { ascending: true });
+        .select('id, name, phase_index, weeks').eq('programme_id', prog.id).order('phase_index', { ascending: true });
       if (!alive) return;
       const source = (allPhases && allPhases.length) ? allPhases
-        : [...pMap.keys()].map((id, i) => ({ id, name: `Phase ${i + 1}`, phase_index: i }));
+        : [...pMap.keys()].map((id, i) => ({ id, name: `Phase ${i + 1}`, phase_index: i, weeks: 1 }));
       const phases = source.map(ph => {
         const c = pMap.get(ph.id) || { total: 0, done: 0 };
-        return { id: ph.id, name: ph.name, idx: ph.phase_index ?? 0, total: c.total, done: c.done,
+        return { id: ph.id, name: ph.name, idx: ph.phase_index ?? 0, weeks: ph.weeks || 1, total: c.total, done: c.done,
           complete: c.total > 0 && c.done === c.total, current: ph.id === currentPhaseId };
       });
-      setInfo({ name: prog.name, total, done, pct: total ? Math.round(done / total * 100) : 0, phases });
+      const startDate = mine.map(r => r.scheduled_date).filter(Boolean).sort()[0] || null;
+      setInfo({ name: prog.name, total, done, startDate, phases });
     })();
     return () => { alive = false; };
   }, [clientId]);
 
   if (info === undefined || info === null) return null;
+  const pct = Math.round(computeRoadmap(info.phases, info.startDate).progress * 100);
   return (
     <button onClick={() => onTab('report')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
       <div className="card" style={{ padding: 14 }}>
@@ -183,32 +187,13 @@ function ProgrammeProgressCard({ clientId, onTab }) {
         </div>
         <div className="h-bold" style={{ fontSize: 15, marginBottom: 14 }}>{info.name}</div>
 
-        {/* Phase milestone track */}
+        {/* Phase milestone track (weeks-based; hexes at each phase's end) */}
         {info.phases.length > 0 && (
-          <div style={{ position: 'relative', margin: '4px 4px 8px' }}>
-            <div style={{ position: 'absolute', left: 14, right: 14, top: 13, height: 0, borderTop: '2px dashed var(--line-strong)' }} />
-            <div style={{ position: 'absolute', left: 14, top: 13, height: 0, borderTop: '2px solid var(--accent)', width: `calc((100% - 28px) * ${info.pct / 100})`, boxShadow: '0 0 calc(6px * var(--glow)) var(--accent-glow)' }} />
-            <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between' }}>
-              {info.phases.map((p, i) => (
-                <div key={p.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: `${100 / info.phases.length}%` }}>
-                  <Hex size={26} square style={{
-                    background: p.complete || p.current ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 10%, transparent)',
-                    border: p.complete || p.current ? '0' : '2px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong))',
-                    color: 'var(--on-accent)',
-                    boxShadow: p.current ? '0 0 calc(9px * var(--glow)) var(--accent-glow)' : 'none',
-                  }}>
-                    {p.complete && <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="var(--on-accent)" strokeWidth="2.5"><path d="M2 6l3 3 5-6" /></svg>}
-                  </Hex>
-                  <div className="mono" style={{ fontSize: 8, letterSpacing: '0.08em', color: p.complete || p.current ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700, marginTop: 6 }}>P{p.idx + 1}</div>
-                  <div style={{ fontSize: 9, marginTop: 1, textAlign: 'center', lineHeight: 1.15, color: p.current ? 'var(--text)' : 'var(--text-3)', fontFamily: 'JetBrains Mono' }}>{p.name}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <RoadmapTrack phases={info.phases} startDate={info.startDate} />
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
-          <Mono>{info.pct}% COMPLETE</Mono>
+          <Mono>{pct}% COMPLETE</Mono>
           <Mono style={{ color: 'var(--accent)' }}>VIEW REPORT →</Mono>
         </div>
       </div>
@@ -744,7 +729,7 @@ function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, moving, setMovi
             }}>
               <div className="mono" style={{ textAlign: 'center', color: isToday ? 'var(--accent)' : 'var(--text-3)', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
                 <div style={{ fontSize: 9, letterSpacing: '0.1em', fontWeight: 700 }}>{DOW[i]}</div>
-                <div className="h-bold" style={{ fontSize: 18, color: isToday ? 'var(--accent)' : 'var(--text)' }}>{d.getDate()}</div>
+                <div className="h-bold" style={{ fontSize: 18, whiteSpace: 'nowrap', color: isToday ? 'var(--accent)' : 'var(--text)' }}>{d.getDate()}</div>
                 <div style={{ fontSize: 8, letterSpacing: '0.06em' }}>{MONTHS[d.getMonth()]}</div>
               </div>
               <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
@@ -1256,74 +1241,45 @@ function BodyTab({ c, trainerId }) {
         <BigToggle active={!isInjuryMode} onClick={() => { setMode('worked');   setPicked(null); setEditPanel(null); }}>MUSCLES WORKED</BigToggle>
         <BigToggle active={isInjuryMode}  onClick={() => { setMode('injuries'); setPicked(null); }}>INJURIES</BigToggle>
       </div>
-      {/* Front / back + (trained) range filter on one row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+      {/* Front / back */}
+      <div style={{ marginTop: 2 }}>
         <SideSlider side={side} onChange={(s) => { setSide(s); setPicked(null); }} />
-        {!isInjuryMode && (
-          <Segmented value={range} onChange={setRange}
-            options={[{ value: '1m', label: '1M' }, { value: '3m', label: '3M' }, { value: '12m', label: '12M' }]} />
-        )}
       </div>
 
-      {/* Body map */}
-      <BodyMap
-        side={side}
-        data={isInjuryMode ? allGroupsData : workedData}
-        intensity={isInjuryMode ? injuryIntensity : workedIntensity}
-        picked={picked}
-        slugMap={isInjuryMode ? injurySlugMap : undefined}
-        perSide={isInjuryMode}
-        neutralBase={isInjuryMode}
-        tintFor={isInjuryMode ? injuryTint : workedTint}
-        zoomable
-        labels={REGION_LABELS}
-        onPick={isInjuryMode
-          ? (group, anat) => { const key = `${group}|${anat}`; setPicked(picked === key ? null : key); setEditPanel(null); setOpenId(null); }
-          : (group) => { setPicked(group === picked ? null : group); setEditPanel(null); setOpenId(null); }}
-        heatColor={isInjuryMode ? 'var(--c-coral)' : 'var(--accent)'}
-      />
+      {/* Worked view — mirrors the client's muscle heatmap exactly */}
+      {!isInjuryMode && <WorkedView userId={c.id} side={side} />}
 
-      {/* Legend */}
-      {isInjuryMode ? (
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {Object.entries(SEV_COLOR).map(([sev, col]) => (
-            <div key={sev} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <Dot color={col}/>
-              <Mono>{SEV_LABEL[sev]}</Mono>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Mono>LOW</Mono>
-          <div style={{
-            flex: 1, height: 6, borderRadius: 999,
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.05), color-mix(in srgb, var(--accent) 30%, transparent), var(--accent))',
-          }}/>
-          <Mono style={{ color: 'var(--accent)' }}>HIGH · TOTAL VOLUME</Mono>
-        </div>
-      )}
-
-      {!isInjuryMode && volume === null && <Mono>LOADING TRAINING VOLUME…</Mono>}
-      {!isInjuryMode && volume !== null && Object.keys(workedData).length === 0 && (
-        <EmptyState>No completed sessions in the last 30 days</EmptyState>
-      )}
-      </div>
-
-      <div className="body-col">
-      {/* Selected muscle — trained volume panel */}
-      {!isInjuryMode && picked && pickedVolume && (
-        <div className="card" style={{ padding: 14, borderColor: 'color-mix(in srgb, var(--accent) 40%, var(--line))' }}>
-          <div className="h-bold" style={{ fontSize: 14, marginBottom: 10 }}>{regionLabel(picked).toUpperCase()}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-            <KpiCard label="SETS"   value={pickedVolume.sets}   color="var(--accent)" />
-            <KpiCard label="REPS"   value={pickedVolume.reps}   color="var(--accent)" />
-            <KpiCard label="VOLUME" value={`${pickedVolume.kg.toLocaleString()}`} unit="kg" color="var(--accent)" />
+      {/* Injury body map + legend */}
+      {isInjuryMode && (
+        <>
+          <BodyMap
+            side={side}
+            data={allGroupsData}
+            intensity={injuryIntensity}
+            picked={picked}
+            slugMap={injurySlugMap}
+            perSide
+            neutralBase
+            tintFor={injuryTint}
+            zoomable
+            labels={REGION_LABELS}
+            onPick={(group, anat) => { const key = `${group}|${anat}`; setPicked(picked === key ? null : key); setEditPanel(null); setOpenId(null); }}
+            heatColor="var(--c-coral)"
+          />
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {Object.entries(SEV_COLOR).map(([sev, col]) => (
+              <div key={sev} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Dot color={col}/>
+                <Mono>{SEV_LABEL[sev]}</Mono>
+              </div>
+            ))}
           </div>
-          <Mono style={{ marginTop: 8 }}>LAST WORKED · {pickedVolume.lastWorked.toUpperCase()}</Mono>
-        </div>
+        </>
       )}
+      </div>
 
+      {isInjuryMode && (
+      <div className="body-col">
       {/* Open injury thread (add notes / resolve) */}
       {isInjuryMode && openInjury && (
         <InjuryThread injury={openInjury} authorId={trainerId}
@@ -1387,6 +1343,7 @@ function BodyTab({ c, trainerId }) {
         </>
       )}
       </div>
+      )}
     </div>
   );
 }

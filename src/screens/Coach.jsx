@@ -26,10 +26,22 @@ function computeStreak(daysSet, lastDate) {
   return streak;
 }
 
-export function Coach({ go, trainerId, unread = 0, only }) {
+export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsumed }) {
   const [tab, setTab]                       = React.useState('clients');
   const [hubTab, setHubTab]                 = React.useState('programmes');
   const [clientId, setClientId]             = React.useState(null);
+  const [clientInitialTab, setClientInitialTab] = React.useState(null);
+
+  // Deep-link: open a specific client's detail page (e.g. from "assume control"
+  // → client admin settings).
+  React.useEffect(() => {
+    if (openTarget?.clientId) {
+      setTab('clients');
+      setClientId(openTarget.clientId);
+      setClientInitialTab(openTarget.tab || null);
+      onOpenConsumed?.();
+    }
+  }, [openTarget]);
   const [programmeId, setProgrammeId]       = React.useState(null);
   const [builderProgramme, setBuilderProgramme] = React.useState(null);
   const [builderOpenRoadmap, setBuilderOpenRoadmap] = React.useState(false);
@@ -387,7 +399,8 @@ export function Coach({ go, trainerId, unread = 0, only }) {
           c={activeClient}
           trainerId={trainerId}
           programmes={programmes}
-          onClose={() => setClientId(null)}
+          initialTab={clientInitialTab}
+          onClose={() => { setClientId(null); setClientInitialTab(null); }}
           onChanged={() => { fetchClients(); fetchTodaySchedule(); }}
           go={go}
         />

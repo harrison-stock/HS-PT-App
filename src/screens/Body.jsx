@@ -55,7 +55,8 @@ export function Body({ userId, trainerId, go }) {
 }
 
 // ── MUSCLES WORKED ───────────────────────────────────────────────
-function WorkedView({ userId, side, go }) {
+// Exported so the coach's client Body tab renders the exact same heatmap.
+export function WorkedView({ userId, side, go }) {
   const [range, setRange] = React.useState('30d');
   const [data, setData]   = React.useState(null);
   const [picked, setPicked] = React.useState(null);
@@ -113,10 +114,12 @@ function WorkedView({ userId, side, go }) {
                 <Stat label="REPS"   value={pickedVol.reps} />
                 <Stat label="VOLUME" value={`${pickedVol.kg.toLocaleString()}`} unit="kg" />
               </div>
-              <button onClick={() => go('progress')} className="btn-primary"
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--heading-deep)' }}>
-                VIEW FULL STATS <IconChevronRight size={14}/>
-              </button>
+              {go && (
+                <button onClick={() => go('progress')} className="btn-primary"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--heading-deep)' }}>
+                  VIEW FULL STATS <IconChevronRight size={14}/>
+                </button>
+              )}
             </div>
           ) : (
             <Mono style={{ textAlign: 'center', padding: '4px 0 8px' }}>TAP A HIGHLIGHTED MUSCLE TO SEE ITS VOLUME</Mono>

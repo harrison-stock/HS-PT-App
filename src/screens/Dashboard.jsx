@@ -6,6 +6,7 @@ import { notify, trainerOf } from '../lib/notifications'
 import { FormFill } from './FormFill'
 import { ProgrammeReport } from './ProgrammeReport'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
+import { RoadmapTrack, computeRoadmap } from '../components/Roadmap'
 
 function useLiveClock() {
   const [now, setNow] = React.useState(() => new Date());
@@ -73,7 +74,7 @@ function shapeTask(t) {
 }
 
 // Dashboard / Home screen
-export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
+export function Dashboard({ go, user, userId, impersonating, unread = 0, onClientSettings }) {
   const name = (user && user.name) || 'Athlete';
   const firstName = name.trim().split(/\s+/)[0];
   const initials = name.replace(/[^a-zA-Z0-9\s]/g, ' ').trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase() || 'U';
@@ -176,8 +177,9 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0 }) {
               }}>{unread > 9 ? '9+' : unread}</span>
             )}
           </button>
-          <button onClick={() => { if (!impersonating) go('profile'); }} aria-label="Profile & settings"
-            style={{ all: 'unset', cursor: impersonating ? 'default' : 'pointer' }}>
+          <button onClick={() => { if (impersonating) { onClientSettings?.(); } else { go('profile'); } }}
+            aria-label={impersonating ? 'Client settings' : 'Profile & settings'}
+            style={{ all: 'unset', cursor: (impersonating && !onClientSettings) ? 'default' : 'pointer' }}>
             <Hex size={38} style={{
               background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
               color: 'var(--on-accent)', fontFamily: 'Orbitron', fontSize: 13, fontWeight: 800,
@@ -553,26 +555,16 @@ async function loadRoadmap(userId) {
   const totalSessions = phases.reduce((n, p) => n + p.total, 0);
   const doneSessions  = phases.reduce((n, p) => n + p.done,  0);
 
-  // Line fill aligned to the phase nodes: every finished phase reaches its node,
-  // and the current phase fills toward the next node by how much of it is done
-  // (sessions complete ≈ weeks elapsed, so a 4-week phase advances ~25%/week).
-  const n = phases.length;
-  const curIdx = phases.findIndex(p => p.status === 'current');
-  let lineFraction;
-  if (curIdx === -1) {
-    lineFraction = phases.some(p => p.status === 'done') ? 1 : 0; // all done, or nothing started
-  } else {
-    const cur = phases[curIdx];
-    const frac = cur.total > 0 ? cur.done / cur.total : 0;
-    lineFraction = n > 1 ? (curIdx + frac) / (n - 1) : frac;
-  }
-  lineFraction = Math.max(0, Math.min(1, lineFraction));
+  // Programme start = the earliest scheduled workout for this programme; the
+  // roadmap progress is weeks-elapsed / total-weeks (see RoadmapTrack).
+  const startDate = data
+    .filter(w => w.programme_days?.programme_phases?.programmes?.id === main.prog.id)
+    .map(w => w.scheduled_date).filter(Boolean).sort()[0] || null;
 
   return {
     name: main.prog.name,
-    phases,
-    pct: totalSessions > 0 ? doneSessions / totalSessions : 0,
-    lineFraction,
+    phases: phases.map(p => ({ id: p.id, idx: p.idx, name: p.name, weeks: p.weeks })),
+    startDate,
     doneSessions, totalSessions,
   };
 }
@@ -587,8 +579,8 @@ function ProgrammeRoadmap({ userId, onOpen }) {
   if (roadmap === undefined) return null;
   if (!roadmap) return null;
 
-  const { name, phases, pct, lineFraction, doneSessions, totalSessions } = roadmap;
-  const overallPct = lineFraction ?? pct;
+  const { name, phases, startDate, doneSessions, totalSessions } = roadmap;
+  const { progress } = computeRoadmap(phases, startDate);
 
   return (
     <div className="card" style={{
@@ -607,78 +599,14 @@ function ProgrammeRoadmap({ userId, onOpen }) {
             {doneSessions} / {totalSessions} SESSIONS
           </div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em', marginTop: 2 }}>
-            {Math.round(overallPct * 100)}% COMPLETE
+            {Math.round(progress * 100)}% COMPLETE
           </div>
         </div>
       </div>
 
-      {/* Phase track */}
-      <div style={{ position: 'relative', marginBottom: 14 }}>
-        {/* Background rail */}
-        <div style={{ position: 'absolute', left: 8, right: 8, top: 11,
-          height: 2, background: 'var(--line-strong)', borderRadius: 1
-        }} />
-        {/* Filled progress */}
-        <div style={{
-          position: 'absolute', left: 8, top: 11,
-          width: `calc((100% - 16px) * ${overallPct})`,
-          height: 2, background: 'linear-gradient(90deg, var(--accent), var(--accent-2))',
-          borderRadius: 1, boxShadow: '0 0 calc(6px * var(--glow)) var(--accent-glow)'
-        }} />
-
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(phases.length, 2)}, 1fr)`, gap: 4, position: 'relative' }}>
-          {phases.map((p, i) => {
-            const isCurrent = p.status === 'current';
-            const isDone = p.status === 'done';
-            return (
-              <div key={p.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                {/* Hex node */}
-                <div style={{ position: 'relative', width: 28, height: 28, display: 'grid', placeItems: 'center' }}>
-                  {isCurrent ?
-                  <>
-                    {/* in-progress glow */}
-                    <span style={{
-                      position: 'absolute', width: 30, height: 30, borderRadius: '50%',
-                      background: 'var(--accent)', filter: 'blur(9px)', opacity: 0.6,
-                      animation: 'phasePulse 1.8s ease-in-out infinite'
-                    }} />
-                    <Hex size={26} square style={{
-                      background: 'var(--accent)',
-                      position: 'relative',
-                      boxShadow: '0 0 calc(10px * var(--glow)) var(--accent-glow)'
-                    }} />
-                  </> :
-
-                  <Hex size={26} square style={{
-                    background: isDone ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 10%, transparent)',
-                    border: isDone ? '0' : '2px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong))',
-                    color: 'var(--on-accent)'
-                  }}>
-                      {isDone &&
-                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="var(--on-accent)" strokeWidth="2.5">
-                          <path d="M2 6l3 3 5-6" />
-                        </svg>
-                    }
-                    </Hex>
-                  }
-                </div>
-                {/* Phase label */}
-                <div style={{ marginTop: 8, textAlign: 'center' }}>
-                  <div className="mono" style={{
-                    fontSize: 8, letterSpacing: '0.14em',
-                    color: isCurrent || isDone ? 'var(--accent)' : 'var(--text-3)',
-                    fontWeight: 600
-                  }}>P{p.idx + 1}</div>
-                  <div style={{
-                    fontSize: 10.5, marginTop: 2, lineHeight: 1.1,
-                    color: isCurrent ? 'var(--text)' : isDone ? 'var(--text-2)' : 'var(--text-3)',
-                    fontWeight: isCurrent ? 600 : 400, fontFamily: "\"JetBrains Mono\""
-                  }}>{p.name}</div>
-                </div>
-              </div>);
-
-          })}
-        </div>
+      {/* Phase track (weeks-based; hexes at each phase's end) */}
+      <div style={{ marginBottom: 14 }}>
+        <RoadmapTrack phases={phases} startDate={startDate} />
       </div>
 
       {onOpen && (

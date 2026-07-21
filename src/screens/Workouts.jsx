@@ -277,7 +277,7 @@ export function Workouts({ go, openPreview, userId }) {
                   <div className="mono" style={{ fontSize: 9, letterSpacing: '0.14em', color: isToday ? 'var(--accent)' : 'var(--text-3)' }}>
                     {dayName(dt)}
                   </div>
-                  <div className="h-bold" style={{ fontSize: 22, marginTop: 2, lineHeight: 1, color: isToday ? 'var(--accent)' : 'var(--text)' }}>
+                  <div className="h-bold" style={{ fontSize: 22, marginTop: 2, lineHeight: 1, whiteSpace: 'nowrap', color: isToday ? 'var(--accent)' : 'var(--text)' }}>
                     {dt.getDate()}
                   </div>
                   {isToday && <div className="mono" style={{ fontSize: 8, color: 'var(--accent)', letterSpacing: '0.14em', marginTop: 2 }}>TODAY</div>}
@@ -573,9 +573,7 @@ function PreviewBody({ w, sections, expanded, onToggle, onOpenSection, onClose, 
             {sections.reduce((n, s) => n + s.items.length, 0)} exercises
           </span>
         </div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', marginBottom: 14 }}>
-          EST. COMPLETION · REST TIMERS + TRANSITIONS
-        </div>
+        <div style={{ marginBottom: 14 }} />
 
         {w.coachNotes && (
           <div style={{
