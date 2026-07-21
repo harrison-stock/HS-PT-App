@@ -131,36 +131,45 @@ function ProgrammeProgressCard({ clientId, onTab }) {
   const [info, setInfo] = React.useState(undefined);
   React.useEffect(() => {
     let alive = true;
-    supabase.from('client_workouts')
-      .select('status, scheduled_date, programme_days(week_index, programme_phases(id, name, phase_index, weeks, programmes(id, name)))')
-      .eq('client_id', clientId).order('scheduled_date', { ascending: true })
-      .then(({ data }) => {
-        if (!alive) return;
-        const rows = data || [];
-        if (!rows.length) { setInfo(null); return; }
-        const prog = rows.map(r => r.programme_days?.programme_phases?.programmes).filter(Boolean).slice(-1)[0];
-        if (!prog) { setInfo(null); return; }
-        const mine = rows.filter(r => r.programme_days?.programme_phases?.programmes?.id === prog.id);
-        const total = mine.length;
-        const done = mine.filter(r => r.status === 'completed').length;
-        const today = new Date().toISOString().slice(0, 10);
-        const current = [...mine].reverse().find(r => r.scheduled_date <= today) || mine[0];
-        const currentPhaseId = current?.programme_days?.programme_phases?.id;
-        // Group into phases for the milestone track.
-        const pMap = new Map();
-        mine.forEach(r => {
-          const ph = r.programme_days?.programme_phases;
-          if (!ph) return;
-          if (!pMap.has(ph.id)) pMap.set(ph.id, { id: ph.id, name: ph.name, idx: ph.phase_index ?? 0, total: 0, done: 0 });
-          const p = pMap.get(ph.id);
-          p.total += 1;
-          if (r.status === 'completed') p.done += 1;
-        });
-        const phases = [...pMap.values()].sort((a, b) => a.idx - b.idx).map(p => ({
-          ...p, complete: p.total > 0 && p.done === p.total, current: p.id === currentPhaseId,
-        }));
-        setInfo({ name: prog.name, total, done, pct: total ? Math.round(done / total * 100) : 0, phases });
+    (async () => {
+      const { data } = await supabase.from('client_workouts')
+        .select('status, scheduled_date, programme_days(week_index, programme_phases(id, name, phase_index, weeks, programmes(id, name)))')
+        .eq('client_id', clientId).order('scheduled_date', { ascending: true });
+      if (!alive) return;
+      const rows = data || [];
+      if (!rows.length) { setInfo(null); return; }
+      const prog = rows.map(r => r.programme_days?.programme_phases?.programmes).filter(Boolean).slice(-1)[0];
+      if (!prog) { setInfo(null); return; }
+      const mine = rows.filter(r => r.programme_days?.programme_phases?.programmes?.id === prog.id);
+      const total = mine.length;
+      const done = mine.filter(r => r.status === 'completed').length;
+      const today = new Date().toISOString().slice(0, 10);
+      const current = [...mine].reverse().find(r => r.scheduled_date <= today) || mine[0];
+      const currentPhaseId = current?.programme_days?.programme_phases?.id;
+      // Per-phase completion from the assigned workouts.
+      const pMap = new Map();
+      mine.forEach(r => {
+        const ph = r.programme_days?.programme_phases;
+        if (!ph) return;
+        if (!pMap.has(ph.id)) pMap.set(ph.id, { total: 0, done: 0 });
+        const p = pMap.get(ph.id);
+        p.total += 1;
+        if (r.status === 'completed') p.done += 1;
       });
+      // Show ALL of the programme's phases (so edits to the programme reflect
+      // here even before the new phases are assigned).
+      const { data: allPhases } = await supabase.from('programme_phases')
+        .select('id, name, phase_index').eq('programme_id', prog.id).order('phase_index', { ascending: true });
+      if (!alive) return;
+      const source = (allPhases && allPhases.length) ? allPhases
+        : [...pMap.keys()].map((id, i) => ({ id, name: `Phase ${i + 1}`, phase_index: i }));
+      const phases = source.map(ph => {
+        const c = pMap.get(ph.id) || { total: 0, done: 0 };
+        return { id: ph.id, name: ph.name, idx: ph.phase_index ?? 0, total: c.total, done: c.done,
+          complete: c.total > 0 && c.done === c.total, current: ph.id === currentPhaseId };
+      });
+      setInfo({ name: prog.name, total, done, pct: total ? Math.round(done / total * 100) : 0, phases });
+    })();
     return () => { alive = false; };
   }, [clientId]);
 
@@ -183,8 +192,8 @@ function ProgrammeProgressCard({ clientId, onTab }) {
               {info.phases.map((p, i) => (
                 <div key={p.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: `${100 / info.phases.length}%` }}>
                   <Hex size={26} square style={{
-                    background: p.complete || p.current ? 'var(--accent)' : 'var(--bg-3)',
-                    border: p.complete || p.current ? '0' : '1.5px solid var(--line-strong)',
+                    background: p.complete || p.current ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 10%, transparent)',
+                    border: p.complete || p.current ? '0' : '2px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong))',
                     color: 'var(--on-accent)',
                     boxShadow: p.current ? '0 0 calc(9px * var(--glow)) var(--accent-glow)' : 'none',
                   }}>
@@ -282,9 +291,10 @@ function OverviewTab({ c, go, onClose, onTab }) {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      {/* Assume control — compact */}
+      {/* Assume control — compact. Available for real (signed-up) clients and
+          for in-person managed clients (who have no app and are coach-logged). */}
       <div>
-      {!c.managed ? (
+      {(!c.managed || c.client_status === 'in_person') ? (
         <button onClick={() => { onClose(); go('clientview', { clientId: c.id, clientName: c.name, screen: 'dashboard' }); }}
           className="mono" style={{
             all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7,
@@ -1713,9 +1723,17 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
 
   const sendReset = async () => {
     if (!resetEmail.trim()) return;
-    await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-      redirectTo: window.location.origin,
-    });
+    const addr = resetEmail.trim();
+    // Prefer the Resend-backed function (built-in SMTP isn't configured); fall
+    // back to the default flow only if the function isn't available.
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('send-reset', {
+        body: { email: addr, redirectTo: window.location.origin },
+      });
+      if (fnErr || (data && data.error)) throw new Error('fallback');
+    } catch (_) {
+      await supabase.auth.resetPasswordForEmail(addr, { redirectTo: window.location.origin });
+    }
     setResetSent(true); setTimeout(() => setResetSent(false), 4000);
   };
 

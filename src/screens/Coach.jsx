@@ -1349,11 +1349,14 @@ function ScheduleRow({ s, client, onPick }) {
 function InviteSheet({ trainerId, onClose, onCreated }) {
   const [clientName,  setClientName]  = React.useState('');
   const [clientEmail, setClientEmail] = React.useState('');
+  const [coaching,    setCoaching]    = React.useState('online'); // online | in_person | hybrid
   const [saving,      setSaving]      = React.useState(false);
   const [inviteUrl,   setInviteUrl]   = React.useState(null);
   const [emailed,     setEmailed]     = React.useState(false);
   const [copied,      setCopied]      = React.useState(false);
   const [error,       setError]       = React.useState(null);
+
+  const inPersonOnly = coaching === 'in_person';
 
   const create = async () => {
     if (!clientName.trim() || saving) return;
@@ -1371,17 +1374,27 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
         .limit(1).maybeSingle();
       if (existing) {
         mc = existing;
-        await supabase.from('managed_clients').update({ name: clientName.trim() }).eq('id', mc.id);
+        await supabase.from('managed_clients').update({ name: clientName.trim(), client_status: coaching }).eq('id', mc.id);
       }
     }
     if (!mc) {
       const { data: created, error: mcErr } = await supabase
         .from('managed_clients')
-        .insert({ trainer_id: trainerId, name: clientName.trim(), email: clientEmail.trim() })
+        .insert({ trainer_id: trainerId, name: clientName.trim(), email: clientEmail.trim() || null, client_status: coaching })
         .select('id')
         .single();
       if (mcErr || !created) { setSaving(false); setError(mcErr?.message || 'Could not add client'); return; }
       mc = created;
+    }
+
+    // In-person-only clients don't use the app — no invite/email needed. Create
+    // the managed record and finish; the coach logs their progress via "assume
+    // control" from the client's page.
+    if (inPersonOnly) {
+      setSaving(false);
+      onCreated?.();
+      onClose();
+      return;
     }
 
     // Create an invite linked to this managed client (for the client to sign up later)
@@ -1440,6 +1453,21 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               </div>
             )}
             <div>
+              <div className="label" style={{ marginBottom: 7 }}>// COACHING TYPE</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                {[['online', 'ONLINE'], ['in_person', 'IN-PERSON'], ['hybrid', 'HYBRID']].map(([v, lbl]) => (
+                  <button key={v} onClick={() => setCoaching(v)} style={{
+                    all: 'unset', cursor: 'pointer', textAlign: 'center',
+                    padding: '10px 6px', borderRadius: 8, fontSize: 9,
+                    fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '0.06em',
+                    background: coaching === v ? 'var(--accent-soft)' : 'var(--bg-3)',
+                    border: `1px solid ${coaching === v ? 'var(--accent)' : 'var(--line)'}`,
+                    color: coaching === v ? 'var(--accent)' : 'var(--text-3)',
+                  }}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+            <div>
               <div className="label" style={{ marginBottom: 7 }}>// CLIENT NAME</div>
               <input
                 value={clientName} onChange={e => setClientName(e.target.value)}
@@ -1448,10 +1476,10 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               />
             </div>
             <div>
-              <div className="label" style={{ marginBottom: 7 }}>// CLIENT EMAIL (OPTIONAL)</div>
+              <div className="label" style={{ marginBottom: 7 }}>// CLIENT EMAIL {inPersonOnly ? '(NOT NEEDED)' : '(OPTIONAL)'}</div>
               <input
                 type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)}
-                placeholder="client@email.com"
+                placeholder={inPersonOnly ? 'No app access — leave blank' : 'client@email.com'}
                 style={inviteInputSt}
               />
             </div>
@@ -1459,7 +1487,9 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6,
               padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8,
             }}>
-              Add an email and we'll send them an invite to join — they set a password and connect to you automatically. You'll also get a one-time link to share manually if you prefer.
+              {inPersonOnly
+                ? 'In-person clients don\'t need the app. We\'ll add them to your roster and you can log their progress yourself via "assume control" on their page — no email or sign-up required.'
+                : 'Add an email and we\'ll send them an invite to join — they set a password and connect to you automatically. You\'ll also get a one-time link to share manually if you prefer.'}
             </div>
           </>
         ) : (
@@ -1516,7 +1546,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
             disabled={!clientName.trim() || saving}
             className="btn-primary"
             style={{ width: '100%', opacity: clientName.trim() ? 1 : 0.4, pointerEvents: clientName.trim() ? 'auto' : 'none' }}>
-            {saving ? 'CREATING…' : 'CREATE INVITE LINK →'}
+            {saving ? 'CREATING…' : inPersonOnly ? 'ADD CLIENT →' : 'CREATE INVITE LINK →'}
           </button>
         </div>
       )}
@@ -1538,6 +1568,8 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
   const [duplicating, setDuplicating] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
+  const dayIdsRef = React.useRef([]);
+  const [unassigningId, setUnassigningId] = React.useState(null); // clientId awaiting confirm / in-flight
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1553,6 +1585,7 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
       if (!days?.length) { if (!cancelled) setAssignedClients([]); return; }
 
       const dayIds = days.map(d => d.id);
+      dayIdsRef.current = dayIds;
       const { data: workouts } = await supabase
         .from('client_workouts')
         .select('client_id')
@@ -1561,16 +1594,32 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
       if (!workouts?.length) { if (!cancelled) setAssignedClients([]); return; }
 
       const uniqueIds = [...new Set(workouts.map(w => w.client_id))];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name')
-        .in('id', uniqueIds);
+      // Names come from real profiles or coach-managed clients.
+      const [{ data: profiles }, { data: managed }] = await Promise.all([
+        supabase.from('profiles').select('id, name').in('id', uniqueIds),
+        supabase.from('managed_clients').select('id, name').in('id', uniqueIds),
+      ]);
+      const byId = new Map();
+      (profiles || []).forEach(r => byId.set(r.id, r.name));
+      (managed || []).forEach(r => { if (!byId.has(r.id)) byId.set(r.id, r.name); });
+      const merged = uniqueIds.map(id => ({ id, name: byId.get(id) || 'Unnamed' }));
 
-      if (!cancelled) setAssignedClients(profiles || []);
+      if (!cancelled) setAssignedClients(merged);
     }
     loadClients();
     return () => { cancelled = true; };
   }, [p.id]);
+
+  // Unassign a client: remove the programme's workouts from their schedule.
+  const unassignClient = async (clientId) => {
+    if (unassigningId !== clientId) { setUnassigningId(clientId); setTimeout(() => setUnassigningId(cur => cur === clientId ? null : cur), 2600); return; }
+    const dayIds = dayIdsRef.current;
+    if (dayIds.length) {
+      await supabase.from('client_workouts').delete().eq('client_id', clientId).in('day_id', dayIds);
+    }
+    setAssignedClients(cur => (cur || []).filter(c => c.id !== clientId));
+    setUnassigningId(null);
+  };
 
   const handleDuplicate = async () => {
     setDuplicating(true);
@@ -1637,11 +1686,13 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
           <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', padding: '8px 0' }}>No clients assigned yet.</div>
         ) : (
           <div style={{ display: 'grid', gap: 6 }}>
-            {assignedClients.map(c => (
+            {assignedClients.map(c => {
+              const confirming = unassigningId === c.id;
+              return (
               <div key={c.id} style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '10px 14px', background: 'var(--bg-2)',
-                border: '1px solid var(--line)', borderRadius: 10,
+                border: `1px solid ${confirming ? 'color-mix(in srgb, var(--c-coral) 50%, var(--line))' : 'var(--line)'}`, borderRadius: 10,
               }}>
                 <div style={{
                   width: 28, height: 28, borderRadius: '50%',
@@ -1649,9 +1700,21 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
                   display: 'grid', placeItems: 'center',
                   color: 'var(--accent)', fontWeight: 800, fontSize: 11,
                 }}>{(c.name || '?')[0].toUpperCase()}</div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name || 'Unnamed'}</div>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{c.name || 'Unnamed'}</div>
+                <button onClick={() => unassignClient(c.id)} className="mono" title="Unassign client"
+                  style={{
+                    all: 'unset', cursor: 'pointer', flexShrink: 0,
+                    padding: confirming ? '5px 9px' : '5px', borderRadius: 7,
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+                    color: 'var(--c-coral)',
+                    border: `1px solid ${confirming ? 'var(--c-coral)' : 'transparent'}`,
+                    background: confirming ? 'color-mix(in srgb, var(--c-coral) 12%, transparent)' : 'transparent',
+                  }}>
+                  {confirming ? 'UNASSIGN?' : <IconX2 size={14} />}
+                </button>
               </div>
-            ))}
+            );})}
           </div>
         )}
       </div>

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { ACTIVE_EXERCISES, PHASES, MUSCLE_LABELS } from '../data/index'
 import { muscleGroupsFor } from '../lib/muscleVolume'
 import { BodyMap, MiniLine } from './Progress'
-import { Hex, HexBackButton } from '../components/hex'
+import { Hex, HexBackButton, HexProgress } from '../components/hex'
 import { IconPause, IconPlay, IconCheck, IconX2, IconChevronLeft, IconChevronRight, IconPlus, IconTrophy, IconTimer, IconFlame, IconBand, IconDumbbell, IconLeaf, IconActivity, IconSwap, IconTrend, IconMetronome, IconClipboard, IconDoc } from '../components/icons'
 import { LoadingTile } from '../components/Loading'
 import { toast } from '../lib/toast'
@@ -41,6 +41,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const [dbLoading, setDbLoading] = React.useState(!!dayId);
   const [loadError, setLoadError] = React.useState(false);
   const [dayIntro, setDayIntro] = React.useState('');
+  const [dayTitle, setDayTitle] = React.useState('');
   const [sectionIntros, setSectionIntros] = React.useState({}); // phase id → coach's slide text
   const sessionStartRef = React.useRef(new Date().toISOString());
 
@@ -201,6 +202,10 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           else setLoadError(true);
           setDayIntro(data.intro || '');
           setSectionIntros(intros);
+          // Workout name (migration 045) — fetched separately so an un-migrated
+          // DB degrades gracefully rather than failing the whole load.
+          supabase.from('programme_days').select('title').eq('id', dayId).maybeSingle()
+            .then(({ data: t }) => { if (t) setDayTitle(t.title || ''); });
         } else {
           setLoadError(true);
           if (error) console.error('load workout', error);
@@ -414,6 +419,14 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   };
   const openAddExercise = (pos) => { addPosRef.current = pos || 'after'; setAddingEx(true); };
 
+  // Remove an exercise from the session (client-driven, from the hex menu).
+  // Keeps at least one exercise so the rail never empties, and steps the
+  // active slide back one so we don't land past the end.
+  const deleteExercise = (exId) => {
+    setExercises((prev) => prev.length <= 1 ? prev : prev.filter((e) => e.id !== exId));
+    setActiveIdx((i) => Math.max(0, i - 1));
+  };
+
   // ── Superset link / unlink (during the session) ───────────────
   // Split a superset back into standalone exercises.
   const unsupersetGroup = (ssVal) => {
@@ -467,6 +480,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   // Build the rail: exercises (consecutive supersets merged into one card),
   // with a section-end divider slide at each phase boundary.
   const railItems = [];
+  // Intro slide first — the session opens on the coach's brief before any
+  // exercise, so "start workout" lands on the intro page, not the pulse raiser.
+  if (dayIntro && exercises.length) railItems.push({ type: 'intro' });
   for (let i = 0; i < exercises.length;) {
     const e = exercises[i];
     let last = e;
@@ -600,13 +616,14 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         WebkitOverflowScrolling: 'touch'
       }}>
         {railItems.map((it, i) =>
+        it.type === 'intro' ?
+        <IntroSlide key={`intro`} title={dayTitle} intro={dayIntro} onContinue={() => setActiveIdx(i + 1)} /> :
         it.type === 'finish' ?
         <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
         it.type === 'divider' ?
         <SectionDivider key={`d${i}`} phaseId={it.phaseId} nextPhaseId={it.nextPhaseId} exercises={exercises} slideText={sectionIntros[it.nextPhaseId]} onContinue={() => setActiveIdx(i + 1)} /> :
         it.type === 'superset' ?
         <SupersetCard key={`ss${it.group[0].id}`} group={it.group}
-          intro={it.exIdx === 0 ? dayIntro : ''}
           onComplete={(exId, si) => completeSet(exId, si)}
           onUpdate={(exId, si, p) => updateSet(exId, si, p)}
           onAddSet={(exId, kind) => addSet(exId, kind)}
@@ -617,7 +634,6 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           onComment={dayId ? (exId) => setCommentForId(exId) : null}
           onHistory={(exId) => setHistoryForId(exId)} /> :
         <ExerciseCard key={it.ex.id} ex={it.ex} idx={it.exIdx} total={exercises.length}
-        intro={it.exIdx === 0 ? dayIntro : ''}
         onComplete={(si) => completeSet(it.ex.id, si)}
         onUpdate={(si, p) => updateSet(it.ex.id, si, p)}
         onTitle={() => setAltsForId(it.ex.id)}
@@ -625,6 +641,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         onDelSet={() => delSet(it.ex.id)}
         onAddExercise={openAddExercise}
         onSuperset={() => setSupersetForId(it.ex.id)}
+        onDelete={exercises.length > 1 ? () => deleteExercise(it.ex.id) : null}
         onCompleteAll={() => completeAllSets(it.ex.id)}
         onComment={dayId ? () => setCommentForId(it.ex.id) : null}
         onHistory={() => setHistoryForId(it.ex.id)} />
@@ -680,6 +697,12 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         {activeItem.type !== 'finish' && (() => {
           const goNext = () => { if (activeIdx < lastIdx) { setActiveIdx(activeIdx + 1); } else { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} setComplete(true); } };
           const goPrev = () => activeIdx > 0 && setActiveIdx(activeIdx - 1);
+          // Intro page — one clear call to action into the workout.
+          if (activeItem.type === 'intro') return (
+            <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={goNext}>
+              START WORKOUT <IconChevronRight size={14} />
+            </button>
+          );
           // The card right before the finish slide is the last piece of work —
           // its forward action reads CONTINUE. With several cards to move
           // between, navigation is a pair of arrows instead of one wide button.
@@ -719,10 +742,10 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       </div>
 
       {/* Alternatives sheet */}
-      {addingEx && <ExercisePicker onClose={() => setAddingEx(false)} onPick={addExercise} />}
+      {addingEx && <ExercisePicker title="ADD EXERCISE" onClose={() => setAddingEx(false)} onPick={addExercise} />}
 
       {/* Superset picker — link the chosen exercise into a superset */}
-      {supersetForId && <ExercisePicker onClose={() => setSupersetForId(null)} onPick={supersetPick} />}
+      {supersetForId && <ExercisePicker title="SUPERSET EXERCISE" onClose={() => setSupersetForId(null)} onPick={supersetPick} />}
 
       {altsFor && <AlternativesSheet ex={altsFor} onClose={() => setAltsForId(null)} onPick={swapExercise} />}
 
@@ -756,7 +779,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           <style>{`@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
           <div style={{ textAlign: 'center', width: '100%', maxWidth: 300 }}>
             <div style={{ display: 'grid', placeItems: 'center', margin: '0 auto 18px' }}>
-              <BrandIcon name="Play and Pause" size={82} color="var(--accent)" glow />
+              <BrandIcon name="Hourglass" size={82} color="var(--accent)" glow />
             </div>
             <div className="label" style={{ color: 'var(--accent)', marginBottom: 6 }}>// SESSION PAUSED</div>
             <div className="h-bold" style={{ fontSize: 30, marginBottom: 6, color: '#eceff4' }}>PAUSED</div>
@@ -829,10 +852,11 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
 }
 
 // ── EXERCISE CARD (one per swipe page) ───────────────────────────
-function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onSuperset, onCompleteAll, onHistory, onComment, intro }) {
+function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onSuperset, onDelete, onCompleteAll, onHistory, onComment, intro }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   const [addChoose, setAddChoose] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(false);
   return (
     <div style={{
       flex: '0 0 100%', width: '100%', height: '100%',
@@ -887,7 +911,19 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
               {ex.name.toUpperCase()}
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Tempo — sits between the title and the action buttons */}
+          {ex.tempo &&
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 10,
+            padding: '6px 12px 6px 10px', borderRadius: 999,
+            background: '#fff', border: '1px solid var(--line-strong)', color: '#0A1F22'
+          }}>
+            <IconMetronome size={13} style={{ color: 'var(--text-3)' }} />
+            <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-3)' }}>TEMPO</span>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text-3)' }}>{ex.tempo}</span>
+          </div>
+          }
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={onTitle} aria-label="Swap exercise" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
                 <IconSwap size={14} />
@@ -907,7 +943,7 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
             {onComment &&
             <button onClick={onComment} aria-label="Add a comment" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
-                <IconClipboard size={14} />
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
               </Hex>
             </button>}
             {onAddExercise &&
@@ -935,19 +971,30 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
                 </>
               )}
             </div>}
-            {ex.tempo &&
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px 6px 10px', borderRadius: 999,
-              background: '#fff',
-              border: '1px solid var(--line-strong)',
-              color: '#0A1F22'
-            }}>
-              <IconMetronome size={13} style={{ color: 'var(--text-3)' }} />
-              <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-3)' }}>TEMPO</span>
-              <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text-3)' }}>{ex.tempo}</span>
-            </div>
-            }
+            {onDelete &&
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setConfirmDel(o => !o)} aria-label="Remove exercise" title="Remove exercise" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+                <Hex size={30} square style={{
+                  background: confirmDel ? 'color-mix(in srgb, var(--c-coral) 16%, transparent)' : 'var(--bg-2)',
+                  border: `1px solid ${confirmDel ? 'var(--c-coral)' : 'var(--line-strong)'}`,
+                  color: confirmDel ? 'var(--c-coral)' : 'var(--text-2)'
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>
+                </Hex>
+              </button>
+              {confirmDel && (
+                <>
+                  <div onClick={() => setConfirmDel(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 41, background: 'var(--bg-3)', border: '1px solid var(--line-strong)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', padding: 12, minWidth: 180, textAlign: 'center' }}>
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 10 }}>Delete this exercise from the workout?</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setConfirmDel(false)} className="mono" style={{ all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 7, border: '1px solid var(--line-strong)', color: 'var(--text-2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>CANCEL</button>
+                      <button onClick={() => { setConfirmDel(false); onDelete(); }} className="mono" style={{ all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 7, border: '1px solid var(--c-coral)', background: 'color-mix(in srgb, var(--c-coral) 16%, transparent)', color: 'var(--c-coral)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>DELETE</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>}
           </div>
         </div>
 
@@ -1198,7 +1245,7 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
           <span className="h-bold" style={{ fontSize: 14, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
         </div>
         <button onClick={onHistory} aria-label="Prior progress" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconTrend size={13}/></Hex></button>
-        {onComment && <button onClick={onComment} aria-label="Comments" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><IconClipboard size={13}/></Hex></button>}
+        {onComment && <button onClick={onComment} aria-label="Comments" style={{ all: 'unset', cursor: 'pointer' }}><Hex size={28} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></Hex></button>}
       </div>
       {e.tempo && (
         <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '0 12px 8px' }}>TEMPO · {e.tempo}</div>
@@ -1238,6 +1285,35 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
 // Celebratory interstitial shown when one phase ends and the next begins.
 // The coach's per-section slide text (set in the programme builder) wins;
 // the stock blurbs are only a fallback.
+// ── INTRO SLIDE ──────────────────────────────────────────────────
+// Opening page of a session: the coach's brief for the day, shown before
+// the pulse raiser so "start workout" lands here first. Advancing is
+// handled by the bottom action bar's CONTINUE button.
+function IntroSlide({ title, intro, onContinue }) {
+  return (
+    <div style={{
+      flex: '0 0 100%', width: '100%', height: '100%',
+      scrollSnapAlign: 'center', padding: '0 14px', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column'
+    }}>
+      <div className="scroller" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', paddingBottom: 10 }}>
+        <div style={{ display: 'grid', placeItems: 'center', color: 'var(--accent)', marginBottom: 24 }}>
+          <BrandIcon name="Weightlifting" size={120} color="var(--accent)" glow />
+        </div>
+        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color: 'var(--accent)', marginBottom: 10 }}>
+          // TODAY'S WORKOUT
+        </div>
+        <div className="h-bold" style={{ fontSize: 26, marginBottom: intro ? 18 : 6 }}>
+          {title ? title.toUpperCase() : "LET'S GO"}
+        </div>
+        {intro
+          ? <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--text-2)', maxWidth: 320, whiteSpace: 'pre-line' }}>{intro}</div>
+          : <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300 }}>Take a moment to get set, then continue to your pulse raiser.</div>}
+      </div>
+    </div>);
+
+}
+
 function SectionDivider({ phaseId, nextPhaseId, exercises, slideText, onContinue }) {
   const phase = PHASES.find((p) => p.id === phaseId) || {};
   const next = PHASES.find((p) => p.id === nextPhaseId) || {};
@@ -1800,31 +1876,30 @@ function BandCell({ band, done, onChange }) {
 }
 
 function RepsCell({ set, onChange }) {
-  if (typeof set.reps === 'string') {
-    return (
-      <div className="mono" style={{
-        fontSize: 13, fontWeight: 600,
-        color: set.done ? 'var(--text-3)' : 'var(--text)',
-        letterSpacing: '0.04em',
-        textDecoration: set.done ? 'line-through' : 'none'
-      }}>
-        {set.reps}
-      </div>);
-
-  }
+  const [calcOpen, setCalcOpen] = React.useState(false);
+  // Seed the keypad with the numeric part of the current/prescribed reps
+  // (e.g. "8-12" → 8) so logging actual reps starts from a sensible value.
+  const seed = typeof set.reps === 'number'
+    ? set.reps
+    : (parseFloat(String(set.reps).match(/\d+(\.\d+)?/)?.[0]) || '');
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-      <input value={set.reps || ''} onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-      style={{
-        width: '100%', background: 'transparent', border: 0,
-        color: set.done ? 'var(--text-2)' : 'var(--text)',
-        fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
-        letterSpacing: '0.04em', outline: 'none',
-        textDecoration: set.done ? 'line-through' : 'none',
-        textDecorationColor: 'var(--text-3)'
-      }} />
-      
-    </div>);
+    <>
+      <button onClick={() => setCalcOpen(true)} style={{
+        all: 'unset', cursor: 'pointer', width: '100%',
+        display: 'flex', alignItems: 'baseline', gap: 4,
+      }}>
+        <span className="mono" style={{
+          fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
+          color: set.done ? 'var(--text-2)' : (set.reps ? 'var(--text)' : 'var(--text-3)'),
+          textDecoration: set.done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
+        }}>{set.reps || '0'}</span>
+      </button>
+      {calcOpen && (
+        <CalcKeypad value={seed} unit="reps" mode="reps"
+          onClose={() => setCalcOpen(false)}
+          onApply={(v) => { onChange(v); setCalcOpen(false); }} />
+      )}
+    </>);
 
 }
 
@@ -1862,7 +1937,8 @@ function evalExpr(s) {
 
 // Weight calculator keypad — tap a weight to open it. Supports plate maths
 // (+/-) and a kg/lb toggle (lb is converted to kg on apply, since we store kg).
-function CalcKeypad({ value, unit = 'kg', onClose, onApply }) {
+function CalcKeypad({ value, unit = 'kg', mode = 'weight', onClose, onApply }) {
+  const isWeight = mode === 'weight';
   const [expr, setExpr] = React.useState(value ? String(value) : '');
   const [asLb, setAsLb] = React.useState(false);
   const preview = evalExpr(expr);
@@ -1881,9 +1957,27 @@ function CalcKeypad({ value, unit = 'kg', onClose, onApply }) {
   const apply = () => {
     let n = evalExpr(expr);
     if (isNaN(n)) n = 0;
-    if (asLb) n = Math.round(n * 0.45359237 * 2) / 2; // lb → kg, nearest 0.5
+    if (isWeight && asLb) n = Math.round(n * 0.45359237 * 2) / 2; // lb → kg, nearest 0.5
     onApply(Math.max(0, n));
   };
+
+  // Hardware-keyboard support — type digits/operators directly (desktop),
+  // while the on-screen keypad stays available for touch. No deps array so
+  // the handler always closes over the current expression.
+  React.useEffect(() => {
+    const onKey = (ev) => {
+      if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      const k = ev.key;
+      if (k >= '0' && k <= '9') { push(k); ev.preventDefault(); }
+      else if (k === '.') { push('.'); ev.preventDefault(); }
+      else if (k === '+' || k === '-') { push(k); ev.preventDefault(); }
+      else if (k === 'Backspace') { back(); ev.preventDefault(); }
+      else if (k === 'Enter' || k === '=') { apply(); ev.preventDefault(); }
+      else if (k === 'Escape') { ev.preventDefault(); onClose(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   const Key = ({ label, onClick, tint, span, big }) => (
     <button onClick={onClick} style={{
@@ -1906,13 +2000,15 @@ function CalcKeypad({ value, unit = 'kg', onClose, onApply }) {
           <span className="mono" style={{ fontSize: 26, fontWeight: 700, color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {expr || '0'}{hasOp && !isNaN(preview) ? <span style={{ color: 'var(--text-3)' }}>  = {preview}</span> : ''}
           </span>
-          <span className="mono" style={{ fontSize: 13, color: 'var(--text-3)', flexShrink: 0 }}>{asLb ? 'lb' : 'kg'}</span>
+          <span className="mono" style={{ fontSize: 13, color: 'var(--text-3)', flexShrink: 0 }}>{isWeight ? (asLb ? 'lb' : 'kg') : unit}</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           <Key label="1" onClick={() => push('1')} />
           <Key label="2" onClick={() => push('2')} />
           <Key label="3" onClick={() => push('3')} />
-          <Key label={asLb ? 'LB' : 'KG'} onClick={() => setAsLb(v => !v)} tint="var(--text-2)" />
+          {isWeight
+            ? <Key label={asLb ? 'LB' : 'KG'} onClick={() => setAsLb(v => !v)} tint="var(--text-2)" />
+            : <Key label="C" onClick={() => setExpr('')} tint="var(--text-2)" />}
           <Key label="4" onClick={() => push('4')} />
           <Key label="5" onClick={() => push('5')} />
           <Key label="6" onClick={() => push('6')} />
@@ -2096,23 +2192,13 @@ function RpeCell({ value, done, onChange }) {
 }
 
 function RestRing({ seconds, total }) {
-  const r = 24;const c = 2 * Math.PI * r;
   const pct = total ? seconds / total : 0;
   return (
-    <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
-      <svg width="56" height="56" viewBox="0 0 56 56">
-        <circle cx="28" cy="28" r={r} fill="none" stroke="color-mix(in srgb, var(--accent-2) 20%, transparent)" strokeWidth="5" />
-        <circle cx="28" cy="28" r={r} fill="none" stroke="var(--accent-2)" strokeWidth="5"
-        strokeLinecap="round"
-        strokeDasharray={c} strokeDashoffset={c * (1 - pct)}
-        transform="rotate(-90 28 28)"
-        style={{ filter: 'drop-shadow(0 0 calc(5px * var(--glow)) color-mix(in srgb, var(--accent-2) 60%, transparent))', transition: 'stroke-dashoffset 1s linear' }} />
-      </svg>
-      <span className="mono" style={{
-        position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
-        fontSize: 14, fontWeight: 700, color: 'var(--accent-2)'
-      }} data-comment-anchor="dd98036798-span-794-7">{seconds}</span>
-    </div>);
+    <HexProgress size={54} pct={pct} accent="var(--accent-2)" strokeWidth={20}
+      trackColor="color-mix(in srgb, var(--accent-2) 20%, transparent)"
+      style={{ flexShrink: 0 }}>
+      <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent-2)' }}>{seconds}</span>
+    </HexProgress>);
 
 }
 

@@ -72,7 +72,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         .order('sort_order');
 
       if (cancelled) return;
-      setDay(sections ? { intro: dayRow.intro || '', notes: dayRow.notes || '', img: dayRow.image_url || '', sections: dbToSections(sections) } : null);
+      setDay(sections ? { title: dayRow.title || '', intro: dayRow.intro || '', notes: dayRow.notes || '', img: dayRow.image_url || '', sections: dbToSections(sections) } : null);
       setDirty(false);
       setDayLoading(false);
     }
@@ -90,7 +90,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     let { data: dayRow, error: dayErr } = await supabase
       .from('programme_days')
       .upsert(
-        { phase_id: phid, week_index: week, day_of_week: dow, intro: content.intro || '', notes: content.notes || '', image_url: content.img || null },
+        { phase_id: phid, week_index: week, day_of_week: dow, title: content.title || null, intro: content.intro || '', notes: content.notes || '', image_url: content.img || null },
         { onConflict: 'phase_id,week_index,day_of_week' }
       )
       .select('id').single();
@@ -467,6 +467,22 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
             {/* Cover photo */}
             <CoverPhoto img={day.img || ''} trainerId={trainerId}
               onChange={(url) => { setDay(d => ({ ...d, img: url })); setDirty(true); }} />
+
+            {/* Workout name */}
+            <div style={{ marginBottom: 16 }}>
+              <div className="label" style={{ marginBottom: 8 }}>// WORKOUT NAME</div>
+              <input
+                value={day.title || ''}
+                onChange={e => { setDay(d => ({ ...d, title: e.target.value })); setDirty(true); }}
+                placeholder="e.g. Push Day, Lower Body, Full Body A"
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 10,
+                  color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 13, fontWeight: 600,
+                  padding: '11px 14px', outline: 'none',
+                }}
+              />
+            </div>
 
             {/* Workout intro */}
             <div style={{ marginBottom: 16 }}>
@@ -1655,7 +1671,7 @@ const EXERCISE_LIBRARY = [
   { name: 'Diaphragmatic Breathing', img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', cat: 'COOLDOWN' },
 ];
 
-export function ExercisePicker({ onClose, onPick }) {
+export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
   const [query, setQuery] = React.useState('');
   const [lib, setLib] = React.useState(null);
 
@@ -1691,7 +1707,7 @@ export function ExercisePicker({ onClose, onPick }) {
       }}>
         <div style={{ padding: '12px 16px 10px', flexShrink: 0 }}>
           <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
-          <div className="label" style={{ marginBottom: 10 }}>// SWITCH EXERCISE</div>
+          <div className="label" style={{ marginBottom: 10 }}>// {title}</div>
           <input
             autoFocus
             value={query}
