@@ -121,15 +121,15 @@ export function Resources({ go, userId, isTrainer }) {
         }} />
       </div>
 
-      {/* Tabs — 2×2 grid (recipes + guides on top, exercises + documents below).
-          Documents is the client's coach-shared files, so it's hidden on the
-          coach's own library; exercises then spans the row. */}
+      {/* Tabs. The coach has a dedicated Exercises nav item and no client docs,
+          so their library is just recipes + guides; clients get the full 2×2
+          (recipes/guides on top, exercises/documents below). */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
         <ResTab big active={tab === 'recipes' || tab === 'favourites'} onClick={() => setTab('recipes')} icon={<IconFork size={18} />} label={`RECIPES · ${recipesLoading ? '…' : recipeList.length}`} />
         <ResTab big active={tab === 'guides'} onClick={() => setTab('guides')} icon={<IconBolt size={18} />} label={`GUIDES · ${guidesLoading ? '…' : guideList.length}`} />
-        <div style={{ gridColumn: isTrainer ? '1 / -1' : 'auto', display: 'flex' }}>
+        {!isTrainer && (
           <ResTab big active={tab === 'exercises'} onClick={() => setTab('exercises')} icon={<IconDumbbell size={18} />} label={`EXERCISES · ${exercises === null ? '…' : exercises.length}`} />
-        </div>
+        )}
         {!isTrainer && (
           <ResTab big active={tab === 'vault'} onClick={() => setTab('vault')} icon={<IconVaultDoc size={18} />} label={`DOCUMENTS · ${vaultDocs === null ? '…' : vaultDocs.length}`} />
         )}
