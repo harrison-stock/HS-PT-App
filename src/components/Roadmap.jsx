@@ -54,7 +54,7 @@ export function RoadmapTrack({ phases, startDate, hexSize = 26 }) {
 
   return (
     <div style={{ margin: '2px 2px 0' }}>
-      <div style={{ position: 'relative', height: railY + hexSize / 2 + 16 }}>
+      <div style={{ position: 'relative', height: railY + hexSize / 2 + 4 }}>
         {/* Rail + fill */}
         <div style={{ position: 'absolute', left: half, right: half, top: railY - 1, height: 2, background: 'var(--line-strong)', borderRadius: 2 }} />
         <div style={{
@@ -101,7 +101,6 @@ export function RoadmapTrack({ phases, startDate, hexSize = 26 }) {
                   <svg width={hexSize * 0.42} height={hexSize * 0.42} viewBox="0 0 12 12" fill="none" stroke="var(--on-accent)" strokeWidth="2.5"><path d="M2 6l3 3 5-6" /></svg>
                 )}
               </Hex>
-              <div className="mono" style={{ position: 'absolute', top: hexSize / 2 + 4, left: '50%', transform: 'translateX(-50%)', fontSize: 8, letterSpacing: '0.08em', fontWeight: 700, color: p.done || p.current ? 'var(--accent)' : 'var(--text-3)' }}>P{p.idx + 1}</div>
             </div>
           );
         })}

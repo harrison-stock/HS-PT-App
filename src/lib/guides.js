@@ -17,6 +17,8 @@ export function shapeGuide(g) {
     video: g.video_url || '',
     link: g.link_url || '',
     body: g.body || '',
+    file: g.file_url || '',
+    fileName: g.file_name || '',
   };
 }
 
@@ -37,14 +39,21 @@ export async function saveGuide(trainerId, draft) {
     video_url: draft.video?.trim() || '',
     link_url: draft.link?.trim() || '',
     body: draft.body?.trim() || '',
+    file_url: draft.file?.trim() || '',
+    file_name: draft.fileName?.trim() || '',
     updated_at: new Date().toISOString(),
   };
+  // Strip the attachment columns and retry if they aren't there yet (migration 049).
+  const { file_url, file_name, ...noFile } = payload;
+
   if (draft.id) {
-    const { error } = await supabase.from('guides').update(payload).eq('id', draft.id);
+    let { error } = await supabase.from('guides').update(payload).eq('id', draft.id);
+    if (error) ({ error } = await supabase.from('guides').update(noFile).eq('id', draft.id));
     return error ? { error } : { id: draft.id };
   }
-  const { data, error } = await supabase.from('guides').insert(payload).select('id').single();
-  return error ? { error } : { id: data.id };
+  let { data, error } = await supabase.from('guides').insert(payload).select('id').single();
+  if (error) ({ data, error } = await supabase.from('guides').insert(noFile).select('id').single());
+  return error || !data ? { error: error || new Error('Insert failed') } : { id: data.id };
 }
 
 export async function deleteGuide(id) {

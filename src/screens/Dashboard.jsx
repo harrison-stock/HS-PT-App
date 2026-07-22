@@ -590,23 +590,18 @@ function ProgrammeRoadmap({ userId, onOpen }) {
       borderColor: 'color-mix(in srgb, var(--accent) 22%, var(--line))'
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
-        <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div className="label">// PROGRAMME ROADMAP</div>
-          <div className="h-bold" style={{ fontSize: 18, marginTop: 4, color: "var(--heading-deep)" }}>{name.toUpperCase()}</div>
+          <div className="h-bold" style={{ fontSize: 16, marginTop: 4, color: "var(--heading-deep)", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name.toUpperCase()}</div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 600 }}>
-            {doneSessions} / {totalSessions} SESSIONS
-          </div>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.1em', marginTop: 2 }}>
-            {Math.round(progress * 100)}% COMPLETE
-          </div>
+        <div className="mono" style={{ flexShrink: 0, fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 600 }}>
+          {Math.round(progress * 100)}% · {doneSessions}/{totalSessions}
         </div>
       </div>
 
       {/* Phase track (weeks-based; hexes at each phase's end) */}
-      <div style={{ marginBottom: 14 }}>
+      <div style={{ marginBottom: 12 }}>
         <RoadmapTrack phases={phases} startDate={startDate} />
       </div>
 

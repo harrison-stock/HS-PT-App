@@ -182,19 +182,22 @@ function ProgrammeProgressCard({ clientId, onTab }) {
   return (
     <button onClick={() => onTab('report')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
       <div className="card" style={{ padding: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-          <div className="label">// PROGRAMME ROADMAP</div>
-          <Mono>{info.done}/{info.total} SESSIONS</Mono>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="label">// PROGRAMME ROADMAP</div>
+            <div className="h-bold" style={{ fontSize: 15, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{info.name}</div>
+          </div>
+          <div className="mono" style={{ flexShrink: 0, fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 600 }}>
+            {pct}% · {info.done}/{info.total}
+          </div>
         </div>
-        <div className="h-bold" style={{ fontSize: 15, marginBottom: 14 }}>{info.name}</div>
 
         {/* Phase milestone track (weeks-based; hexes at each phase's end) */}
         {info.phases.length > 0 && (
           <RoadmapTrack phases={info.phases} startDate={info.startDate} />
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
-          <Mono>{pct}% COMPLETE</Mono>
+        <div style={{ textAlign: 'right', marginTop: 10 }}>
           <Mono style={{ color: 'var(--accent)' }}>VIEW REPORT →</Mono>
         </div>
       </div>

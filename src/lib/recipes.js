@@ -14,17 +14,16 @@ export function scaleQty(qty, factor) {
   return Math.round(v * 4) / 4;
 }
 
-// Pretty-print a quantity with simple fractions for halves/quarters.
+// Pretty-print a quantity. Uses slash fractions ("1/2", "1 1/2") rather than
+// the tiny unicode glyphs (½), which are hard to read at small sizes.
 export function fmtQty(q) {
   if (q == null) return '';
   if (Number.isInteger(q)) return String(q);
-  if (q === 0.5)  return '½';
-  if (q === 0.25) return '¼';
-  if (q === 0.75) return '¾';
   const whole = Math.floor(q);
-  const frac = q - whole;
-  const fStr = frac === 0.5 ? '½' : frac === 0.25 ? '¼' : frac === 0.75 ? '¾' : null;
-  if (whole > 0 && fStr) return `${whole}${fStr}`;
+  const frac = +(q - whole).toFixed(2);
+  const fStr = frac === 0.5 ? '1/2' : frac === 0.25 ? '1/4' : frac === 0.75 ? '3/4'
+    : frac === 0.33 || frac === 0.34 ? '1/3' : frac === 0.67 || frac === 0.66 ? '2/3' : null;
+  if (fStr) return whole > 0 ? `${whole} ${fStr}` : fStr;
   return q.toFixed(2).replace(/\.?0+$/, '');
 }
 
