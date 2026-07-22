@@ -1890,7 +1890,8 @@ function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, onComplete
           background: set.done ? color : 'transparent',
           border: '1.5px solid ' + (set.done ? color : 'var(--line-strong)'),
           color: set.done ? 'var(--on-accent)' : 'var(--tick-idle)',
-          boxShadow: set.done ? `0 0 calc(7px * var(--glow)) color-mix(in srgb, ${color} 55%, transparent)` : 'none'
+          boxShadow: set.done ? `0 0 calc(7px * var(--glow)) color-mix(in srgb, ${color} 55%, transparent)` : 'none',
+          animation: set.done ? 'tickPop .32s cubic-bezier(.34,1.56,.64,1)' : 'none'
         }}>
           <IconCheck size={13} sw={3} />
         </Hex>

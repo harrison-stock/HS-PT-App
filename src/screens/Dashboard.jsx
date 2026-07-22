@@ -1,12 +1,13 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
 import { HEX_RATIO, HexShape, Hex } from '../components/hex'
-import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc } from '../components/icons'
+import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc, IconChevronRight } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
 import { FormFill } from './FormFill'
 import { ProgrammeReport } from './ProgrammeReport'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { RoadmapTrack, computeRoadmap } from '../components/Roadmap'
+import { Skel } from '../components/Loading'
 
 function useLiveClock() {
   const [now, setNow] = React.useState(() => new Date());
@@ -32,6 +33,25 @@ function fmtClock(d) {
 }
 
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+// One line a day, rotating through the year — quiet encouragement, no hype.
+const DAILY_LINES = [
+  'Consistency beats intensity.',
+  'Show up. The rest follows.',
+  'Small sessions still count.',
+  'Strong is built, not found.',
+  'Progress hides in the boring weeks.',
+  'You never regret the workout you did.',
+  'Slow progress is still progress.',
+  'Train for the person you’re becoming.',
+  'Discipline is remembering what you want.',
+  'One more good day. Stack them up.',
+  'The best programme is the one you follow.',
+  'Rest is training too — take it seriously.',
+  'Effort today, evidence tomorrow.',
+  'Nobody’s watching. Do it anyway.',
+];
+const dayOfYear = (d) => Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
 
 function shapeWorkout(row) {
   const day = row.programme_days;
@@ -194,6 +214,9 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
         <div className="h-bold" style={{ fontSize: 28, lineHeight: 1.1, color: "var(--heading-deep)" }}>
           {greeting(now.getHours())},<br /><span style={{ color: 'var(--accent)' }} className="text-glow">{firstName.toUpperCase()}.</span>
         </div>
+        <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.05em', marginTop: 8, lineHeight: 1.5 }}>
+          {DAILY_LINES[dayOfYear(now) % DAILY_LINES.length]}
+        </div>
       </div>
 
       {/* Today's workout hero */}
@@ -209,14 +232,21 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
         <div style={{ padding: 'var(--density-pad)' }}>
           <div className="label" style={{ marginBottom: 6 }}>// TODAY'S SESSION</div>
           {workoutLoading ? (
-            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em', padding: '8px 0' }}>LOADING…</div>
+            <div style={{ display: 'grid', gap: 10, padding: '4px 0 8px' }}>
+              <Skel w="55%" h={20} />
+              <Skel w="80%" h={11} />
+            </div>
           ) : !todayWorkout ? (
             <>
               <div className="h-bold" style={{ fontSize: 22, lineHeight: 1.05, marginBottom: 12, color: 'var(--text-3)' }}>
                 REST DAY
               </div>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em' }}>
-                No session scheduled today.
+              <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 14 }}>
+                No session scheduled — recovery is where the adaptation happens.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => go('workouts')} className="btn-ghost" style={{ flex: 1, fontSize: 10.5 }}>VIEW WEEK</button>
+                <button onClick={() => go('resources')} className="btn-ghost" style={{ flex: 1, fontSize: 10.5, color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line-strong))' }}>BROWSE LIBRARY</button>
               </div>
             </>
           ) : (
@@ -272,8 +302,8 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
         </div>
       )}
 
-      {/* At-a-glance training strip (7/30-day) */}
-      <TrainingStrip userId={userId} />
+      {/* At-a-glance training strip (7/30-day) — taps through to Progress */}
+      <TrainingStrip userId={userId} onOpen={() => go('progress')} />
 
       {/* Goal set by the coach */}
       <GoalCard userId={userId} />
@@ -293,7 +323,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
 }
 
 // ── TRAINING STRIP (at-a-glance) ─────────────────────────────────
-function TrainingStrip({ userId }) {
+function TrainingStrip({ userId, onOpen }) {
   const [s, setS] = React.useState(null);
   React.useEffect(() => {
     if (!userId) { setS({ w7: 0, w30: 0 }); return; }
@@ -318,11 +348,14 @@ function TrainingStrip({ userId }) {
     </div>
   );
   return (
-    <div className="card" style={{ padding: 0, display: 'flex' }}>
-      <Cell label="LAST 7 DAYS"  value={s?.w7} />
-      <div style={{ width: 1, background: 'var(--line)' }}/>
-      <Cell label="LAST 30 DAYS" value={s?.w30} />
-    </div>
+    <button onClick={onOpen} style={{ all: 'unset', cursor: onOpen ? 'pointer' : 'default', display: 'block' }}>
+      <div className={onOpen ? 'card tappable' : 'card'} style={{ padding: 0, display: 'flex', alignItems: 'center' }}>
+        <Cell label="LAST 7 DAYS"  value={s?.w7} />
+        <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--line)' }}/>
+        <Cell label="LAST 30 DAYS" value={s?.w30} />
+        {onOpen && <IconChevronRight size={14} style={{ color: 'var(--text-3)', marginRight: 12, flexShrink: 0 }}/>}
+      </div>
+    </button>
   );
 }
 

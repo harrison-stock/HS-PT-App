@@ -11,6 +11,7 @@ import { uploadWorkoutPhoto } from '../lib/workoutPhotos'
 import { RoadmapTrack } from '../components/Roadmap'
 import { FileDrop } from '../components/FileDrop'
 import { toast } from '../lib/toast'
+import { SkeletonCard } from '../components/Loading'
 
 const IMG_FALLBACK = 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70';
 const TAGS = ['STRENGTH','ONBOARD','REHAB','ENDURANCE','HYBRID','SPORT'];
@@ -470,7 +471,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           </div>
         )}
         {dayLoading ? (
-          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
+          <div style={{ padding: '18px 0' }}><SkeletonCard rows={2} /></div>
         ) : !day ? (
           <RestDay onAdd={() => { setDay(seedDay()); setDirty(true); }}/>
         ) : (

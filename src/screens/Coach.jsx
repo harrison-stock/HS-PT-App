@@ -8,6 +8,7 @@ import { loadForms } from '../lib/forms'
 import { notify } from '../lib/notifications'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
 // Stable, well-spread colour per client — hashing the whole id (not just the
@@ -580,7 +581,7 @@ function KPIRow({ kpis }) {
     { label: 'PENDING',   value: kpis.pending,    color: 'var(--c-coral)', icon: <IconBell size={11}/> },
   ];
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+    <div className="stagger-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
       {items.map(it => (
         <div key={it.label} className="card" style={{ padding: '10px 8px', textAlign: 'left' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: it.color, marginBottom: 4 }}>
@@ -621,23 +622,20 @@ function ClientsTab({ clients, loading, onPick, onInvite, onRemovePending }) {
       </div>
 
       {loading ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>
-          LOADING…
-        </div>
+        <SkeletonCard rows={3} />
       ) : (
-        <div className="grid-2-wide" style={{ display: 'grid', gap: 8 }}>
+        <div className="grid-2-wide stagger-in" style={{ display: 'grid', gap: 8 }}>
           {filtered.map(c => <ClientRow key={c.id} c={c} onPick={() => onPick(c.id)} onRemovePending={onRemovePending}/>)}
           {filtered.length === 0 && (
-            <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 8 }}>
-                {clients.length === 0 ? 'NO CLIENTS YET' : 'NO CLIENTS MATCH'}
+            clients.length === 0 ? (
+              <EmptyState icon="Group" title="No clients yet"
+                sub="Invite your first client — they’ll get an email link to set up their app."
+                actionLabel="+ INVITE A CLIENT" onAction={onInvite} />
+            ) : (
+              <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em' }}>NO CLIENTS MATCH</div>
               </div>
-              {clients.length === 0 && (
-                <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5 }}>
-                  Invite clients to get started.
-                </div>
-              )}
-            </div>
+            )
           )}
         </div>
       )}
@@ -653,17 +651,12 @@ function ArchivedTab({ archived = [], loading, onRestore, onRemove }) {
         // ARCHIVED CLIENTS — restore to your roster, or remove permanently
       </div>
       {loading ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>
-          LOADING…
-        </div>
+        <SkeletonCard rows={2} />
       ) : archived.length === 0 ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em' }}>
-            NO ARCHIVED CLIENTS
-          </div>
-        </div>
+        <EmptyState icon="Hourglass" title="No archived clients"
+          sub="Clients you archive keep their history and can be restored any time." />
       ) : (
-        <div className="grid-2-wide" style={{ display: 'grid', gap: 8 }}>
+        <div className="grid-2-wide stagger-in" style={{ display: 'grid', gap: 8 }}>
           {archived.map(c => (
             <ArchivedClientRow key={c.id} c={c} onRestore={() => onRestore(c)} onRemove={() => onRemove(c)}/>
           ))}
@@ -749,7 +742,7 @@ function ClientRow({ c, onPick, onRemovePending }) {
   };
   return (
     <div onClick={onPick} style={{ cursor: 'pointer', display: 'block' }}>
-      <div className="card" style={{
+      <div className="card tappable" style={{
         padding: 12, display: 'grid', gridTemplateColumns: '44px 1fr auto', gap: 12,
         alignItems: 'center', borderLeft: `2px solid ${statusColor}`,
         opacity: c.pending ? 0.85 : 1,
@@ -830,11 +823,9 @@ function ProgrammesTab({ programmes, loading, progClients, clients, onPick, onNe
       </div>
 
       {loading ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>
-          LOADING…
-        </div>
+        <SkeletonCard rows={3} />
       ) : (
-        <div className="grid-2-wide" style={{ display: 'grid', gap: 10 }}>
+        <div className="grid-2-wide stagger-in" style={{ display: 'grid', gap: 10 }}>
           {shown.map(p => (
             <ProgrammeCard key={p.id} p={p}
               assigned={(progClients?.[p.id] || []).map(id => byId[id]).filter(Boolean)}
@@ -847,16 +838,15 @@ function ProgrammesTab({ programmes, loading, progClients, clients, onPick, onNe
             />
           ))}
           {shown.length === 0 && (
-            <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: programmes.length === 0 ? 12 : 0 }}>
-                {programmes.length === 0 ? 'NO PROGRAMMES YET' : `NO ${filter.toUpperCase()} PROGRAMMES`}
+            programmes.length === 0 ? (
+              <EmptyState icon="Weightlifting" title="No programmes yet"
+                sub="Design a multi-phase training block once, then assign it to any client."
+                actionLabel="+ CREATE FIRST PROGRAMME" onAction={onNew} />
+            ) : (
+              <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+                <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em' }}>NO {filter.toUpperCase()} PROGRAMMES</div>
               </div>
-              {programmes.length === 0 && (
-                <button onClick={onNew} className="btn-primary" style={{ fontSize: 11, padding: '10px 18px' }}>
-                  + CREATE FIRST PROGRAMME
-                </button>
-              )}
-            </div>
+            )
           )}
         </div>
       )}
@@ -881,7 +871,7 @@ function ProgrammeCard({ p, assigned = [], assignedCount = 0, onPick, onEdit, on
   return (
     <div style={{ position: 'relative', opacity: p.status === 'archived' ? 0.72 : 1 }}>
       <button onClick={onPick} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', boxSizing: 'border-box' }}>
-        <div className="card" style={{ padding: 14 }}>
+        <div className="card tappable" style={{ padding: 14 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
@@ -1006,19 +996,18 @@ function AdhocTab({ workouts, loading, clients, trainerId, onNew, onEdit, onDupl
         One-off sessions you can assign to any client on any date — no phases or weeks. Great for trials, makeup sessions or testing days.
       </div>
       {loading ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
+        <SkeletonCard rows={2} />
       ) : (
-        <div style={{ display: 'grid', gap: 10 }}>
+        <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {workouts.map(w => (
             <AdhocCard key={w.id} w={w}
               onEdit={() => onEdit(w)} onAssign={() => setAssignTo(w)}
               onDuplicate={() => onDuplicate(w)} onDelete={() => onDelete(w.id)}/>
           ))}
           {workouts.length === 0 && (
-            <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', marginBottom: 12 }}>NO AD-HOC WORKOUTS YET</div>
-              <button onClick={onNew} className="btn-primary" style={{ fontSize: 11, padding: '10px 18px' }}>+ CREATE A WORKOUT</button>
-            </div>
+            <EmptyState icon="Lightning" title="No ad-hoc workouts yet"
+              sub="One-off sessions for trials, makeup days or testing — build once, assign to anyone."
+              actionLabel="+ CREATE A WORKOUT" onAction={onNew} />
           )}
         </div>
       )}
@@ -1258,13 +1247,12 @@ function TaskTemplatesTab({ trainerId }) {
       )}
 
       {templates === null ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
+        <SkeletonCard rows={2} />
       ) : templates.length === 0 ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em' }}>NO TEMPLATES YET</div>
-        </div>
+        <EmptyState icon="Checklist" title="No templates yet"
+          sub="Save tasks, goals or reminders you assign often — reuse them on any client in two taps." />
       ) : (
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
           {templates.map(t => {
             const col = TT_COLOR[t.kind] || 'var(--accent)';
             return (
@@ -1297,11 +1285,7 @@ const ttInputSt = {
 
 // ── SCHEDULE TAB ────────────────────────────────────────────────
 function ScheduleTab({ schedule, clients, onPick }) {
-  if (schedule === null) return (
-    <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>
-      LOADING…
-    </div>
-  );
+  if (schedule === null) return <SkeletonCard rows={3} />;
 
   const doneCount = schedule.filter(s => s.status === 'completed').length;
 
@@ -1315,15 +1299,11 @@ function ScheduleTab({ schedule, clients, onPick }) {
       </div>
 
       {schedule.length === 0 && (
-        <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-            NOTHING SCHEDULED TODAY<br/>
-            <span style={{ fontSize: 9 }}>Assign workouts from a client's Training tab</span>
-          </div>
-        </div>
+        <EmptyState icon="Sunrise" title="Nothing scheduled today"
+          sub="A quiet day — assign workouts from a client’s Training tab and they’ll show here." />
       )}
 
-      <div style={{ display: 'grid', gap: 8 }}>
+      <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
         {schedule.map(s => <ScheduleRow key={s.id} s={s} client={clients.find(c => c.id === s.client_id)} onPick={onPick}/>)}
       </div>
     </>
@@ -1337,7 +1317,7 @@ function ScheduleRow({ s, client, onPick }) {
 
   return (
     <button onClick={client ? () => onPick(client.id) : undefined} style={{ all: 'unset', cursor: client ? 'pointer' : 'default', display: 'block' }}>
-      <div className="card" style={{
+      <div className={client ? 'card tappable' : 'card'} style={{
         padding: 12, display: 'grid', gridTemplateColumns: '36px 1fr auto', gap: 10, alignItems: 'center',
         opacity: done ? 0.65 : 1,
         borderLeft: `2px solid ${done ? 'var(--accent)' : 'var(--c-amber)'}`,

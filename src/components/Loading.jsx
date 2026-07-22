@@ -1,5 +1,6 @@
 import React from 'react'
 import { HexShape } from './hex'
+import { BrandIcon } from './BrandIcon'
 
 // The brand hex loader — a hexagon "track" with an accent arc that chases
 // around its perimeter (ported from the HS PT Menu Scanner boot screen).
@@ -48,6 +49,49 @@ function HexPulse() {
           <HexShape size={12} fill="var(--accent)" />
         </span>
       ))}
+    </div>
+  );
+}
+
+// A single shimmer block. Size it via width/height (numbers = px).
+export function Skel({ w = '100%', h = 12, r = 8, style }) {
+  return <span className="skel" style={{ display: 'block', width: w, height: h, borderRadius: r, ...style }} />;
+}
+
+// Card-shaped skeleton — mimics a media-row card (thumb + two text lines).
+// Use in place of "LOADING…" text tiles so lists feel alive while fetching.
+//   <SkeletonCard />            one row card
+//   <SkeletonCard rows={3} />   a stack of three
+//   <SkeletonCard variant="stat" /> compact stat-tile shape
+export function SkeletonCard({ rows = 1, variant = 'row', style }) {
+  const one = (key) => (
+    <div key={key} className="card" style={{ padding: 14, display: 'flex', gap: 12, alignItems: 'center', ...style }}>
+      {variant === 'row' && <Skel w={46} h={46} r={12} style={{ flexShrink: 0 }} />}
+      <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 8 }}>
+        <Skel w="62%" h={12} />
+        <Skel w="38%" h={9} />
+      </div>
+    </div>
+  );
+  if (rows === 1) return one();
+  return <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>{Array.from({ length: rows }, (_, i) => one(i))}</div>;
+}
+
+// Empty-state card — an icon, a headline, optional supporting line and CTA.
+// Keeps every "nothing here yet" moment on-brand and actionable.
+export function EmptyState({ icon = 'Target', title, sub, actionLabel, onAction, style }) {
+  return (
+    <div className="card" style={{ padding: '30px 22px', textAlign: 'center', animation: 'popIn .25s ease', ...style }}>
+      <div style={{ display: 'grid', placeItems: 'center', marginBottom: 12, opacity: 0.9 }}>
+        <BrandIcon name={icon} size={44} color="var(--text-3)" />
+      </div>
+      <div className="mono" style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{title}</div>
+      {sub && <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.04em', lineHeight: 1.6, marginTop: 6 }}>{sub}</div>}
+      {actionLabel && onAction && (
+        <button onClick={onAction} className="btn-ghost" style={{ marginTop: 16, fontSize: 11, color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line-strong))' }}>
+          {actionLabel}
+        </button>
+      )}
     </div>
   );
 }

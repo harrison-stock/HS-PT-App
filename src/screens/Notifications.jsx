@@ -2,6 +2,7 @@ import React from 'react'
 import { HexBackButton, Hex } from '../components/hex'
 import { IconUser, IconClipboard, IconCalendar, IconFlame, IconHeart, IconDoc, IconCheck } from '../components/icons'
 import { loadNotifications, markAllRead } from '../lib/notifications'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 function ago(iso) {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -40,26 +41,21 @@ export function Notifications({ go, userId, home = 'dashboard' }) {
         </div>
       </div>
 
-      {items === null && (
-        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
-      )}
+      {items === null && <SkeletonCard rows={3} />}
       {items !== null && items.length === 0 && (
-        <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-            ALL CAUGHT UP<br/><span style={{ fontSize: 9 }}>Activity from your clients shows here</span>
-          </div>
-        </div>
+        <EmptyState icon="Trophy" title="All caught up"
+          sub="Nothing new right now — activity lands here as it happens." />
       )}
 
       {today.length > 0 && <>
         <div className="label" style={{ margin: '4px 4px 8px' }}>// TODAY</div>
-        <div style={{ display: 'grid', gap: 8, marginBottom: 18 }}>
+        <div className="stagger-in" style={{ display: 'grid', gap: 8, marginBottom: 18 }}>
           {today.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || 'dashboard')} />)}
         </div>
       </>}
       {earlier.length > 0 && <>
         <div className="label" style={{ margin: '4px 4px 8px' }}>// EARLIER</div>
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
           {earlier.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || 'dashboard')} />)}
         </div>
       </>}
@@ -72,7 +68,7 @@ function NotifRow({ n, onTap }) {
   const unread = !n.read_at;
   return (
     <button onClick={onTap} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-      <div className="card" style={{
+      <div className="card tappable" style={{
         padding: 12, display: 'grid', gridTemplateColumns: '38px 1fr', gap: 12, alignItems: 'flex-start',
         borderColor: unread ? `color-mix(in srgb, ${meta.color} 40%, var(--line))` : 'var(--line)',
         background: unread ? `color-mix(in srgb, ${meta.color} 7%, var(--bg-2))` : 'var(--bg-2)',

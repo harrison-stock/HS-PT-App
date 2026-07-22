@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { Hex } from '../components/hex'
 import { IconCheck } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
+import { Skel } from '../components/Loading'
 
 // A comment thread for one exercise (per client). Both the client and their
 // coach can post; each post notifies the other party.
@@ -43,7 +44,7 @@ export function ExerciseComments({ exerciseId, clientId, exerciseName, onClose }
           <div className="h-bold" style={{ fontSize: 16, marginTop: 4 }}>{exerciseName || 'EXERCISE'}</div>
         </div>
         <div className="scroller" style={{ flex: 1, padding: '8px 16px', minHeight: 80, display: 'grid', gap: 8, alignContent: 'start' }}>
-          {rows === null && <Mono>LOADING…</Mono>}
+          {rows === null && <><Skel w="70%" h={30} r={12} /><Skel w="55%" h={30} r={12} style={{ justifySelf: 'end' }} /></>}
           {rows && rows.length === 0 && <Mono>No comments yet — start the conversation.</Mono>}
           {(rows || []).map(c => {
             const mine = c.author_id === me;

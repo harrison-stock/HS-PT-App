@@ -19,6 +19,7 @@ import { ImportHistory } from './ImportHistory'
 import { toast } from '../lib/toast'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
+import { Skel } from '../components/Loading'
 
 // ── Constants ────────────────────────────────────────────────────
 const SEV_COLOR  = { mild: 'var(--c-amber)', moderate: 'var(--c-coral)', severe: '#d93434' };
@@ -181,7 +182,7 @@ function ProgrammeProgressCard({ clientId, onTab }) {
   const pct = Math.round(computeRoadmap(info.phases, info.startDate).progress * 100);
   return (
     <button onClick={() => onTab('report')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-      <div className="card" style={{ padding: 14 }}>
+      <div className="card tappable" style={{ padding: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="label">// PROGRAMME ROADMAP</div>
@@ -302,7 +303,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
         <div className="ov-col">
       {/* Training */}
       <button onClick={() => onTab('training')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-        <div className="card" style={{ padding: 14 }}>
+        <div className="card tappable" style={{ padding: 14 }}>
           <div className="label" style={{ marginBottom: 12 }}>// TRAINING</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
             <TrainStat top="LAST 7 DAYS" big={d ? `${tracked(window7)}/${window7.length}` : '—'} sub="TRACKED" />
@@ -325,12 +326,12 @@ function OverviewTab({ c, go, onClose, onTab }) {
 
       {/* Body metrics overview */}
       <button onClick={() => onTab('data')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-        <div className="card" style={{ padding: 14 }}>
+        <div className="card tappable" style={{ padding: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
             <div className="label">// BODY METRICS</div>
             <Mono>LAST 4 MONTHS</Mono>
           </div>
-          {!d ? <Mono>LOADING…</Mono> : (
+          {!d ? <Skel w="46%" h={11} style={{ margin: '4px 0' }} /> : (
             <div style={{ display: 'grid', gap: 14 }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -382,9 +383,9 @@ function OverviewTab({ c, go, onClose, onTab }) {
 
       {/* Goal & countdown */}
       <button onClick={() => onTab('goals')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-        <div className="card" style={{ padding: 14 }}>
+        <div className="card tappable" style={{ padding: 14 }}>
           <div className="label" style={{ marginBottom: 8 }}>// GOAL &amp; COUNTDOWN</div>
-          {!d ? <Mono>LOADING…</Mono> : goal ? (
+          {!d ? <Skel w="46%" h={11} style={{ margin: '4px 0' }} /> : goal ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="h-bold" style={{ fontSize: 15, lineHeight: 1.25 }}>{goal.title}</div>
@@ -441,7 +442,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
       {/* Updates — full-width feed below both columns */}
       <div style={{ display: 'grid', gap: 12 }}>
         <div className="label">// UPDATES</div>
-        {!d && <Mono>LOADING…</Mono>}
+        {!d && <Skel w="46%" h={11} style={{ margin: '4px 0' }} />}
         {d && d.sessions.length === 0 && <EmptyState>No sessions logged yet</EmptyState>}
         {d?.sessions.map(s => {
           const dur = s.completed_at ? Math.round((new Date(s.completed_at) - new Date(s.started_at)) / 60000) : null;
@@ -523,7 +524,7 @@ function NoteCard({ label, placeholder, initial, onSave, loading, accent, childr
         <div className="label" style={{ color: accent || undefined }}>{label}</div>
         {saved ? <Mono style={{ color: col }}>✓ SAVED</Mono> : dirty ? <Mono style={{ color: 'var(--c-amber)' }}>UNSAVED</Mono> : null}
       </div>
-      {loading ? <Mono>LOADING…</Mono> : (
+      {loading ? <Skel w="46%" h={11} style={{ margin: '4px 0' }} /> : (
         <textarea
           value={val}
           onChange={e => { setVal(e.target.value); setDirty(true); }}
@@ -1597,7 +1598,7 @@ function TasksTab({ c, trainerId }) {
         </div>
       )}
 
-      {tasks === null && <Mono>LOADING…</Mono>}
+      {tasks === null && <Skel w="46%" h={11} style={{ margin: '4px 0' }} />}
       {tasks !== null && open.length === 0 && done.length === 0 && <EmptyState>No tasks yet — add one above</EmptyState>}
 
       {open.map(t => <TaskRow key={t.id} t={t} onToggle={toggle} onDelete={del}/>)}
@@ -1923,7 +1924,7 @@ function VaultTab({ c, trainerId }) {
       <FileDrop onFiles={uploadFiles} accept="*/*" multiple busy={busy} label="DRAG & DROP OR TAP TO ADD DOCUMENTS" hint="PDF, images, docs · up to 20MB each" />
       {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)' }}>{err}</div>}
 
-      {docs === null ? <Mono>LOADING…</Mono> : docs.length === 0 ? (
+      {docs === null ? <Skel w="46%" h={11} style={{ margin: '4px 0' }} /> : docs.length === 0 ? (
         <div className="card" style={{ padding: 24, textAlign: 'center' }}>
           <Mono>NO DOCUMENTS YET</Mono>
         </div>

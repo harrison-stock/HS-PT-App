@@ -5,6 +5,7 @@ import { REGION_LABELS } from '../data/musclePaths'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { loadReportProgrammes, buildProgrammeReport } from '../lib/report'
 import { IconChevronRight } from '../components/icons'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const regionLabel = (g) => REGION_LABELS[g] || (g || '').replace(/([A-Z])/g, ' $1').trim();
 const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -50,11 +51,10 @@ export function ProgrammeReport({ clientId, clientName, onClose, embedded = fals
     <div className={embedded ? '' : 'scroller'} style={embedded
       ? { width: '100%', boxSizing: 'border-box' }
       : { flex: 1, minHeight: 0, padding: '14px 16px 48px', maxWidth: 820, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-        {progs === null && <Mono>LOADING…</Mono>}
+        {progs === null && <SkeletonCard rows={2} />}
         {progs && progs.length === 0 && (
-          <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-            <Mono style={{ lineHeight: 1.7 }}>NO COMPLETED SESSIONS YET<br/><span style={{ fontSize: 9 }}>Reports appear once {clientName.split(' ')[0]} has logged workouts from a programme</span></Mono>
-          </div>
+          <EmptyState icon="Graph (Ascending)" title="No completed sessions yet"
+            sub={`Reports appear once ${clientName.split(' ')[0]} has logged workouts from a programme.`} />
         )}
 
         {progs && progs.length > 0 && (

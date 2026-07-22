@@ -307,6 +307,18 @@ body:has([data-role="trainer"]) {
   position: relative;
 }
 .bnav button.active { color: var(--accent-2); }
+/* Active-tab marker — an accent dot that pops in beneath the label. */
+.bnav button::after {
+  content: '';
+  width: 4px; height: 4px; border-radius: 999px;
+  margin-top: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 calc(6px * var(--glow)) var(--accent-glow);
+  opacity: 0;
+  transform: scale(0);
+  transition: opacity .2s ease, transform .25s cubic-bezier(.34,1.56,.64,1);
+}
+.bnav button.active::after { opacity: 1; transform: scale(1); }
 
 /* Glow utility */
 .glow-accent { box-shadow: 0 0 calc(20px * var(--glow)) var(--accent-glow); }
@@ -357,6 +369,13 @@ body:has([data-role="trainer"]) {
   50% { box-shadow: 0 0 18px 0 var(--accent-glow); }
 }
 
+/* Set-tick spring pop — plays when a set is marked complete. */
+@keyframes tickPop {
+  0% { transform: scale(0.6); }
+  55% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
 /* Roadmap current-phase "in progress" pulse */
 @keyframes phasePulse {
   0%, 100% { box-shadow: 0 0 6px 1px var(--accent-glow); }
@@ -382,6 +401,51 @@ body:has([data-role="trainer"]) {
 /* Tactile press feedback on the bottom nav + primary/ghost buttons */
 .bnav button, .btn-primary, .btn-ghost { transition: transform .12s ease, opacity .12s ease; }
 .bnav button:active, .btn-primary:active, .btn-ghost:active { transform: scale(0.95); }
+
+/* Skeleton shimmer — a soft band sweeping across placeholder blocks while
+   real content loads. Blocks are .skel; size them inline where used. */
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.skel {
+  border-radius: 8px;
+  background:
+    linear-gradient(100deg, transparent 30%, var(--line-strong) 50%, transparent 70%),
+    var(--track);
+  background-size: 200% 100%, auto;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Staggered list entrance — put `stagger-in` on a list container and each
+   direct child rises in with a small cascading delay. Capped at 10 children
+   so long lists don't feel sluggish; anything later appears with the last. */
+.stagger-in > * { animation: screenIn .34s cubic-bezier(.22,.61,.36,1) both; }
+.stagger-in > *:nth-child(1)  { animation-delay: .02s; }
+.stagger-in > *:nth-child(2)  { animation-delay: .06s; }
+.stagger-in > *:nth-child(3)  { animation-delay: .10s; }
+.stagger-in > *:nth-child(4)  { animation-delay: .14s; }
+.stagger-in > *:nth-child(5)  { animation-delay: .18s; }
+.stagger-in > *:nth-child(6)  { animation-delay: .22s; }
+.stagger-in > *:nth-child(7)  { animation-delay: .26s; }
+.stagger-in > *:nth-child(8)  { animation-delay: .30s; }
+.stagger-in > *:nth-child(9)  { animation-delay: .34s; }
+.stagger-in > *:nth-child(n+10) { animation-delay: .38s; }
+
+/* Tactile cards — press-down feedback for any card that acts as a button.
+   On pointer devices, a gentle lift + accent edge on hover. */
+.tappable { transition: transform .14s ease, border-color .18s ease, box-shadow .18s ease; }
+.tappable:active { transform: scale(0.983); }
+@media (hover: hover) and (pointer: fine) {
+  .tappable:hover {
+    border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+    box-shadow: 0 4px 18px rgba(0,0,0,0.22), 0 0 calc(12px * var(--glow)) color-mix(in srgb, var(--accent-glow) 40%, transparent);
+    transform: translateY(-1px);
+  }
+  :root[data-theme="light"] .tappable:hover {
+    box-shadow: 0 4px 16px rgba(10,31,34,0.10);
+  }
+}
+
+/* Progress-bar fills ease into place instead of snapping. */
+.bar > span { transition: width .7s cubic-bezier(.22,.61,.36,1); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -410,7 +474,9 @@ body:has([data-role="trainer"]) {
   text-transform: uppercase;
   color: var(--text-2);
   cursor: pointer;
+  transition: background .18s ease, color .18s ease, transform .12s ease;
 }
+.seg button:active { transform: scale(0.95); }
 .seg button.active {
   background: var(--accent);
   color: var(--on-accent);

@@ -9,6 +9,7 @@ import { loadExercises, videoThumb, ALL_MUSCLES } from '../lib/exercises'
 import { exerciseMatches } from '../lib/exerciseSearch'
 import { HEX_RATIO, HEX_PATH, HexShape, Hex, HexBackButton } from '../components/hex'
 import { IconHeart, IconFlame, IconBolt, IconClock, IconChevronRight, IconPlus, IconCamera2, IconPlay, IconCheck, IconDumbbell, IconDoc } from '../components/icons'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const MUSCLE_LABEL = Object.fromEntries(ALL_MUSCLES.map(m => [m.key, m.label]));
 
@@ -152,40 +153,28 @@ export function Resources({ go, userId, isTrainer }) {
       }
 
       {/* List */}
-      {tab === 'recipes' && recipesLoading &&
-      <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>
-        LOADING…
-      </div>
-      }
+      {tab === 'recipes' && recipesLoading && <SkeletonCard rows={4} />}
       {tab === 'recipes' && !recipesLoading &&
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {filtered.map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={favs.has(r.id)} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {recipeList.length === 0 &&
-          <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-              NO RECIPES YET<br/>
-              <span style={{ fontSize: 9 }}>{isTrainer ? 'Tap NEW RECIPE to build your first one' : 'Your coach hasn’t added any recipes yet'}</span>
-            </div>
-          </div>}
+          <EmptyState icon="Recipe" title="No recipes yet"
+            sub={isTrainer ? 'Build your first recipe and it lands in every client’s library.' : 'Your coach hasn’t added any recipes yet — check back soon.'}
+            actionLabel={isTrainer ? '+ NEW RECIPE' : undefined} onAction={isTrainer ? () => setBuilderRecipe(null) : undefined} />}
         </div>
       }
-      {tab === 'guides' && guidesLoading &&
-      <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
-      }
+      {tab === 'guides' && guidesLoading && <SkeletonCard rows={4} />}
       {tab === 'guides' && !guidesLoading &&
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {filtered.map((g) => <GuideCard key={g.id} g={g} isFav={favs.has(g.id)} onToggleFav={() => toggleFav(g.id, 'guide')} onEdit={isTrainer ? () => setBuilderGuide(g) : null} onOpen={() => openGuide(g)} />)}
           {guideList.length === 0 &&
-          <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-              NO GUIDES YET<br/>
-              <span style={{ fontSize: 9 }}>{isTrainer ? 'Tap NEW GUIDE to add one' : 'Your coach hasn’t added any guides yet'}</span>
-            </div>
-          </div>}
+          <EmptyState icon="Book" title="No guides yet"
+            sub={isTrainer ? 'Articles, videos and PDFs you add appear here for every client.' : 'Your coach hasn’t added any guides yet — check back soon.'}
+            actionLabel={isTrainer ? '+ NEW GUIDE' : undefined} onAction={isTrainer ? () => setBuilderGuide(null) : undefined} />}
         </div>
       }
       {tab === 'favourites' &&
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {recipeList.filter((r) => favs.has(r.id) && r.title.toLowerCase().includes(query.toLowerCase()))
             .map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={true} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {guideList.filter((g) => favs.has(g.id) && g.title.toLowerCase().includes(query.toLowerCase()))
@@ -196,33 +185,26 @@ export function Resources({ go, userId, isTrainer }) {
       }
 
       {favs.size === 0 && tab === 'favourites' &&
-      <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-          <IconHeart size={26} style={{ color: 'var(--text-3)', margin: '0 auto 10px' }} />
-          <div style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>No favourites yet</div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 6, lineHeight: 1.5 }}>
-            TAP THE ♥ ON ANY RECIPE,<br />GUIDE OR EXERCISE TO SAVE IT HERE
-          </div>
-        </div>
+      <EmptyState icon="Heart" title="No favourites yet"
+        sub="Tap the ♥ on any recipe, guide or exercise to pin it here for quick access."
+        actionLabel="BROWSE RECIPES" onAction={() => setTab('recipes')} />
       }
 
       {/* Exercise glossary — read-only reference of the coach's library */}
       {tab === 'exercises' && (
         exercises === null ? (
-          <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
+          <SkeletonCard rows={4} />
         ) : (() => {
           const exFiltered = exercises.filter((e) => exerciseMatches(e.name, query, e.muscle_group || ''));
           if (exercises.length === 0) return (
-            <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-                NO EXERCISES YET<br/><span style={{ fontSize: 9 }}>{isTrainer ? 'Build your library in the Exercises tab' : 'Your coach hasn’t added any exercises yet'}</span>
-              </div>
-            </div>
+            <EmptyState icon="Dumbbell" title="No exercises yet"
+              sub={isTrainer ? 'Build your library in the Exercises tab.' : 'Your coach hasn’t added any exercises yet.'} />
           );
           if (exFiltered.length === 0) return (
             <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}><div style={{ fontSize: 13 }}>No exercises match "{query}"</div></div>
           );
           return (
-            <div style={{ display: 'grid', gap: 10 }}>
+            <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
               {exFiltered.map((e) => <ExerciseGlossaryCard key={e.id} e={e} onOpen={() => setOpenExercise(e)} isFav={favs.has(e.id)} onToggleFav={() => toggleFav(e.id, 'exercise')} />)}
             </div>
           );
@@ -256,7 +238,7 @@ export function Resources({ go, userId, isTrainer }) {
 function ExerciseGlossaryCard({ e, onOpen, isFav, onToggleFav }) {
   const thumb = e.thumbnail_url || videoThumb(e.video_url) || (e.photos && e.photos[0]) || '';
   return (
-    <div className="card" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: 'pointer', position: 'relative' }}>
+    <div className="card tappable" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: 'pointer', position: 'relative' }}>
       <div style={{ width: 88, flexShrink: 0, background: `url('${thumb}') center/cover, var(--bg-3)`, position: 'relative' }}>
         {e.video_url && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#eceff4' }}><IconPlay size={18}/></div>}
       </div>
@@ -371,7 +353,7 @@ function ExerciseGlossaryDetail({ e, onClose, isFav, onToggleFav }) {
 // attached PDF.
 function GuideDetail({ g, onClose, isFav, onToggleFav, onEdit }) {
   const paras = (g.body || '').split('\n').map(s => s.trim()).filter(Boolean);
-  const kindColor = g.kind === 'VIDEO' ? 'var(--c-coral)' : g.kind === 'GUIDE' ? 'var(--accent)' : 'var(--c-blue)';
+  const kindColor = g.kind === 'VIDEO' ? 'var(--pink)' : g.kind === 'GUIDE' ? 'var(--accent)' : 'var(--purple)';
   const openVideo = () => { if (g.video) window.open(g.video, '_blank', 'noopener'); };
   const hasActions = g.video || g.link || g.file;
   return (
@@ -462,7 +444,8 @@ function ResTab({ active, onClick, icon, label, big }) {
       color: active ? 'var(--accent)' : 'var(--text-2)',
       fontFamily: 'JetBrains Mono', fontSize: big ? 12.5 : 10, fontWeight: 700, letterSpacing: '0.06em',
       textTransform: 'uppercase',
-      boxShadow: active ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none'
+      boxShadow: active ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none',
+      transition: 'background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease'
     }}>
       <span style={{ display: 'inline-flex', flexShrink: 0 }}>{icon}</span>
       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
@@ -492,18 +475,15 @@ function VaultView({ docs }) {
     const { data } = await supabase.storage.from('client-vault').createSignedUrl(doc.path, 120);
     if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener');
   };
-  if (docs === null) return <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>;
+  if (docs === null) return <SkeletonCard rows={3} />;
   if (docs.length === 0) return (
-    <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-        NO DOCUMENTS<br/><span style={{ fontSize: 9 }}>Your coach hasn’t shared any documents with you yet</span>
-      </div>
-    </div>
+    <EmptyState icon="Notes" title="No documents"
+      sub="Plans, PDFs and paperwork your coach shares with you will appear here." />
   );
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
+    <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
       {docs.map(doc => (
-        <button key={doc.id} onClick={() => open(doc)} className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left', border: '1px solid var(--line)' }}>
+        <button key={doc.id} onClick={() => open(doc)} className="card tappable" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left', border: '1px solid var(--line)' }}>
           <span style={{ color: 'var(--accent)', flexShrink: 0 }}><IconVaultDoc size={22} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
@@ -520,7 +500,7 @@ function VaultView({ docs }) {
 
 function RecipeCard({ r, onOpen, isFav, onToggleFav, onEdit }) {
   return (
-    <div className="card" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: onOpen ? 'pointer' : 'default', position: 'relative' }}>
+    <div className="card tappable" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: onOpen ? 'pointer' : 'default', position: 'relative' }}>
       <div style={{
         width: 88, flexShrink: 0,
         background: `url('${r.img}') center/cover, var(--bg-3)`
@@ -583,7 +563,7 @@ function Macro({ v, l, c }) {
 function GuideCard({ g, isFav, onToggleFav, onEdit, onOpen }) {
   const kindColor = g.kind === 'VIDEO' ? 'var(--pink)' : g.kind === 'GUIDE' ? 'var(--accent)' : 'var(--purple)';
   return (
-    <div className="card" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', position: 'relative', cursor: onOpen ? 'pointer' : 'default' }}>
+    <div className="card tappable" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', position: 'relative', cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{
         width: 88, flexShrink: 0,
         background: `linear-gradient(135deg, transparent, rgba(0,0,0,0.5)), url('${g.img}') center/cover, var(--bg-3)`,

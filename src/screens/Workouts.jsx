@@ -4,6 +4,7 @@ import { HEX_RATIO, Hex, HexBackButton } from '../components/hex'
 import { IconBand, IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconClock, IconDumbbell, IconFlame, IconLeaf, IconTarget } from '../components/icons'
 import { bandOf } from '../components/bands'
 import { SectionGlyph } from '../lib/svgIcon'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -245,15 +246,11 @@ export function Workouts({ go, openPreview, userId }) {
       )}
 
       {/* Loading state */}
-      {loading && (
-        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>
-          LOADING…
-        </div>
-      )}
+      {loading && <SkeletonCard rows={4} />}
 
       {/* Week rows */}
       {!loading && (
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
           {weekDates.map(dt => {
             const dateStr = fmtDate(dt);
             const dayWorkouts = workoutsByDate[dateStr] || [];
@@ -330,12 +327,9 @@ export function Workouts({ go, openPreview, userId }) {
       )}
 
       {!loading && workouts.length === 0 && (
-        <div className="card" style={{ marginTop: 12, padding: 28, textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.6 }}>
-            NO WORKOUTS ASSIGNED YET<br/>
-            <span style={{ fontSize: 9, color: 'var(--text-3)' }}>Your coach will assign sessions here</span>
-          </div>
-        </div>
+        <EmptyState icon="Rocket" title="No workouts assigned yet"
+          sub="Your coach is building your plan — sessions will land here the moment they’re assigned."
+          style={{ marginTop: 12 }} />
       )}
 
       {previewWorkout && (
