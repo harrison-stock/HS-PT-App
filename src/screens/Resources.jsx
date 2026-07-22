@@ -13,7 +13,7 @@ import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const MUSCLE_LABEL = Object.fromEntries(ALL_MUSCLES.map(m => [m.key, m.label]));
 
-// Resources — recipes & guides. Coaches build/edit both here.
+// Resources - recipes & guides. Coaches build/edit both here.
 export function Resources({ go, userId, isTrainer }) {
   const [tab, setTab] = React.useState('recipes');
   const [recipes, setRecipes] = React.useState(null);   // null = loading
@@ -43,7 +43,7 @@ export function Resources({ go, userId, isTrainer }) {
     setFavourite(userId, type, id, makeFav);
   };
 
-  // Open a guide's asset directly (like the documents tab) — an attached PDF,
+  // Open a guide's asset directly (like the documents tab) - an attached PDF,
   // a linked video/article, or failing those the cover image itself.
   const FALLBACK_GUIDE_IMG = 'photo-1517836357463';
   const openGuide = (g) => {
@@ -165,7 +165,7 @@ export function Resources({ go, userId, isTrainer }) {
           {filtered.map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={favs.has(r.id)} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {recipeList.length === 0 &&
           <EmptyState icon="Recipe" title="No recipes yet"
-            sub={isTrainer ? 'Build your first recipe and it lands in every client’s library.' : 'Your coach hasn’t added any recipes yet — check back soon.'}
+            sub={isTrainer ? 'Build your first recipe and it lands in every client’s library.' : 'Your coach hasn’t added any recipes yet - check back soon.'}
             actionLabel={isTrainer ? '+ NEW RECIPE' : undefined} onAction={isTrainer ? () => setBuilderRecipe(null) : undefined} />}
         </div>
       }
@@ -175,7 +175,7 @@ export function Resources({ go, userId, isTrainer }) {
           {filtered.map((g) => <GuideCard key={g.id} g={g} isFav={favs.has(g.id)} onToggleFav={() => toggleFav(g.id, 'guide')} onEdit={isTrainer ? () => setBuilderGuide(g) : null} onOpen={() => openGuide(g)} />)}
           {guideList.length === 0 &&
           <EmptyState icon="Book" title="No guides yet"
-            sub={isTrainer ? 'Articles, videos and PDFs you add appear here for every client.' : 'Your coach hasn’t added any guides yet — check back soon.'}
+            sub={isTrainer ? 'Articles, videos and PDFs you add appear here for every client.' : 'Your coach hasn’t added any guides yet - check back soon.'}
             actionLabel={isTrainer ? '+ NEW GUIDE' : undefined} onAction={isTrainer ? () => setBuilderGuide(null) : undefined} />}
         </div>
       }
@@ -196,7 +196,7 @@ export function Resources({ go, userId, isTrainer }) {
         actionLabel="BROWSE RECIPES" onAction={() => setTab('recipes')} />
       }
 
-      {/* Exercise glossary — read-only reference of the coach's library */}
+      {/* Exercise glossary - read-only reference of the coach's library */}
       {tab === 'exercises' && (
         exercises === null ? (
           <SkeletonCard rows={4} />
@@ -217,7 +217,7 @@ export function Resources({ go, userId, isTrainer }) {
         })()
       )}
 
-      {/* Client vault — documents shared by the coach */}
+      {/* Client vault - documents shared by the coach */}
       {tab === 'vault' && <VaultView docs={vaultDocs} />}
 
       {filtered.length === 0 && query && tab !== 'favourites' && tab !== 'exercises' && tab !== 'vault' && !(tab === 'recipes' && recipesLoading) && sourceList.length > 0 &&
@@ -385,7 +385,7 @@ function IconVaultDoc({ size = 14 }) {
   );
 }
 
-// Client-side document vault — read-only view of documents the coach attached.
+// Client-side document vault - read-only view of documents the coach attached.
 function VaultView({ docs }) {
   const open = async (doc) => {
     const { data } = await supabase.storage.from('client-vault').createSignedUrl(doc.path, 120);
@@ -543,7 +543,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
   // Ingredient scaling factor (ingredients are stored for `base` servings)
   const factor = servings / base;
 
-  // Scaled totals — macros are per serving, so total = perServing × servings
+  // Scaled totals - macros are per serving, so total = perServing × servings
   const scaled = (n) => n != null ? n * servings : null;
   const totalKcal = scaled(r.kcal) || 0;
   const macros = [
@@ -552,7 +552,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
   { l: 'FATS', v: scaled(r.fats), kcalPer: 9, c: '#EE6A6A' }].
   map((m) => ({ ...m, g: totalKcal ? m.v * m.kcalPer / totalKcal * 100 : 0 }));
 
-  // Per-portion macros — fixed regardless of how many servings you cook.
+  // Per-portion macros - fixed regardless of how many servings you cook.
   const portionKcal = r.kcal || 0;
   const portionMacros = [
   { l: 'PROTEIN', v: r.protein, kcalPer: 4, c: '#F39E1F' },
@@ -629,7 +629,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
 
         {/* Body scroll */}
         <div className="scroller" style={{ flex: 1, padding: '16px 16px 120px', minHeight: 0 }}>
-          {/* Hex macro + breakdown — per portion */}
+          {/* Hex macro + breakdown - per portion */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '0 4px 8px' }}>
             <div className="label">// MACROS</div>
             <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: '0.14em', fontWeight: 600 }}>PER PORTION</span>
@@ -681,7 +681,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
                 width: 14, height: 14, accentColor: 'var(--accent)', cursor: 'pointer'
               }} />
                 <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: '0.04em', fontWeight: 600 }}>
-                  {ing.qty == null ? '—' : `${fmtQty(scaleQty(ing.qty, factor))}${ing.unit}`}
+                  {ing.qty == null ? '-' : `${fmtQty(scaleQty(ing.qty, factor))}${ing.unit}`}
                 </span>
                 <span style={{ fontSize: 13, color: 'var(--text)' }}>{ing.name}</span>
               </div>
@@ -689,7 +689,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
           </div>
           )}
 
-          {/* Intro — the coach's personal note, before the method */}
+          {/* Intro - the coach's personal note, before the method */}
           {r.intro && (
             <div style={{ marginBottom: 14, padding: '12px 14px', borderRadius: 10, background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 30%, var(--line))' }}>
               <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-line', fontFamily: "'JetBrains Mono', monospace" }}>{r.intro}</div>
@@ -775,7 +775,7 @@ function ServingDial({ value, base, onChange }) {
           <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 600 }}>−</span>
         </button>
 
-        {/* Hex dots row — tappable */}
+        {/* Hex dots row - tappable */}
         <div ref={trackRef} style={{ display: 'flex', gap: 4, alignItems: 'center' }} data-comment-anchor="8fdaab69df-div-523-9">
           {options.map((n) =>
           <button key={n} onClick={() => onChange(n)} aria-label={`${n} servings`}
@@ -836,7 +836,7 @@ function ExportSheet({ recipe, servings, totalKcal, macros, onClose }) {
   // Real action: copy a macro summary to the clipboard to paste into the
   // chosen tracker (rather than a simulated "send").
   const send = (app) => {
-    const text = `${recipe.title} — per serving: ${Math.round(kcal1)} kcal · ${Math.round(p1)}g protein · ${Math.round(c1)}g carbs · ${Math.round(f1)}g fat`;
+    const text = `${recipe.title} - per serving: ${Math.round(kcal1)} kcal · ${Math.round(p1)}g protein · ${Math.round(c1)}g carbs · ${Math.round(f1)}g fat`;
     try { navigator.clipboard?.writeText(text); } catch (e) { /* ignore */ }
     setPickedApp(app);
     setSent(true);

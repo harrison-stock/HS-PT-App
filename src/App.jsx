@@ -87,7 +87,7 @@ export default function App() {
       else { sessionStorage.removeItem('hs_cv_id'); sessionStorage.removeItem('hs_cv_name'); }
     } catch (e) {}
   }, [clientViewId, clientViewName]);
-  // Route a coach to their hub only once, on first load — never on later token
+  // Route a coach to their hub only once, on first load - never on later token
   // refreshes (which would otherwise eject them from a client they're viewing).
   const didInitialRoute = React.useRef(false);
 
@@ -97,7 +97,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = React.useState(true);
   const [bootError, setBootError] = React.useState(false);
   // Invite / password-recovery email links land here with a session but no
-  // usable password — force a set-password step. Captured from the URL hash
+  // usable password - force a set-password step. Captured from the URL hash
   // before supabase-js consumes it, and persisted across that processing.
   const [needsPassword, setNeedsPassword] = React.useState(() => {
     try {
@@ -134,7 +134,7 @@ export default function App() {
       else { setProfile(null); setAuthLoading(false); setNeedsPassword(false); }
     });
 
-    // Watchdog — never hang forever if the backend is paused/unreachable.
+    // Watchdog - never hang forever if the backend is paused/unreachable.
     const wd = setTimeout(() => { if (!done) { setBootError(true); setAuthLoading(false); } }, 10000);
 
     return () => { clearTimeout(wd); subscription.unsubscribe(); };
@@ -149,7 +149,7 @@ export default function App() {
       ]);
       setProfile(data);
       setBootError(false);
-      // Coaches land on the Coach hub (no client homepage in their nav) — but
+      // Coaches land on the Coach hub (no client homepage in their nav) - but
       // only on first load, and never while assuming control of a client, so a
       // token refresh on tab-back doesn't eject them from the client's app.
       if (data?.role === 'trainer' && !didInitialRoute.current) {
@@ -449,7 +449,7 @@ function ResumeWorkoutPrompt({ snap, onResume, onDiscard }) {
         </div>
         <div className="h-bold" style={{ fontSize: 19, marginBottom: 8 }}>CONTINUE YOUR WORKOUT?</div>
         <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.55, marginBottom: 18 }}>
-          You have a session in progress{setsDone > 0 ? <> — <strong style={{ color: 'var(--text)' }}>{setsDone} set{setsDone === 1 ? '' : 's'}</strong> logged, {elapsed} in</> : ''}. Pick up where you left off?
+          You have a session in progress{setsDone > 0 ? <> - <strong style={{ color: 'var(--text)' }}>{setsDone} set{setsDone === 1 ? '' : 's'}</strong> logged, {elapsed} in</> : ''}. Pick up where you left off?
         </div>
         <div style={{ display: 'grid', gap: 8 }}>
           <button onClick={onResume} className="btn-primary" style={{ width: '100%', color: 'var(--heading-deep)' }}>RESUME WORKOUT</button>
@@ -477,7 +477,7 @@ function BottomNav({ screen, go, isTrainer }) {
 
   return (
     <div className="bnav">
-      {/* Brand header — only visible in the desktop sidebar layout */}
+      {/* Brand header - only visible in the desktop sidebar layout */}
       <div className="bnav-brand">
         <BrandIcon name="HS PT App" size={38} color="var(--accent)" glow />
         <div>

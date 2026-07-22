@@ -7,7 +7,7 @@ let _fid = 0;
 const newField = (type = 'text') => ({ id: `f${Date.now()}_${_fid++}`, type, label: '', options: type === 'choice' ? ['Option 1', 'Option 2'] : [], required: true });
 const emptyDraft = () => ({ id: null, title: '', description: '', fields: [newField('scale')] });
 
-// Coach form builder — mirrors the recipe / guide makers.
+// Coach form builder - mirrors the recipe / guide makers.
 export function FormBuilder({ trainerId, form, onClose, onSaved }) {
   const [d, setD] = React.useState(() => form ? { id: form.id, title: form.title, description: form.description, fields: form.fields?.length ? form.fields : [newField()] } : emptyDraft());
   const [saving, setSaving] = React.useState(false);
@@ -97,7 +97,7 @@ export function FormBuilder({ trainerId, form, onClose, onSaved }) {
             all: 'unset', cursor: 'pointer', padding: '13px', borderRadius: 10, textAlign: 'center', marginTop: 4,
             border: `1px solid color-mix(in srgb, var(--c-coral) ${confirmDel ? 60 : 35}%, var(--line))`,
             color: confirmDel ? 'var(--c-coral)' : 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
-          }}>{confirmDel ? 'CONFIRM DELETE — TAP AGAIN' : 'DELETE FORM'}</button>
+          }}>{confirmDel ? 'CONFIRM DELETE - TAP AGAIN' : 'DELETE FORM'}</button>
         )}
       </div>
     </div>

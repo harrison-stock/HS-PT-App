@@ -45,7 +45,7 @@ export function ExerciseComments({ exerciseId, clientId, exerciseName, onClose }
         </div>
         <div className="scroller" style={{ flex: 1, padding: '8px 16px', minHeight: 80, display: 'grid', gap: 8, alignContent: 'start' }}>
           {rows === null && <><Skel w="70%" h={30} r={12} /><Skel w="55%" h={30} r={12} style={{ justifySelf: 'end' }} /></>}
-          {rows && rows.length === 0 && <Mono>No comments yet — start the conversation.</Mono>}
+          {rows && rows.length === 0 && <Mono>No comments yet - start the conversation.</Mono>}
           {(rows || []).map(c => {
             const mine = c.author_id === me;
             return (

@@ -1,7 +1,7 @@
 import React from 'react'
 import { canInstall, promptInstall, subscribeInstall, getPlatform, isStandalone } from '../lib/installPrompt'
 
-// Share icon (iOS Safari toolbar) — used in the instructions.
+// Share icon (iOS Safari toolbar) - used in the instructions.
 const IconShare = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 16V4M8 8l4-4 4 4"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/>
@@ -53,20 +53,20 @@ export function InstallPrompt({ onClose }) {
           <>
             <button onClick={doInstall} className="btn-primary" style={{ width: '100%', color: 'var(--heading-deep)', marginBottom: 12 }}>INSTALL APP</button>
             <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5, marginBottom: 4 }}>
-              Tap install and confirm — it'll appear on your home screen.
+              Tap install and confirm - it'll appear on your home screen.
             </div>
           </>
         ) : platform === 'ios' ? (
           <div style={{ display: 'grid', gap: 12, textAlign: 'left', marginBottom: 18 }}>
             <Step n="1">In Safari, tap the <strong style={{ color: 'var(--text)' }}>Share</strong> button <span style={{ display: 'inline-flex', verticalAlign: 'middle', color: 'var(--accent)' }}><IconShare size={14}/></span> at the bottom of the screen.</Step>
             <Step n="2">Scroll down and tap <strong style={{ color: 'var(--text)' }}>Add to Home Screen</strong> <span style={{ display: 'inline-flex', verticalAlign: 'middle', color: 'var(--accent)' }}><IconPlusSquare size={14}/></span>.</Step>
-            <Step n="3">Tap <strong style={{ color: 'var(--text)' }}>Add</strong> — the app icon lands on your home screen.</Step>
+            <Step n="3">Tap <strong style={{ color: 'var(--text)' }}>Add</strong> - the app icon lands on your home screen.</Step>
           </div>
         ) : platform === 'android' ? (
           <div style={{ display: 'grid', gap: 12, textAlign: 'left', marginBottom: 18 }}>
             <Step n="1">Open your browser menu <strong style={{ color: 'var(--text)' }}>⋮</strong> (top-right).</Step>
             <Step n="2">Tap <strong style={{ color: 'var(--text)' }}>Install app</strong> or <strong style={{ color: 'var(--text)' }}>Add to Home screen</strong>.</Step>
-            <Step n="3">Confirm — the app icon lands on your home screen.</Step>
+            <Step n="3">Confirm - the app icon lands on your home screen.</Step>
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 12, textAlign: 'left', marginBottom: 18 }}>

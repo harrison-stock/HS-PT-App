@@ -43,7 +43,7 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
     const { url, error } = await uploadGuideImage(trainerId, file);
     setUploading(false);
     if (url) set({ img: url });
-    else alert('Image upload failed — please try again.' + (error?.message ? `\n\n${error.message}` : ''));
+    else alert('Image upload failed - please try again.' + (error?.message ? `\n\n${error.message}` : ''));
   };
   const pickFile = async (e) => {
     const file = e.target.files?.[0]; e.target.value = '';
@@ -52,7 +52,7 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
     const { url, error } = await uploadGuideImage(trainerId, file);
     setUploadingFile(false);
     if (url) set({ file: url, fileName: file.name });
-    else { toast('File upload failed', { kind: 'error' }); alert('File upload failed — please try again.' + (error?.message ? `\n\n${error.message}` : '')); }
+    else { toast('File upload failed', { kind: 'error' }); alert('File upload failed - please try again.' + (error?.message ? `\n\n${error.message}` : '')); }
   };
 
   return (
@@ -139,7 +139,7 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
                 border: `1px solid color-mix(in srgb, var(--c-coral) ${confirmDel ? 60 : 35}%, var(--line))`,
                 color: confirmDel ? 'var(--c-coral)' : 'var(--text-3)',
                 fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
-              }}>{confirmDel ? 'CONFIRM DELETE — TAP AGAIN' : 'DELETE GUIDE'}</button>
+              }}>{confirmDel ? 'CONFIRM DELETE - TAP AGAIN' : 'DELETE GUIDE'}</button>
             )}
           </div>
         </div>

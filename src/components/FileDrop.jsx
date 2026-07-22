@@ -1,7 +1,7 @@
 import React from 'react'
 
 // Reusable drag-and-drop + click-to-browse upload zone. Calls onFiles(FileList)
-// for both a drop and a file-picker selection. Purely presentational — the
+// for both a drop and a file-picker selection. Purely presentational - the
 // caller does the actual upload and owns the busy state.
 export function FileDrop({ onFiles, accept = 'image/*', multiple = false, busy = false, disabled = false, label, hint, height = 120, style }) {
   const inputRef = React.useRef(null);
@@ -32,7 +32,7 @@ export function FileDrop({ onFiles, accept = 'image/*', multiple = false, busy =
     >
       <input ref={inputRef} type="file" accept={accept} multiple={multiple} style={{ display: 'none' }}
         onChange={(e) => {
-          // Snapshot the files BEFORE clearing the input — resetting value wipes
+          // Snapshot the files BEFORE clearing the input - resetting value wipes
           // the live FileList, so reading it after would give nothing.
           const picked = Array.from(e.target.files || []);
           e.target.value = '';

@@ -13,7 +13,7 @@ export const bandOf = (key) => BANDS.find(b => b.key === key) || null;
 // Compact swatch + label for read-only display (rows, previews, plans).
 export function BandChip({ band, size = 12 }) {
   const b = bandOf(band);
-  if (!b) return <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>—</span>;
+  if (!b) return <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>-</span>;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
       <span style={{ width: size, height: size, borderRadius: 4, background: b.color, border: '1px solid rgba(255,255,255,0.35)', flexShrink: 0 }} />
@@ -22,7 +22,7 @@ export function BandChip({ band, size = 12 }) {
   );
 }
 
-// Full picker — a row of tappable swatches with labels. value is a band key.
+// Full picker - a row of tappable swatches with labels. value is a band key.
 export function BandPicker({ value, onChange, compact }) {
   return (
     <div style={{ display: 'flex', gap: compact ? 4 : 6 }}>

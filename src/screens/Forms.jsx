@@ -4,7 +4,7 @@ import { loadForms } from '../lib/forms'
 import { FormBuilder } from './FormBuilder'
 import { SkeletonCard, EmptyState } from '../components/Loading'
 
-// Coach hub for all forms — build, edit and review check-in / intake forms.
+// Coach hub for all forms - build, edit and review check-in / intake forms.
 export function Forms({ trainerId }) {
   const [forms, setForms]   = React.useState(null);
   const [query, setQuery]   = React.useState('');

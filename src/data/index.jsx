@@ -17,7 +17,7 @@ export const ASSIGNED_WORKOUTS = [
     equipment: ['Bike', 'Leg Press', 'Machine'],
     sections: [
       { kind: 'PULSE_RAISER', title: 'Pulse Raiser (Legs)', minutes: 5,
-        intro: 'To begin, perform some light cardiovascular activity on the exercise bike — the pedalling motion will activate your hip and knee joints, priming your legs for additional load in your upcoming exercises.\n\nAim to burn approximately 50kcal before moving on to your pre-stretches and activation.',
+        intro: 'To begin, perform some light cardiovascular activity on the exercise bike - the pedalling motion will activate your hip and knee joints, priming your legs for additional load in your upcoming exercises.\n\nAim to burn approximately 50kcal before moving on to your pre-stretches and activation.',
         items: [
         { name: 'Exercise Bike',          target: '70 %HR · 117 bpm · 5 mins', load: '×1', img: 'https://images.unsplash.com/photo-1591741535018-d042766c62eb?w=400&q=70' },
       ]},
@@ -29,7 +29,7 @@ export const ASSIGNED_WORKOUTS = [
         { name: 'Banded Ankle Mobility',  target: '2 × 10/side', load: '×2', img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=400&q=70' },
       ]},
       { kind: 'MAIN', title: 'Workout', minutes: 35,
-        intro: 'Your main lifts. Keep tempo controlled (3-X-1-X) — quality reps over quantity. Stop at RPE 8 and save fuel for tomorrow.',
+        intro: 'Your main lifts. Keep tempo controlled (3-X-1-X) - quality reps over quantity. Stop at RPE 8 and save fuel for tomorrow.',
         items: [
         { name: 'Back Squat',             target: '4 × 8',  load: '100kg' },
         { name: 'Romanian Deadlift',      target: '3 × 10', load: '80kg' },
@@ -41,9 +41,9 @@ export const ASSIGNED_WORKOUTS = [
       { kind: 'COOLDOWN', title: 'Cooldown', minutes: 6,
         intro: 'Drop your heart rate and lengthen the muscles you just trained. Slow nasal breathing throughout.',
         items: [
-        { name: 'Couch Stretch',          target: '2 × 60s/side', load: '—' },
-        { name: 'Pigeon Pose',            target: '2 × 60s/side', load: '—' },
-        { name: 'Diaphragmatic Breathing',target: '5 min', load: '—' },
+        { name: 'Couch Stretch',          target: '2 × 60s/side', load: '-' },
+        { name: 'Pigeon Pose',            target: '2 × 60s/side', load: '-' },
+        { name: 'Diaphragmatic Breathing',target: '5 min', load: '-' },
       ]},
     ],
     preview: [
@@ -81,11 +81,11 @@ export const ASSIGNED_WORKOUTS = [
     ] },
   { id: 'w5', name: 'Mobility Flow', date: '2026-05-03', dateLabel: 'Sun, May 3', duration: 25, exercises: 5, status: 'scheduled', tag: 'RECOVERY', img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=400&q=70',
     preview: [
-      { name: 'Hip Flow',             target: '5 min',  load: '—' },
-      { name: 'Thoracic Opener',      target: '5 min',  load: '—' },
-      { name: 'Shoulder CARs',        target: '3 × 8',  load: '—' },
-      { name: '90/90 Hip Switches',   target: '3 × 10', load: '—' },
-      { name: "Couch Stretch",        target: '2 × 60s', load: '—' },
+      { name: 'Hip Flow',             target: '5 min',  load: '-' },
+      { name: 'Thoracic Opener',      target: '5 min',  load: '-' },
+      { name: 'Shoulder CARs',        target: '3 × 8',  load: '-' },
+      { name: '90/90 Hip Switches',   target: '3 × 10', load: '-' },
+      { name: "Couch Stretch",        target: '2 × 60s', load: '-' },
     ] },
   // historic
   { id: 'wh1', name: 'Upper Push Power', date: '2026-04-27', dateLabel: 'Yesterday', duration: 47, exercises: 7, status: 'completed', tag: 'STRENGTH', img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=400&q=70', preview: [],
@@ -120,7 +120,7 @@ export const RECENT = [
   { name: 'Full Body Tempo', when: '4 days ago', duration: 51, badge: null },
 ];
 
-// Active exercises — each has a phase: pulse | banded | main | cooldown
+// Active exercises - each has a phase: pulse | banded | main | cooldown
 // alternatives is a list of swap options the user can pick instead.
 export const ACTIVE_EXERCISES = [
   // ── PULSE RAISER ──────────────────────────────────────────────
@@ -128,7 +128,7 @@ export const ACTIVE_EXERCISES = [
     id: 'p1', phase: 'pulse', name: 'Rower (Easy)', target: '5 min · low effort',
     rest: 30,
     img: 'https://images.unsplash.com/photo-1591741535018-d042766c62eb?w=600&q=70',
-    coach: 'Build to 130bpm — nasal breathing only.',
+    coach: 'Build to 130bpm - nasal breathing only.',
     sets: [
       { reps: '5 min', kg: null, rpe: null, done: true, time: true },
     ],
@@ -142,7 +142,7 @@ export const ACTIVE_EXERCISES = [
   {
     id: 'b1', phase: 'banded', name: 'Banded Hip Opener', target: '2 × 8 ea side', rest: 0, tempo: '2/1/2/0',
     img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=600&q=70',
-    coach: 'Slow, controlled pulses — feel hip capsule open.',
+    coach: 'Slow, controlled pulses - feel hip capsule open.',
     sets: [
       { reps: 8, kg: null, rpe: null, done: true, perSide: true },
       { reps: 8, kg: null, rpe: null, done: false, active: true, perSide: true },
@@ -155,7 +155,7 @@ export const ACTIVE_EXERCISES = [
   {
     id: 'b2', phase: 'banded', name: 'Banded Pull-Apart', target: '2 × 12', rest: 0, tempo: '2/1/1/0',
     img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=600&q=70',
-    coach: 'Squeeze shoulder blades — lock the rep at the back.',
+    coach: 'Squeeze shoulder blades - lock the rep at the back.',
     sets: [
       { reps: 12, kg: null, rpe: null, done: false, active: true },
       { reps: 12, kg: null, rpe: null, done: false },
@@ -169,7 +169,7 @@ export const ACTIVE_EXERCISES = [
   {
     id: 'e1', phase: 'main', name: 'Back Squat', target: '4 × 8 @ 100kg', rest: 120, tempo: '3/1/1/0',
     img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600&q=70',
-    coach: 'Tempo 3-1-1. Stop at RPE 8 — save fuel for tomorrow.',
+    coach: 'Tempo 3-1-1. Stop at RPE 8 - save fuel for tomorrow.',
     sets: [
       { reps: 12, kg: 60, rpe: 1, done: true, kind: 'WARMUP' },
       { reps: 10, kg: 80, rpe: 2, done: true, kind: 'WARMUP' },
@@ -219,7 +219,7 @@ export const ACTIVE_EXERCISES = [
   {
     id: 'e4', phase: 'main', name: 'Leg Press', target: '3 × 12 @ 140kg', rest: 90, tempo: '2/1/2/0',
     img: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=600&q=70',
-    coach: 'Feet shoulder-width, full ROM — no lockout.',
+    coach: 'Feet shoulder-width, full ROM - no lockout.',
     sets: [
       { reps: 12, kg: 140, rpe: null, done: false },
       { reps: 12, kg: 140, rpe: null, done: false },
@@ -234,7 +234,7 @@ export const ACTIVE_EXERCISES = [
   {
     id: 'c1', phase: 'cooldown', name: 'Couch Stretch', target: '2 × 60s ea', rest: 0,
     img: 'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=600&q=70',
-    coach: 'Open hip flexors — squeeze glute, ribs down.',
+    coach: 'Open hip flexors - squeeze glute, ribs down.',
     sets: [
       { reps: '60s', kg: null, rpe: null, done: false, time: true, perSide: true },
       { reps: '60s', kg: null, rpe: null, done: false, time: true, perSide: true },
@@ -277,7 +277,7 @@ export const PR_HISTORY = [
 
 export const PROGRESS_LINE = [38, 42, 40, 48, 52, 51, 58, 62, 60, 68, 71, 75];
 
-// Body metrics — manual + Apple Health
+// Body metrics - manual + Apple Health
 export const BODY_METRICS = {
   weight:    { label: 'Weight',    unit: 'kg',    value: 74.2,  delta: -0.8, deltaPct: -1.1, source: 'MANUAL', history: [76.4, 76.1, 75.8, 75.5, 75.2, 74.9, 74.6, 74.5, 74.4, 74.3, 74.2, 74.2] },
   bodyfat:   { label: 'Body fat',  unit: '%',     value: 14.2,  delta: -0.6, deltaPct: -4.1, source: 'MANUAL', history: [15.4, 15.2, 15.0, 14.9, 14.7, 14.6, 14.5, 14.4, 14.3, 14.3, 14.2, 14.2] },
@@ -289,7 +289,7 @@ export const BODY_METRICS = {
   sleep:     { label: 'Sleep',     unit: 'h',     value: 7.4,   delta: 0.3,  deltaPct: 4.2,  source: 'APPLE_HEALTH', history: [6.8,6.9,7.0,7.0,7.1,7.2,7.2,7.3,7.3,7.4,7.4,7.4] },
 };
 
-// Exercise PR / performance history — for Weight metrics tab
+// Exercise PR / performance history - for Weight metrics tab
 // Each exercise belongs to a category (chest, back, legs, shoulders, arms, core).
 // `pr` is true when the most recent session set a new max-weight PR.
 export const EXERCISE_HISTORY = [
@@ -382,7 +382,7 @@ export const EXERCISE_HISTORY = [
     history: [{ d: 'Mar 1', w: 18, r: 12 },{ d: 'Mar 15', w: 20, r: 12 },{ d: 'Mar 29', w: 22.5, r: 12 },{ d: 'Apr 12', w: 25, r: 12 },{ d: 'Apr 26', w: 25, r: 12 }] },
 ];
 
-// Categories — ordered, with metadata for cards
+// Categories - ordered, with metadata for cards
 export const EXERCISE_CATEGORIES = [
   { id: 'chest',     label: 'Chest',     icon: '◢',  accent: 'var(--accent)' },
   { id: 'back',      label: 'Back',      icon: '◣',  accent: 'var(--purple)' },
@@ -392,7 +392,7 @@ export const EXERCISE_CATEGORIES = [
   { id: 'core',      label: 'Core',      icon: '◯',  accent: 'var(--good)' },
 ];
 
-// Per-muscle-group volume worked (sets) — last 7 / 30 / 90 days.
+// Per-muscle-group volume worked (sets) - last 7 / 30 / 90 days.
 // Drives the muscle-map heatmap. Group keys map to anatomical regions.
 export const MUSCLE_VOLUME = {
   '7d': {
@@ -493,8 +493,8 @@ export const COACH_CLIENTS = [
 export const COACH_SCHEDULE = [
   { id: 's1', time: '06:30', client: 'Marcus Webb',  clientId: 'c2', kind: 'LIVE_PT',  duration: 60, status: 'done',     note: 'Bench PR ✓' },
   { id: 's2', time: '07:30', client: 'Sarah Chen',   clientId: 'c1', kind: 'CHECK_IN', duration: 15, status: 'live',     note: 'Form review video uploaded' },
-  { id: 's3', time: '09:00', client: 'Aisha Khan',   clientId: 'c5', kind: 'LIVE_PT',  duration: 45, status: 'upcoming', note: 'Postnatal — reduce load 10%' },
-  { id: 's4', time: '11:00', client: 'Lin Park',     clientId: 'c7', kind: 'REVIEW',   duration: 20, status: 'upcoming', note: 'Peak week — log review' },
+  { id: 's3', time: '09:00', client: 'Aisha Khan',   clientId: 'c5', kind: 'LIVE_PT',  duration: 45, status: 'upcoming', note: 'Postnatal - reduce load 10%' },
+  { id: 's4', time: '11:00', client: 'Lin Park',     clientId: 'c7', kind: 'REVIEW',   duration: 20, status: 'upcoming', note: 'Peak week - log review' },
   { id: 's5', time: '15:30', client: 'Noah Foster',  clientId: 'c8', kind: 'LIVE_PT',  duration: 60, status: 'upcoming', note: 'Programme catchup' },
   { id: 's6', time: '17:00', client: 'Emily Hart',   clientId: 'c9', kind: 'INTAKE',   duration: 30, status: 'upcoming', note: 'Onboarding · goal setting' },
 ];
@@ -533,13 +533,13 @@ export const COACH_PROGRAMMES = [
 ];
 
 export const COACH_INBOX = [
-  { id: 'm1', from: 'Sarah Chen',  initials: 'SC', accent: 'var(--accent)',     when: '2m',   unread: true,  preview: 'Hip felt stiff after squats — should I keep going Thurs?' },
-  { id: 'm2', from: 'Priya Anand', initials: 'PA', accent: 'var(--c-coral)',    when: '47m',  unread: true,  preview: "Sorry — slammed at work, missed Mon + Wed. Can we replan?" },
+  { id: 'm1', from: 'Sarah Chen',  initials: 'SC', accent: 'var(--accent)',     when: '2m',   unread: true,  preview: 'Hip felt stiff after squats - should I keep going Thurs?' },
+  { id: 'm2', from: 'Priya Anand', initials: 'PA', accent: 'var(--c-coral)',    when: '47m',  unread: true,  preview: "Sorry - slammed at work, missed Mon + Wed. Can we replan?" },
   { id: 'm3', from: 'Jonas Berg',  initials: 'JB', accent: 'var(--c-amber)',    when: '2h',   unread: true,  preview: 'Hit 140kg deadlift @ 8 RPE 🎉 video attached' },
-  { id: 'm4', from: 'Emily Hart',  initials: 'EH', accent: 'var(--accent)',     when: '5h',   unread: true,  preview: 'Form check please — split squat felt weird' },
-  { id: 'm5', from: 'Aisha Khan',  initials: 'AK', accent: 'var(--c-blue)',     when: 'Yest', unread: false, preview: 'Done! Feeling strong — sleep was rough though' },
-  { id: 'm6', from: 'Marcus Webb', initials: 'MW', accent: 'var(--accent-2)',   when: 'Yest', unread: false, preview: 'Pull session crushed — log uploaded' },
-  { id: 'm7', from: 'Diego Ramos', initials: 'DR', accent: 'var(--c-pink)',     when: '4d',   unread: false, preview: "I'm so sorry — I'll be back next week, family stuff." },
+  { id: 'm4', from: 'Emily Hart',  initials: 'EH', accent: 'var(--accent)',     when: '5h',   unread: true,  preview: 'Form check please - split squat felt weird' },
+  { id: 'm5', from: 'Aisha Khan',  initials: 'AK', accent: 'var(--c-blue)',     when: 'Yest', unread: false, preview: 'Done! Feeling strong - sleep was rough though' },
+  { id: 'm6', from: 'Marcus Webb', initials: 'MW', accent: 'var(--accent-2)',   when: 'Yest', unread: false, preview: 'Pull session crushed - log uploaded' },
+  { id: 'm7', from: 'Diego Ramos', initials: 'DR', accent: 'var(--c-pink)',     when: '4d',   unread: false, preview: "I'm so sorry - I'll be back next week, family stuff." },
 ];
 
 // KPIs for coach dashboard hero row
@@ -568,16 +568,16 @@ export const TASKS = [
   { id: 't2', kind: 'action', icon: 'scale', title: 'Log your weigh-in', sub: 'Tuesday & Friday mornings', done: false },
   { id: 't3', kind: 'action', icon: 'camera', title: 'Upload progress photos', sub: 'Every 4 weeks · 2 weeks left', done: false },
   { id: 't4', kind: 'form', icon: 'doc', title: 'Sign training agreement', sub: 'Completed 12 Apr', done: true,
-    form: { title: 'TRAINING AGREEMENT', intro: 'Already signed — view your agreement.', fields: [] } },
+    form: { title: 'TRAINING AGREEMENT', intro: 'Already signed - view your agreement.', fields: [] } },
 ];
 
 // Athlete-side notifications (bell on dashboard)
 export const NOTIFICATIONS = [
-  { id: 'n1', kind: 'coach',   when: '12m',  today: true, unread: true,  title: 'Harrison Stock', body: 'Great session yesterday — bumped your bench target to 87.5kg for next week. Keep the tempo controlled.' },
-  { id: 'n2', kind: 'pr',      when: '1h',   today: true, unread: true,  title: 'New PR · Bench Press', body: 'You hit 85kg × 3 — a +2.5kg personal record. That\u2019s 3 PRs this month.' },
+  { id: 'n1', kind: 'coach',   when: '12m',  today: true, unread: true,  title: 'Harrison Stock', body: 'Great session yesterday - bumped your bench target to 87.5kg for next week. Keep the tempo controlled.' },
+  { id: 'n2', kind: 'pr',      when: '1h',   today: true, unread: true,  title: 'New PR · Bench Press', body: 'You hit 85kg × 3 - a +2.5kg personal record. That\u2019s 3 PRs this month.' },
   { id: 'n3', kind: 'reminder',when: '3h',   today: true, unread: true,  title: 'Lower Day is ready', body: 'Today\u2019s session: Week 1 | Lower Day · 52 min · 6 exercises. Tap to preview.' },
-  { id: 'n4', kind: 'achievement', when: 'Yesterday', today: false, unread: false, title: '4-day streak 🔥', body: 'Four sessions completed on schedule. Consistency is compounding — keep it going.' },
+  { id: 'n4', kind: 'achievement', when: 'Yesterday', today: false, unread: false, title: '4-day streak 🔥', body: 'Four sessions completed on schedule. Consistency is compounding - keep it going.' },
   { id: 'n5', kind: 'schedule',when: 'Yesterday', today: false, unread: false, title: 'Session rescheduled', body: 'Pull & Posterior moved to Fri, May 1 at your request.' },
-  { id: 'n6', kind: 'coach',   when: '2d',   today: false, unread: false, title: 'Harrison Stock', body: 'Nice work logging your meals this week. Your protein average is up to 1.8g/kg — right where we want it.' },
+  { id: 'n6', kind: 'coach',   when: '2d',   today: false, unread: false, title: 'Harrison Stock', body: 'Nice work logging your meals this week. Your protein average is up to 1.8g/kg - right where we want it.' },
   { id: 'n7', kind: 'health',  when: '3d',   today: false, unread: false, title: 'Recovery looking good', body: 'Resting HR down to 58bpm and sleep averaging 7.4h. Your body is adapting well to the volume.' },
 ];

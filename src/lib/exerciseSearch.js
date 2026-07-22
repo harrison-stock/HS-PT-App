@@ -1,4 +1,4 @@
-// Search shorthand for exercises — typing an abbreviation matches the full word
+// Search shorthand for exercises - typing an abbreviation matches the full word
 // so "bb bench" finds "Barbell Bench Press", "db" finds dumbbell work, etc.
 // Each key is a typed token; values are phrases that may appear in the name.
 export const EXERCISE_ABBR = {

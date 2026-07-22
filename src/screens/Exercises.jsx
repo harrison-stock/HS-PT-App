@@ -72,7 +72,7 @@ export function Exercises({ trainerId }) {
         <SkeletonCard rows={4} />
       ) : all.length === 0 ? (
         <EmptyState icon="Dumbbell" title="No exercises yet"
-          sub="Build your reusable library — every exercise you add is available in the programme builder."
+          sub="Build your reusable library - every exercise you add is available in the programme builder."
           actionLabel="+ CREATE FIRST EXERCISE" onAction={() => setBuilder(null)} />
       ) : (
         <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
