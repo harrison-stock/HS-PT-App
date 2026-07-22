@@ -220,7 +220,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
                 REST DAY
               </div>
               <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 14 }}>
-                No session scheduled — recovery is where the adaptation happens.
+                No workout session is scheduled for today, take a breather.
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => go('workouts')} className="btn-ghost" style={{ flex: 1, fontSize: 10.5 }}>VIEW WEEK</button>

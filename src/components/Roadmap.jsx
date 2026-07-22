@@ -41,36 +41,35 @@ export function RoadmapTrack({ phases, startDate }) {
 
   return (
     <div style={{ margin: '2px 0 0' }}>
-      {/* Segmented bar — flex weights = each phase's weeks */}
+      {/* Segmented bar — flex weights = each phase's weeks. Completed phases
+          fade back so the active phase stands out. */}
       <div style={{ display: 'flex', gap: 3, height: 12 }}>
         {nodes.map((p) => (
           <div key={p.id} style={{
             flex: `${p.weeks} 1 0`, minWidth: 0, position: 'relative',
             background: 'var(--track)', borderRadius: 4, overflow: 'hidden',
+            opacity: p.done ? 0.45 : 1,
             border: p.current ? '1px solid color-mix(in srgb, var(--accent) 55%, transparent)' : '1px solid transparent',
           }}>
             <span style={{
               position: 'absolute', inset: 0, transformOrigin: 'left',
               transform: `scaleX(${p.fill})`, transition: 'transform .7s cubic-bezier(.22,.61,.36,1)',
               background: 'linear-gradient(90deg, var(--accent), var(--accent-2))',
-              boxShadow: p.fill > 0 ? '0 0 calc(6px * var(--glow)) var(--accent-glow)' : 'none',
+              boxShadow: p.fill > 0 && !p.done ? '0 0 calc(6px * var(--glow)) var(--accent-glow)' : 'none',
             }} />
           </div>
         ))}
       </div>
 
-      {/* Per-chunk labels — phase name + its % of total weeks */}
+      {/* Per-chunk labels — phase name only; completed phases fade back. */}
       <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
         {nodes.map((p) => (
-          <div key={p.id} style={{ flex: `${p.weeks} 1 0`, minWidth: 0, textAlign: 'center' }}>
+          <div key={p.id} style={{ flex: `${p.weeks} 1 0`, minWidth: 0, textAlign: 'center', opacity: p.done ? 0.45 : 1 }}>
             <div className="mono" style={{
               fontSize: 8.5, fontWeight: 700, letterSpacing: '0.02em',
-              color: p.done ? 'var(--text-2)' : p.current ? 'var(--accent)' : 'var(--text-3)',
+              color: p.current ? 'var(--accent)' : 'var(--text-2)',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>{p.name || `Phase ${p.idx + 1}`}</div>
-            <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.04em', marginTop: 1 }}>
-              {Math.round(p.share * 100)}%
-            </div>
           </div>
         ))}
       </div>
