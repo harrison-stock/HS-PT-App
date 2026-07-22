@@ -121,12 +121,35 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     if (real.length > 0) {
       const ids   = real.map(c => c.id);
       const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: sessions } = await supabase
-        .from('workout_sessions')
-        .select('client_id, started_at')
-        .in('client_id', ids)
-        .gte('started_at', since)
-        .order('started_at', { ascending: false });
+      const today28   = new Date().toISOString().slice(0, 10);
+      const since28   = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const [{ data: sessions }, { data: schedRows }] = await Promise.all([
+        supabase
+          .from('workout_sessions')
+          .select('client_id, started_at')
+          .in('client_id', ids)
+          .gte('started_at', since)
+          .order('started_at', { ascending: false }),
+        // 4-week adherence: completed vs scheduled workouts up to today.
+        supabase
+          .from('client_workouts')
+          .select('client_id, status, scheduled_date')
+          .in('client_id', ids)
+          .gte('scheduled_date', since28)
+          .lte('scheduled_date', today28)
+          .neq('status', 'skipped'),
+      ]);
+
+      const compBy = {};
+      (schedRows || []).forEach(w => {
+        const b = compBy[w.client_id] = compBy[w.client_id] || { done: 0, total: 0 };
+        b.total += 1;
+        if (w.status === 'completed') b.done += 1;
+      });
+      real.forEach(c => {
+        const b = compBy[c.id];
+        c.compliance = b && b.total > 0 ? Math.round((b.done / b.total) * 100) : null;
+      });
 
       const week7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const statsByClient = {};
@@ -728,6 +751,11 @@ function ArchivedClientRow({ c, onRestore, onRemove }) {
   );
 }
 
+// Adherence colour bands: green ≥80, amber 50–79, coral below.
+export function complianceColor(p) {
+  return p == null ? 'var(--text-3)' : p >= 80 ? 'var(--accent)' : p >= 50 ? 'var(--c-amber)' : 'var(--c-coral)';
+}
+
 function ClientRow({ c, onPick, onRemovePending }) {
   const [confirm, setConfirm] = React.useState(false);
   const statusColor = c.status === 'invited'         ? 'var(--c-amber)'
@@ -780,7 +808,17 @@ function ClientRow({ c, onPick, onRemovePending }) {
             border: `1px solid color-mix(in srgb, var(--c-coral) ${confirm ? 60 : 30}%, var(--line))`,
           }}>{confirm ? 'CONFIRM' : 'REMOVE'}</button>
         ) : (
-          <IconChevronRight size={16} style={{ color: 'var(--text-3)' }}/>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {c.compliance != null && (
+              <div style={{ textAlign: 'right' }}>
+                <div className="mono" style={{ fontSize: 13, fontWeight: 800, lineHeight: 1, color: complianceColor(c.compliance) }}>
+                  {c.compliance}%
+                </div>
+                <div className="mono" style={{ fontSize: 7, letterSpacing: '0.1em', color: 'var(--text-3)', marginTop: 3 }}>4-WK ADHERENCE</div>
+              </div>
+            )}
+            <IconChevronRight size={16} style={{ color: 'var(--text-3)' }}/>
+          </div>
         )}
       </div>
     </div>

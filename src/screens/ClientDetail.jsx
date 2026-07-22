@@ -131,6 +131,112 @@ function MetricMini({ label, value }) {
 }
 
 // Programme progress — how far the client is through their assigned programme.
+// ── ADHERENCE (behaviour over the last 8 weeks) ──────────────────
+// One bar per week: completed ÷ scheduled workouts. Header shows the 4-week
+// adherence % and how long since the client last trained.
+function AdherenceCard({ clientId }) {
+  const [weeks, setWeeks] = React.useState(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const base = new Date(todayStr + 'T00:00:00Z');
+      const dow = (base.getUTCDay() + 6) % 7; // Mon = 0
+      const monday = new Date(base.getTime() - dow * 86400000);
+      const start = new Date(monday.getTime() - 7 * 7 * 86400000); // 8 weeks incl. current
+      const { data } = await supabase.from('client_workouts')
+        .select('status, scheduled_date')
+        .eq('client_id', clientId)
+        .gte('scheduled_date', start.toISOString().slice(0, 10))
+        .lte('scheduled_date', todayStr)
+        .neq('status', 'skipped');
+      if (!alive) return;
+      const wk = Array.from({ length: 8 }, (_, i) => {
+        const s = new Date(start.getTime() + i * 7 * 86400000);
+        return { start: s, done: 0, total: 0 };
+      });
+      let lastDone = null;
+      (data || []).forEach(r => {
+        const idx = Math.floor((new Date(r.scheduled_date + 'T00:00:00Z') - start) / (7 * 86400000));
+        if (idx < 0 || idx > 7) return;
+        wk[idx].total += 1;
+        if (r.status === 'completed') {
+          wk[idx].done += 1;
+          if (!lastDone || r.scheduled_date > lastDone) lastDone = r.scheduled_date;
+        }
+      });
+      setWeeks({ wk, lastDone });
+    })();
+    return () => { alive = false; };
+  }, [clientId]);
+
+  if (weeks === null) return null;
+  const { wk, lastDone } = weeks;
+  if (wk.every(w => w.total === 0)) return null; // nothing ever scheduled — stay quiet
+
+  const recent = wk.slice(4);
+  const rDone = recent.reduce((n, w) => n + w.done, 0);
+  const rTot  = recent.reduce((n, w) => n + w.total, 0);
+  const pct = rTot > 0 ? Math.round((rDone / rTot) * 100) : null;
+  const col = (p) => p == null ? 'var(--text-3)' : p >= 80 ? 'var(--accent)' : p >= 50 ? 'var(--c-amber)' : 'var(--c-coral)';
+
+  const daysSince = lastDone ? Math.floor((Date.now() - new Date(lastDone + 'T00:00:00Z').getTime()) / 86400000) : null;
+  const lastLabel = daysSince == null ? 'NO SESSIONS YET'
+    : daysSince === 0 ? 'TRAINED TODAY'
+    : `LAST SESSION ${daysSince}D AGO`;
+  const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+        <div className="label">// ADHERENCE · 8 WEEKS</div>
+        {pct != null && (
+          <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: col(pct), flexShrink: 0 }}>
+            {pct}%<span style={{ fontSize: 7.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginLeft: 5 }}>4-WK</span>
+          </span>
+        )}
+      </div>
+      <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.08em', color: daysSince != null && daysSince >= 7 ? 'var(--c-coral)' : 'var(--text-3)', marginBottom: 12 }}>
+        {lastLabel}
+      </div>
+
+      {/* Weekly bars — height = that week's completed/scheduled ratio */}
+      <div style={{ display: 'flex', gap: 5, alignItems: 'stretch', height: 62 }}>
+        {wk.map((w, i) => {
+          const p = w.total > 0 ? Math.round((w.done / w.total) * 100) : null;
+          return (
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', background: 'var(--track)', borderRadius: 5, overflow: 'hidden', position: 'relative' }}>
+              {p != null && p > 0 && (
+                <div style={{
+                  height: `${Math.max(p, 8)}%`, borderRadius: 5,
+                  background: `linear-gradient(180deg, ${col(p)}, color-mix(in srgb, ${col(p)} 65%, transparent))`,
+                  boxShadow: `0 0 calc(6px * var(--glow)) color-mix(in srgb, ${col(p)} 40%, transparent)`,
+                  transition: 'height .6s cubic-bezier(.22,.61,.36,1)',
+                }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
+        {wk.map((w, i) => (
+          <div key={i} style={{ flex: 1, textAlign: 'center' }}>
+            <div className="mono" style={{ fontSize: 7.5, color: 'var(--text-3)', letterSpacing: '0.02em' }}>
+              {w.total > 0 ? `${w.done}/${w.total}` : '—'}
+            </div>
+            {(i === 0 || i === 7) && (
+              <div className="mono" style={{ fontSize: 6.5, color: 'var(--text-3)', letterSpacing: '0.04em', marginTop: 2 }}>
+                {w.start.getUTCDate()} {MONTHS[w.start.getUTCMonth()]}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ProgrammeProgressCard({ clientId, onTab }) {
   const [info, setInfo] = React.useState(undefined);
   React.useEffect(() => {
@@ -421,6 +527,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
 
       {/* Programme roadmap with phase milestones */}
       <ProgrammeProgressCard clientId={c.id} onTab={onTab} />
+      <AdherenceCard clientId={c.id} />
 
       {/* Profile */}
       <div className="card" style={{ padding: 14 }}>

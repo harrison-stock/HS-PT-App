@@ -307,6 +307,39 @@ body:has([data-role="trainer"]) {
   position: relative;
 }
 .bnav button.active { color: var(--accent-2); }
+/* Sidebar brand block — hidden in the mobile bottom-nav layout. */
+.bnav-brand { display: none; }
+
+/* ── Coach desktop: left sidebar nav ─────────────────────────────
+   On wide screens the trainer's bottom nav becomes a left rail, freeing
+   the full viewport height for content (client app stays phone-first). */
+@media (min-width: 980px) {
+  [data-role="trainer"] { flex-direction: row !important; }
+  [data-role="trainer"] > .bnav {
+    order: -1;
+    display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch;
+    width: 196px; flex-shrink: 0; gap: 4px; height: 100%; box-sizing: border-box;
+    padding: 20px 12px;
+    border-top: 0; border-right: 1px solid var(--line);
+    background: var(--bg-1);
+    backdrop-filter: none;
+  }
+  [data-role="trainer"] > .bnav .bnav-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 2px 8px 16px; margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  [data-role="trainer"] > .bnav button {
+    flex-direction: row; justify-content: flex-start; gap: 10px;
+    padding: 10px 12px; font-size: 10px; letter-spacing: 0.12em;
+    border-radius: 10px;
+    transition: background .15s ease, color .15s ease, transform .12s ease;
+  }
+  [data-role="trainer"] > .bnav button:hover { background: var(--bg-2); }
+  [data-role="trainer"] > .bnav button.active { background: var(--accent-soft); color: var(--accent); }
+  [data-role="trainer"] > .bnav button::after { display: none; }
+  [data-role="trainer"] > .bnav button > div { margin-bottom: 0 !important; }
+}
 /* Active-tab marker — an accent dot that pops in beneath the label. */
 .bnav button::after {
   content: '';
@@ -375,6 +408,28 @@ body:has([data-role="trainer"]) {
   55% { transform: scale(1.15); }
   100% { transform: scale(1); }
 }
+
+/* ── Sign-in splash (console-style boot) ─────────────────────────
+   Logo blooms in from a blur, the title tracks in from wide letter
+   spacing, then the whole overlay fades and unmounts. */
+@keyframes splashLogo {
+  0%   { opacity: 0; transform: scale(0.72); filter: blur(8px); }
+  55%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes splashText {
+  from { opacity: 0; letter-spacing: 0.55em; }
+  to   { opacity: 1; letter-spacing: 0.2em; }
+}
+@keyframes splashSub { from { opacity: 0; } to { opacity: 0.75; } }
+@keyframes splashOut { 0%, 82% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Pulsing hero CTA — a slow breathing glow for the day's main action. */
+@keyframes ctaPulse {
+  0%, 100% { box-shadow: 0 0 calc(16px * var(--glow)) var(--accent-glow); }
+  50% { box-shadow: 0 0 calc(34px * var(--glow)) var(--accent-glow), 0 0 calc(56px * var(--glow)) color-mix(in srgb, var(--accent-glow) 50%, transparent); }
+}
+.btn-pulse { animation: ctaPulse 2.4s ease-in-out infinite; }
 
 /* ── Subtle motion / polish ─────────────────────────────────────── */
 @keyframes screenIn   { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
