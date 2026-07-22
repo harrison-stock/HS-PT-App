@@ -957,10 +957,10 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
           marginBottom: 18,
         }}>+ ADD PHASE</button>
 
-        {/* Live roadmap preview — updates as phases/weeks change */}
+        {/* Live phase-split preview — updates as phases/weeks change */}
         {phases.length > 0 && (
           <div className="card" style={{ padding: 14, marginBottom: 18 }}>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: '0.12em', fontWeight: 600, marginBottom: 10 }}>// ROADMAP PREVIEW</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: '0.12em', fontWeight: 600, marginBottom: 10 }}>// PHASE SPLIT</div>
             <RoadmapTrack phases={phases.map((ph, i) => ({ id: ph.id || `p${i}`, name: ph.name || `Phase ${i + 1}`, idx: i, weeks: ph.weeks }))} startDate={null} />
           </div>
         )}

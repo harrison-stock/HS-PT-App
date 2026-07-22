@@ -603,7 +603,7 @@ function ProgrammeRoadmap({ userId, onOpen }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="label">// PROGRAMME ROADMAP</div>
+          <div className="label">// PROGRAMME PROGRESS</div>
           <div className="h-bold" style={{ fontSize: 16, marginTop: 4, color: "var(--heading-deep)", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name.toUpperCase()}</div>
         </div>
         <div className="mono" style={{ flexShrink: 0, fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 600 }}>
@@ -611,7 +611,7 @@ function ProgrammeRoadmap({ userId, onOpen }) {
         </div>
       </div>
 
-      {/* Phase track (weeks-based; hexes at each phase's end) */}
+      {/* Weeks-based phase progress bar */}
       <div style={{ marginBottom: 12 }}>
         <RoadmapTrack phases={phases} startDate={startDate} />
       </div>

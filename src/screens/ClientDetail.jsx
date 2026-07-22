@@ -185,7 +185,7 @@ function ProgrammeProgressCard({ clientId, onTab }) {
       <div className="card tappable" style={{ padding: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="label">// PROGRAMME ROADMAP</div>
+            <div className="label">// PROGRAMME PROGRESS</div>
             <div className="h-bold" style={{ fontSize: 15, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{info.name}</div>
           </div>
           <div className="mono" style={{ flexShrink: 0, fontSize: 11, color: 'var(--accent)', letterSpacing: '0.08em', fontWeight: 600 }}>
@@ -193,7 +193,7 @@ function ProgrammeProgressCard({ clientId, onTab }) {
           </div>
         </div>
 
-        {/* Phase milestone track (weeks-based; hexes at each phase's end) */}
+        {/* Weeks-based phase progress bar */}
         {info.phases.length > 0 && (
           <RoadmapTrack phases={info.phases} startDate={info.startDate} />
         )}
