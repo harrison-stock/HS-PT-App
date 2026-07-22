@@ -389,39 +389,29 @@ function WeekStrip({ userId, go }) {
 }
 
 // ── TRAINING STRIP (at-a-glance) ─────────────────────────────────
-// Three stats: 4-week compliance, sessions in the last 30 days, and total
-// volume lifted (kg) over the same window.
+// Two stats: sessions in the last 30 days, and total volume lifted (kg) over
+// the same window. Compliance % is coach-only (shown on the roster + the
+// client's adherence chart in the coach app) - deliberately not surfaced here.
 function TrainingStrip({ userId, onOpen }) {
   const [s, setS] = React.useState(null);
   React.useEffect(() => {
-    if (!userId) { setS({ compliance: null, w30: 0, kg: 0 }); return; }
+    if (!userId) { setS({ w30: 0, kg: 0 }); return; }
     let alive = true;
     (async () => {
-      const d30    = new Date(Date.now() - 30 * 86400000).toISOString();
-      const today  = new Date().toISOString().slice(0, 10);
-      const since28 = new Date(Date.now() - 28 * 86400000).toISOString().slice(0, 10);
-      const [{ data: sess }, { data: sched }] = await Promise.all([
-        supabase.from('workout_sessions')
-          .select('completed_at, logged_sets(actual_reps, actual_weight_kg)')
-          .eq('client_id', userId).not('completed_at', 'is', null).gte('completed_at', d30),
-        supabase.from('client_workouts')
-          .select('status, scheduled_date')
-          .eq('client_id', userId).gte('scheduled_date', since28).lte('scheduled_date', today).neq('status', 'skipped'),
-      ]);
+      const d30 = new Date(Date.now() - 30 * 86400000).toISOString();
+      const { data: sess } = await supabase.from('workout_sessions')
+        .select('completed_at, logged_sets(actual_reps, actual_weight_kg)')
+        .eq('client_id', userId).not('completed_at', 'is', null).gte('completed_at', d30);
       if (!alive) return;
       const rows = sess || [];
       const kg = rows.reduce((tot, r) => tot + (r.logged_sets || []).reduce((n, ls) =>
         n + (Number(ls.actual_weight_kg) || 0) * (Number(ls.actual_reps) || 0), 0), 0);
-      const total = (sched || []).length;
-      const done  = (sched || []).filter(r => r.status === 'completed').length;
-      setS({ w30: rows.length, kg: Math.round(kg), compliance: total > 0 ? Math.round((done / total) * 100) : null });
+      setS({ w30: rows.length, kg: Math.round(kg) });
     })();
     return () => { alive = false; };
   }, [userId]);
 
   const fmtKg = (v) => v >= 1000 ? v.toLocaleString('en-GB') : String(v);
-  const compColor = s?.compliance == null ? 'var(--text-3)'
-    : s.compliance >= 80 ? 'var(--accent)' : s.compliance >= 50 ? 'var(--c-amber)' : 'var(--c-coral)';
 
   const Cell = ({ label, value, sub, color }) => (
     <div style={{ flex: 1, minWidth: 0, textAlign: 'center', padding: '12px 6px' }}>
@@ -434,8 +424,6 @@ function TrainingStrip({ userId, onOpen }) {
   return (
     <button onClick={onOpen} style={{ all: 'unset', cursor: onOpen ? 'pointer' : 'default', display: 'block' }}>
       <div className={onOpen ? 'card tappable' : 'card'} style={{ padding: 0, display: 'flex', alignItems: 'center' }}>
-        <Cell label="COMPLIANCE" value={s?.compliance != null ? `${s.compliance}%` : '-'} sub="4 WEEKS" color={compColor} />
-        <Div />
         <Cell label="LAST 30 DAYS" value={s?.w30} sub="SESSIONS" />
         <Div />
         <Cell label="TOTAL KG" value={s ? fmtKg(s.kg) : '-'} sub="LIFTED · 30D" color="var(--c-amber)" />
