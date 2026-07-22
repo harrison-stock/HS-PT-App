@@ -34,25 +34,6 @@ function fmtClock(d) {
 
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-// One line a day, rotating through the year — quiet encouragement, no hype.
-const DAILY_LINES = [
-  'Consistency beats intensity.',
-  'Show up. The rest follows.',
-  'Small sessions still count.',
-  'Strong is built, not found.',
-  'Progress hides in the boring weeks.',
-  'You never regret the workout you did.',
-  'Slow progress is still progress.',
-  'Train for the person you’re becoming.',
-  'Discipline is remembering what you want.',
-  'One more good day. Stack them up.',
-  'The best programme is the one you follow.',
-  'Rest is training too — take it seriously.',
-  'Effort today, evidence tomorrow.',
-  'Nobody’s watching. Do it anyway.',
-];
-const dayOfYear = (d) => Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
-
 function shapeWorkout(row) {
   const day = row.programme_days;
   if (!day) return null;
@@ -213,9 +194,6 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       <div>
         <div className="h-bold" style={{ fontSize: 28, lineHeight: 1.1, color: "var(--heading-deep)" }}>
           {greeting(now.getHours())},<br /><span style={{ color: 'var(--accent)' }} className="text-glow">{firstName.toUpperCase()}.</span>
-        </div>
-        <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.05em', marginTop: 8, lineHeight: 1.5 }}>
-          {DAILY_LINES[dayOfYear(now) % DAILY_LINES.length]}
         </div>
       </div>
 
