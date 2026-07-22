@@ -128,7 +128,7 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
           <div className="card" style={{ padding: 22, textAlign: 'center', display: 'grid', gap: 14 }}>
             <div className="mono" style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.7 }}>
               Upload a CSV of past workouts (e.g. an Everfit history export).<br/>
-              <span style={{ color: 'var(--text-3)', fontSize: 10 }}>One row per logged set works best — a Date and Exercise column are required.</span>
+              <span style={{ color: 'var(--text-3)', fontSize: 10 }}>One row per logged set works best - a Date and Exercise column are required.</span>
             </div>
             <button onClick={() => fileRef.current?.click()} className="btn-primary" style={{ width: '100%' }}>CHOOSE CSV FILE</button>
             <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: 'none' }} />
@@ -147,7 +147,7 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
                 <div key={fl.key} style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10, alignItems: 'center' }}>
                   <div style={{ fontSize: 12 }}>{fl.label}{fl.required && <span style={{ color: 'var(--c-coral)' }}> *</span>}</div>
                   <select value={map[fl.key] || ''} onChange={e => setMap(m => ({ ...m, [fl.key]: e.target.value }))} style={selSt}>
-                    <option value="">— none —</option>
+                    <option value="">- none -</option>
                     {parsed.headers.map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
                 </div>
@@ -171,7 +171,7 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
               <div className="label">// PREVIEW · {entries.length} VALID ROWS</div>
               {entries.length === 0 ? (
                 <div className="card" style={{ padding: 14, textAlign: 'center' }}>
-                  <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>No rows have both a readable date and an exercise — check the Date/Exercise mapping.</div>
+                  <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>No rows have both a readable date and an exercise - check the Date/Exercise mapping.</div>
                 </div>
               ) : (
                 <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -182,9 +182,9 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
                     <div key={i} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 44px 52px 36px', gap: 6, padding: '7px 12px', borderTop: i ? '1px solid var(--line)' : 'none', fontSize: 11 }}>
                       <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>{e.date.slice(5)}</span>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.exercise}</span>
-                      <span className="mono">{e.reps ?? '—'}</span>
-                      <span className="mono">{e.weight ?? '—'}</span>
-                      <span className="mono">{e.rpe ?? '—'}</span>
+                      <span className="mono">{e.reps ?? '-'}</span>
+                      <span className="mono">{e.weight ?? '-'}</span>
+                      <span className="mono">{e.rpe ?? '-'}</span>
                     </div>
                   ))}
                   {entries.length > 6 && <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', padding: '8px 12px', borderTop: '1px solid var(--line)' }}>+{entries.length - 6} more…</div>}

@@ -71,7 +71,7 @@ async function loadWeightData(userId) {
   for (const ex of exMap.values()) {
     const sessArr = [...ex.sessMap.values()].sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt));
     const allSets = sessArr.flatMap(sg => sg.sets);
-    // A timed/cardio exercise has clocked work and no load — chart time, not kg.
+    // A timed/cardio exercise has clocked work and no load - chart time, not kg.
     const timed = allSets.some(s => s.t > 0) && !allSets.some(s => s.w > 0);
     const history = sessArr.map(sg => {
       const maxW = sg.sets.reduce((m, s) => Math.max(m, s.w), 0);
@@ -81,7 +81,7 @@ async function loadWeightData(userId) {
         ? sg.sets.map(s => fmtDuration(s.t)).join(', ')
         : sg.sets.map(s => `${s.w || 'BW'}${s.w ? 'kg' : ''}×${s.r}`).join(', ');
       return { d: sg.d, date: sg.completedAt, w: maxW, r: atMax?.r || 0, t: maxT, sets: sg.sets,
-        label: `${ex.name} — ${sg.sets.length} set${sg.sets.length === 1 ? '' : 's'} · ${setSummary}` };
+        label: `${ex.name} - ${sg.sets.length} set${sg.sets.length === 1 ? '' : 's'} · ${setSummary}` };
     });
     const best = history.reduce((b, h) => h.w > b.w ? h : b, history[0] || { w: 0, r: 0 });
     const prevBest = history.length > 1 ? history.slice(0, -1).reduce((b, h) => h.w > b.w ? h : b, history[0]) : null;
@@ -107,7 +107,7 @@ async function loadWeightData(userId) {
   return { cats, exs };
 }
 
-// Progress — Body metrics + Weight metrics tabs. `embedded` lets the coach
+// Progress - Body metrics + Weight metrics tabs. `embedded` lets the coach
 // render a client's exact Metrics view inside the client file.
 export function Progress({ go, userId, embedded }) {
   const [tab, setTab] = React.useState('body');
@@ -159,7 +159,7 @@ function HealthActivityCard({ userId }) {
     <div style={{ flex: 1, textAlign: 'center' }}>
       <div className="label" style={{ fontSize: 7.5, marginBottom: 4 }}>{label}</div>
       <div className="h-bold" style={{ fontSize: 20, color: 'var(--accent)', lineHeight: 1 }}>
-        {value == null ? '—' : value.toLocaleString()}{unit && value != null && <span style={{ fontSize: 9, color: 'var(--text-3)', marginLeft: 1 }}>{unit}</span>}
+        {value == null ? '-' : value.toLocaleString()}{unit && value != null && <span style={{ fontSize: 9, color: 'var(--text-3)', marginLeft: 1 }}>{unit}</span>}
       </div>
       {sub && <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
     </div>
@@ -247,7 +247,7 @@ function PhotosTab({ userId }) {
       setShots({ front: null, side: null, back: null });
       toast(taken === 1 ? 'Photo uploaded' : 'Photos uploaded');
     } else {
-      toast(`Couldn't save ${failed} photo${failed === 1 ? '' : 's'} — please try again`, { kind: 'error' });
+      toast(`Couldn't save ${failed} photo${failed === 1 ? '' : 's'} - please try again`, { kind: 'error' });
     }
     reload();
   };
@@ -313,7 +313,7 @@ function PhotosTab({ userId }) {
       {history === null && <SkeletonCard rows={2} />}
       {history?.length === 0 && (
         <EmptyState icon="Camera" title="No photos yet"
-          sub="Submit your first set above — future you will thank you for the before shot." />
+          sub="Submit your first set above - future you will thank you for the before shot." />
       )}
       <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
         {(history || []).map((h) =>
@@ -401,7 +401,7 @@ function buildCustomMetrics(defs) {
   for (const def of defs) {
     const key = 'c:' + def.id;
     const series = def.entries;
-    if (!series.length) { out[key] = { key, label: def.name, unit: def.unit, value: '—', delta: 0, deltaPct: 0, series: [], history: [], custom: true, metricId: def.id }; continue; }
+    if (!series.length) { out[key] = { key, label: def.name, unit: def.unit, value: '-', delta: 0, deltaPct: 0, series: [], history: [], custom: true, metricId: def.id }; continue; }
     const value = series[series.length - 1].v;
     const prior = [...series].reverse().find((p) => p.date <= cutoff) || series[0];
     const delta = +(value - prior.v).toFixed(1);
@@ -455,7 +455,7 @@ function BodyTab({ userId }) {
       {logging && <LogMeasurementSheet userId={userId} metrics={m} customDefs={customDefs} onClose={() => setLogging(false)} onSaved={reload} />}
       {addingCustom && <AddCustomMetricSheet userId={userId} onClose={() => setAddingCustom(false)} onSaved={reload} />}
       <EmptyState icon="Weight Scales" title="No measurements yet"
-        sub="Log your first weigh-in to start the trend line — one number is all it takes."
+        sub="Log your first weigh-in to start the trend line - one number is all it takes."
         style={{ marginBottom: 14 }} />
       <button onClick={() => setLogging(true)} className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         <IconPlus size={14} /> LOG MEASUREMENT
@@ -594,7 +594,7 @@ function BodyMetricDetail({ met, onBack, onLog }) {
                 <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{r.v}{met.unit}</span>
                 <span className="mono" style={{ fontSize: 10, fontWeight: 600, minWidth: 42, textAlign: 'right',
                   color: diff === 0 ? 'var(--text-3)' : diff > 0 ? 'var(--c-amber)' : 'var(--accent)' }}>
-                  {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${diff}`}
+                  {diff === 0 ? '-' : `${diff > 0 ? '+' : ''}${diff}`}
                 </span>
               </div>);
           })}
@@ -671,7 +671,7 @@ function LogMeasurementSheet({ userId, metrics, customDefs = [], onClose, onSave
           <div className="label">// LOG MEASUREMENT</div>
           <div className="h-bold" style={{ fontSize: 20, marginTop: 4, marginBottom: 4 }}>TODAY · {todayLabel}</div>
           <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.05em', marginBottom: 16, lineHeight: 1.5 }}>
-            Enter what you measured — leave the rest blank.
+            Enter what you measured - leave the rest blank.
           </div>
 
           <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
@@ -689,7 +689,7 @@ function LogMeasurementSheet({ userId, metrics, customDefs = [], onClose, onSave
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                 <input value={vals[f.key]} inputMode="decimal"
                   onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value.replace(/[^\d.]/g, '') }))}
-                  placeholder={metrics?.[f.key] ? String(metrics[f.key].value) : '—'}
+                  placeholder={metrics?.[f.key] ? String(metrics[f.key].value) : '-'}
                   style={{
                     width: 70, textAlign: 'right', background: 'var(--bg-1)', border: '1px solid var(--line-strong)',
                     borderRadius: 8, padding: '8px 10px', color: 'var(--accent)',
@@ -736,7 +736,7 @@ function AddCustomMetricSheet({ userId, onClose, onSaved }) {
         <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 14px' }} />
         <div className="label">// NEW CUSTOM METRIC</div>
         <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.05em', margin: '6px 0 16px', lineHeight: 1.5 }}>
-          Track anything not covered by the defaults — resting HR, sleep hours, grip strength, VO₂ max…
+          Track anything not covered by the defaults - resting HR, sleep hours, grip strength, VO₂ max…
         </div>
         <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
           <div>
@@ -1006,7 +1006,7 @@ function WeightTab({ range, userId }) {
 
   if (dbLoading) return <SkeletonCard rows={3} />;
 
-  // Muscle map lives in its own BODY tab now — Metrics shows categories only.
+  // Muscle map lives in its own BODY tab now - Metrics shows categories only.
   return (
     <>
       <CategoriesView onPick={setCatId} onPickEx={setExId} cats={cats} exs={exs} />
@@ -1200,7 +1200,7 @@ function CategoriesView({ onPick, onPickEx, cats, exs }) {
 
 }
 
-// Compact exercise card — PR stats + a mini trend. Reused in the muscle-group
+// Compact exercise card - PR stats + a mini trend. Reused in the muscle-group
 // drill-down (2-up) and in search results.
 function ExerciseSummaryCard({ e, onClick }) {
   const zc = ZONE_COLOR_ALL[e.category] || 'var(--accent)';
@@ -1227,8 +1227,8 @@ function ExerciseSummaryCard({ e, onClick }) {
             </>
           ) : (
             <>
-              <PRStat label="MAX WEIGHT" value={e.maxWeight.value === 0 ? '—' : `${e.maxWeight.value}${e.maxWeight.unit}`} sub={`× ${e.maxWeight.reps} reps`} delta={e.maxWeight.delta} accent={zc} />
-              <PRStat label="MAX REPS" value={e.maxReps.value || '—'} sub={`@ ${e.maxReps.weight}kg`} delta={null} accent={zc} />
+              <PRStat label="MAX WEIGHT" value={e.maxWeight.value === 0 ? '-' : `${e.maxWeight.value}${e.maxWeight.unit}`} sub={`× ${e.maxWeight.reps} reps`} delta={e.maxWeight.delta} accent={zc} />
+              <PRStat label="MAX REPS" value={e.maxReps.value || '-'} sub={`@ ${e.maxReps.weight}kg`} delta={null} accent={zc} />
             </>
           )}
         </div>
@@ -1323,7 +1323,7 @@ function MuscleMapView({ range, userId }) {
 
   if (Object.keys(data).length === 0) return (
     <EmptyState icon="Flexed Bicep" title={`No training data in the last ${range}`}
-      sub="Complete sessions to light up the heatmap — every logged set colours in a muscle." />
+      sub="Complete sessions to light up the heatmap - every logged set colours in a muscle." />
   );
 
   // Compute intensity (0..1) per muscle from set count
@@ -1426,7 +1426,7 @@ function MuscleMapView({ range, userId }) {
           <span className="label" style={{ color: 'var(--warn)' }}>UNDERTRAINED</span>
         </div>
         <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
-          <strong style={{ color: 'var(--text)' }}>{labels[bottom[0]]}</strong> only {bottom[1].sets} sets in the last {range} — consider adding accessory work.
+          <strong style={{ color: 'var(--text)' }}>{labels[bottom[0]]}</strong> only {bottom[1].sets} sets in the last {range} - consider adding accessory work.
         </div>
       </div>
     </>);
@@ -1514,7 +1514,7 @@ export function BodyMap({ side, intensity, picked, onPick, data, labels, heatCol
       {/* Subtle backdrop glow */}
       <rect x={vb[0]} y={vb[1]} width={vb[2]} height={vb[3]} fill="url(#bm-glow)" />
 
-      {/* Anatomical regions — neutral structure first, heat muscles on top */}
+      {/* Anatomical regions - neutral structure first, heat muscles on top */}
       {(MUSCLE_BODY.order[side] || Object.keys(body.parts)).map((slug) => {
         const paths = body.parts[slug];
         if (!paths) return null;
@@ -1547,7 +1547,7 @@ export function BodyMap({ side, intensity, picked, onPick, data, labels, heatCol
           });
         }
 
-        // Grouped (whole-muscle) behaviour — also used for central regions in
+        // Grouped (whole-muscle) behaviour - also used for central regions in
         // per-side mode (selected as a single "both" section).
         const central = perSide && CENTRAL_GROUPS.has(group);
         const anat = central ? 'both' : null;
@@ -1645,7 +1645,7 @@ export function Segmented({ options, value, onChange, color = 'var(--accent)', w
   );
 }
 
-// Decorative outline strokes — drawn under heat regions for definition
+// Decorative outline strokes - drawn under heat regions for definition
 function FrontSilhouette() {
   return (
     <>
@@ -1698,7 +1698,7 @@ function ExerciseDrill({ ex, onBack }) {
           }}>
             <div className="label" style={{ color: zc, marginBottom: 4 }}>MAX WEIGHT</div>
             <div className="h-bold" style={{ fontSize: 22, color: zc }}>
-              {ex.maxWeight.value === 0 ? '—' : ex.maxWeight.value}<span style={{ fontSize: 12, color: 'var(--text-2)', marginLeft: 4 }}>{ex.maxWeight.value === 0 ? '' : ex.maxWeight.unit}</span>
+              {ex.maxWeight.value === 0 ? '-' : ex.maxWeight.value}<span style={{ fontSize: 12, color: 'var(--text-2)', marginLeft: 4 }}>{ex.maxWeight.value === 0 ? '' : ex.maxWeight.unit}</span>
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>× {ex.maxWeight.reps} REPS</div>
           </button>
@@ -1711,7 +1711,7 @@ function ExerciseDrill({ ex, onBack }) {
           }}>
             <div className="label" style={{ color: zc, marginBottom: 4 }}>MAX REPS</div>
             <div className="h-bold" style={{ fontSize: 22, color: zc }}>
-              {ex.maxReps.value || '—'}
+              {ex.maxReps.value || '-'}
             </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>@ {ex.maxReps.weight}KG</div>
           </button>
@@ -1777,7 +1777,7 @@ function expandSets(h) {
   const r = h.r;
   const round = (x) => Math.round(x / 2.5) * 2.5;
   if (!h.w || h.w <= 0) {
-    // Bodyweight — show working sets only
+    // Bodyweight - show working sets only
     return [
     { w: 0, r: r + 1 },
     { w: 0, r },
@@ -1860,7 +1860,7 @@ function BigChart({ data, view, zoneColor }) {
         onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)}
         onClick={() => setActive(active === i ? null : i)} />
       )}
-      {/* X labels + ticks — in weeks */}
+      {/* X labels + ticks - in weeks */}
       {data.map((d, i) => {
         if (!(i === 0 || i === data.length - 1 || i === Math.floor(data.length / 2))) return null;
         const wkLabel = i === data.length - 1 ? 'NOW' : `WK ${i + 1}`;

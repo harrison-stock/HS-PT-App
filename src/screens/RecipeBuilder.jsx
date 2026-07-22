@@ -31,17 +31,17 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
   const uploadImg = async (files) => {
     const file = files[0];
     if (!file) return;
-    // Camera RAW / unsupported formats won't display in a browser — steer the
+    // Camera RAW / unsupported formats won't display in a browser - steer the
     // coach to a web format rather than uploading something that renders broken.
     if (/\.(arw|cr2|cr3|nef|dng|raf|orf|rw2|tiff?)$/i.test(file.name || '')) {
-      toast('That’s a camera RAW file — please use a JPG or PNG', { kind: 'error' });
+      toast('That’s a camera RAW file - please use a JPG or PNG', { kind: 'error' });
       return;
     }
     setImgBusy(true);
     const { url, error } = await uploadGuideImage(trainerId, file);
     setImgBusy(false);
     if (url) { set({ img: url }); toast('Photo uploaded'); }
-    else { console.error('recipe image upload', error); toast(`Upload failed${error?.message ? ` — ${error.message}` : ''}`, { kind: 'error' }); }
+    else { console.error('recipe image upload', error); toast(`Upload failed${error?.message ? ` - ${error.message}` : ''}`, { kind: 'error' }); }
   };
   // Macros can be entered PER SERVING or for the WHOLE BATCH (divided down by
   // servings). Stored value is always per serving.
@@ -156,7 +156,7 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
           </FieldLabel>
         </Section>
 
-        {/* Macros — entered per serving or for the whole batch */}
+        {/* Macros - entered per serving or for the whole batch */}
         <Section label="// MACROS">
           <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
             {[['serving', 'PER SERVING'], ['batch', 'WHOLE BATCH']].map(([v, lbl]) => (
@@ -171,7 +171,7 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
           </div>
           <Mono style={{ marginBottom: 2 }}>
             {macroBasis === 'batch'
-              ? `Enter totals for the whole batch — we divide by ${servings} serving${servings > 1 ? 's' : ''}.`
+              ? `Enter totals for the whole batch - we divide by ${servings} serving${servings > 1 ? 's' : ''}.`
               : 'Enter the macros for a single serving.'}
           </Mono>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
@@ -218,10 +218,10 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
           <Mono style={{ marginTop: 4 }}>Leave qty blank for "to taste" items (e.g. salt &amp; pepper).</Mono>
         </Section>
 
-        {/* Intro — a personal note shown before the method */}
+        {/* Intro - a personal note shown before the method */}
         <Section label="// INTRO (OPTIONAL)">
           <textarea value={d.intro} onChange={e => set({ intro: e.target.value })} rows={3}
-            placeholder="A personal intro — why you love this one, when to eat it, a swap tip…"
+            placeholder="A personal intro - why you love this one, when to eat it, a swap tip…"
             style={{ ...fieldSt, resize: 'vertical', lineHeight: 1.6 }}/>
         </Section>
 
@@ -260,7 +260,7 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
                 }}>
                   <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
                     {ing.qty === '' || ing.qty == null
-                      ? '—'
+                      ? '-'
                       : `${fmtQty(scaleQty(parseFloat(ing.qty), factor))}${ing.unit}`}
                   </span>
                   <span style={{ fontSize: 12, color: 'var(--text)' }}>{ing.name}</span>
@@ -284,7 +284,7 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
             border: `1px solid color-mix(in srgb, var(--c-coral) ${confirmDel ? 60 : 35}%, var(--line))`,
             color: confirmDel ? 'var(--c-coral)' : 'var(--text-3)',
             fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
-          }}>{confirmDel ? 'CONFIRM DELETE — TAP AGAIN' : 'DELETE RECIPE'}</button>
+          }}>{confirmDel ? 'CONFIRM DELETE - TAP AGAIN' : 'DELETE RECIPE'}</button>
         )}
       </div>
     </div>

@@ -22,18 +22,18 @@ function fmtDate(dt) {
 }
 
 function deriveTarget(sets, unilateral) {
-  if (!sets || sets.length === 0) return '—';
+  if (!sets || sets.length === 0) return '-';
   const sorted = [...sets].sort((a, b) => a.set_index - b.set_index);
   const reps = sorted[0]?.reps;
-  return `${sorted.length} × ${reps || '—'}${unilateral ? ' ea' : ''}`;
+  return `${sorted.length} × ${reps || '-'}${unilateral ? ' ea' : ''}`;
 }
 
 function deriveLoad(sets, banded) {
-  if (!sets || sets.length === 0) return '—';
+  if (!sets || sets.length === 0) return '-';
   const sorted = [...sets].sort((a, b) => a.set_index - b.set_index);
   if (banded) { const b = bandOf(sorted[0]?.band); return b ? `${b.short} BAND` : 'BAND'; }
   const kg = sorted[0]?.weight_kg;
-  if (!kg || parseFloat(kg) === 0) return '—';
+  if (!kg || parseFloat(kg) === 0) return '-';
   return `${parseFloat(kg)}kg`;
 }
 
@@ -328,7 +328,7 @@ export function Workouts({ go, openPreview, userId }) {
 
       {!loading && workouts.length === 0 && (
         <EmptyState icon="Rocket" title="No workouts assigned yet"
-          sub="Your coach is building your plan — sessions will land here the moment they’re assigned."
+          sub="Your coach is building your plan - sessions will land here the moment they’re assigned."
           style={{ marginTop: 12 }} />
       )}
 
@@ -715,7 +715,7 @@ function ExerciseRow({ e, large, color, ssLabel }) {
           <div style={{ fontSize: large ? 15 : 13.5, fontWeight: 600, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
         </div>
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', letterSpacing: '0.04em', marginTop: 3 }}>
-          {e.load && e.load !== '—' ? `${e.load} · ` : ''}{e.target}
+          {e.load && e.load !== '-' ? `${e.load} · ` : ''}{e.target}
         </div>
       </div>
       <IconChevronRight size={14} style={{ color: 'var(--text-3)' }}/>

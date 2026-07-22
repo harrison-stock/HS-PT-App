@@ -2,7 +2,7 @@ import React from 'react'
 import { HexShape } from './hex'
 import { BrandIcon } from './BrandIcon'
 
-// The brand hex loader — a hexagon "track" with an accent arc that chases
+// The brand hex loader - a hexagon "track" with an accent arc that chases
 // around its perimeter (ported from the HS PT Menu Scanner boot screen).
 const HEX_PATH = 'M194.489,30.721c-3.782,0 -7.574,0.799 -10.995,2.417l-141.142,66.762c-6.877,3.253 -11.356,9.426 -11.356,16.346l0,133.524c0,6.921 4.479,13.093 11.356,16.346l141.142,66.762c6.776,3.205 15.227,3.205 22.002,0l141.136,-66.762c6.876,-3.253 11.362,-9.424 11.362,-16.346l0,-133.524c0,-6.922 -4.486,-13.093 -11.362,-16.346l-141.136,-66.762c-3.418,-1.617 -7.23,-2.417 -11.007,-2.417Z';
 
@@ -27,7 +27,7 @@ export function HexLoader({ size = 120, label, sub, gap = 22 }) {
   );
 }
 
-// Small inline spinner — an accent ring that rotates. Sizeable anywhere.
+// Small inline spinner - an accent ring that rotates. Sizeable anywhere.
 export function Spinner({ size = 22, stroke = 3, color = 'var(--accent)' }) {
   return (
     <span style={{
@@ -40,7 +40,7 @@ export function Spinner({ size = 22, stroke = 3, color = 'var(--accent)' }) {
   );
 }
 
-// Three pulsing hexes — the brand-flavoured "working…" motif.
+// Three pulsing hexes - the brand-flavoured "working…" motif.
 function HexPulse() {
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -58,7 +58,7 @@ export function Skel({ w = '100%', h = 12, r = 8, style }) {
   return <span className="skel" style={{ display: 'block', width: w, height: h, borderRadius: r, ...style }} />;
 }
 
-// Card-shaped skeleton — mimics a media-row card (thumb + two text lines).
+// Card-shaped skeleton - mimics a media-row card (thumb + two text lines).
 // Use in place of "LOADING…" text tiles so lists feel alive while fetching.
 //   <SkeletonCard />            one row card
 //   <SkeletonCard rows={3} />   a stack of three
@@ -77,7 +77,7 @@ export function SkeletonCard({ rows = 1, variant = 'row', style }) {
   return <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>{Array.from({ length: rows }, (_, i) => one(i))}</div>;
 }
 
-// Empty-state card — an icon, a headline, optional supporting line and CTA.
+// Empty-state card - an icon, a headline, optional supporting line and CTA.
 // Keeps every "nothing here yet" moment on-brand and actionable.
 export function EmptyState({ icon = 'Target', title, sub, actionLabel, onAction, style }) {
   return (
@@ -96,7 +96,7 @@ export function EmptyState({ icon = 'Target', title, sub, actionLabel, onAction,
   );
 }
 
-// Centered loading tile on a dimmed backdrop — use for any processing that
+// Centered loading tile on a dimmed backdrop - use for any processing that
 // runs longer than a beat (saving a session, generating a PDF, uploading…).
 // Render conditionally: {busy && <LoadingTile label="Saving…" />}
 export function LoadingTile({ label = 'Working…', sub, variant = 'hex', blocking = true }) {

@@ -14,7 +14,7 @@ function ago(iso) {
   return d < 7 ? `${d}d` : `${Math.floor(d / 7)}w`;
 }
 
-// Notifications — backed by the notifications table (workouts, tasks, forms,
+// Notifications - backed by the notifications table (workouts, tasks, forms,
 // comments, injuries). Tapping a row marks it read and jumps to the target.
 export function Notifications({ go, userId, home = 'dashboard' }) {
   const [items, setItems] = React.useState(null);
@@ -44,7 +44,7 @@ export function Notifications({ go, userId, home = 'dashboard' }) {
       {items === null && <SkeletonCard rows={3} />}
       {items !== null && items.length === 0 && (
         <EmptyState icon="Trophy" title="All caught up"
-          sub="Nothing new right now — activity lands here as it happens." />
+          sub="Nothing new right now - activity lands here as it happens." />
       )}
 
       {today.length > 0 && <>

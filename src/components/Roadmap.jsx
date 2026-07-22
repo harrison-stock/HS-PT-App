@@ -41,7 +41,7 @@ export function RoadmapTrack({ phases, startDate }) {
 
   return (
     <div style={{ margin: '2px 0 0' }}>
-      {/* Segmented bar — flex weights = each phase's weeks. Completed phases
+      {/* Segmented bar - flex weights = each phase's weeks. Completed phases
           fade back so the active phase stands out. */}
       <div style={{ display: 'flex', gap: 3, height: 12 }}>
         {nodes.map((p) => (
@@ -61,7 +61,7 @@ export function RoadmapTrack({ phases, startDate }) {
         ))}
       </div>
 
-      {/* Per-chunk labels — phase name only; completed phases fade back. */}
+      {/* Per-chunk labels - phase name only; completed phases fade back. */}
       <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
         {nodes.map((p) => (
           <div key={p.id} style={{ flex: `${p.weeks} 1 0`, minWidth: 0, textAlign: 'center', opacity: p.done ? 0.45 : 1 }}>

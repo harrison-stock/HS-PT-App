@@ -11,14 +11,14 @@ import { BRAND_ICONS } from '../data/brandIcons'
 import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
-// Stable, well-spread colour per client — hashing the whole id (not just the
+// Stable, well-spread colour per client - hashing the whole id (not just the
 // first letter, which clustered same-initial names onto one colour).
 const hashStr = (s) => { let h = 0; for (let i = 0; i < (s || '').length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0; return h; };
 const accentFor = (key) => CLIENT_ACCENTS[hashStr(key) % CLIENT_ACCENTS.length];
 
 // Assign avatar colours across a roster so no two *visible* clients share one
 // (a per-id hash alone still collides). Each client starts at its stable hash
-// colour, then bumps to the next free slot if taken — so up to 7 clients are
+// colour, then bumps to the next free slot if taken - so up to 7 clients are
 // always distinct, and colours stay stable as long as the roster is unchanged.
 function assignAccents(list) {
   const used = new Set();
@@ -194,7 +194,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     setLoadingClients(false);
   };
 
-  // Remove a pending (managed, never-signed-up) client outright — no archive
+  // Remove a pending (managed, never-signed-up) client outright - no archive
   // step needed since there's no real account behind it. Clears its invite too.
   const removePendingClient = async (c) => {
     setClients(prev => prev.filter(x => x.id !== c.id));
@@ -242,7 +242,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
   };
 
   // Ad-hoc workout = a one-off single-session "programme" (one phase, one
-  // week, one day). Skips the roadmap — straight into the day builder.
+  // week, one day). Skips the roadmap - straight into the day builder.
   const newAdhoc = () => {
     setBuilderOpenRoadmap(false);
     setBuilderProgramme({
@@ -329,7 +329,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     return <ProgrammeBuilder programme={builderProgramme} onClose={closeBuilder} openRoadmap={builderOpenRoadmap} trainerId={trainerId}/>;
   }
 
-  // Dedicated Programmes hub (its own bottom-nav tab) — programmes, ad-hoc
+  // Dedicated Programmes hub (its own bottom-nav tab) - programmes, ad-hoc
   // workouts and reusable task templates.
   if (only === 'programmes') {
     const q = hubQuery.trim().toLowerCase();
@@ -502,7 +502,7 @@ function shapeClient(p) {
     timezone: p.timezone || 'Europe/London',
     status: 'active',
     phaseLabel: 'No programme assigned',
-    lastSeen: '—',
+    lastSeen: '-',
     streak: 0,
     prsThisWeek: 0,
     sessionsThisWeek: 0,
@@ -523,13 +523,13 @@ function shapeManagedClient(mc) {
     managed: true,
     status: 'managed',
     phaseLabel: 'Awaiting app sign-up',
-    lastSeen: '—',
+    lastSeen: '-',
     streak: 0, prsThisWeek: 0, sessionsThisWeek: 0, sessionsTarget: 3,
   };
 }
 
 function relativeTime(iso) {
-  if (!iso) return '—';
+  if (!iso) return '-';
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
@@ -645,17 +645,17 @@ function buildDigest(clients) {
   const items = [];
   for (const c of clients || []) {
     if (c.managed) {
-      items.push({ id: c.id, sev: 1, tab: null, name: c.name, msg: 'invite not yet accepted — resend or nudge' });
+      items.push({ id: c.id, sev: 1, tab: null, name: c.name, msg: 'invite not yet accepted - resend or nudge' });
       continue;
     }
     // Never trained / no scheduled work at all → likely needs a programme.
     if (c.compliance == null && (c.lastSeenDays == null)) {
-      items.push({ id: c.id, sev: 3, tab: 'training', name: c.name, msg: 'no programme assigned — nothing scheduled' });
+      items.push({ id: c.id, sev: 3, tab: 'training', name: c.name, msg: 'no programme assigned - nothing scheduled' });
       continue;
     }
     // Gone quiet.
     if (c.lastSeenDays == null) {
-      items.push({ id: c.id, sev: 3, tab: 'training', name: c.name, msg: 'no session in the last month — needs a nudge' });
+      items.push({ id: c.id, sev: 3, tab: 'training', name: c.name, msg: 'no session in the last month - needs a nudge' });
     } else if (c.lastSeenDays >= 7) {
       items.push({ id: c.id, sev: 2, tab: 'training', name: c.name, msg: `hasn’t trained in ${c.lastSeenDays} days` });
     }
@@ -687,7 +687,7 @@ function CoachDigest({ clients, loading, onPick, onPickTab }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <BrandIcon name="Trophy" size={30} color="var(--accent)" />
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
-            Roster’s in good shape — everyone’s training and on track this week.
+            Roster’s in good shape - everyone’s training and on track this week.
           </div>
         </div>
       ) : (
@@ -703,7 +703,7 @@ function CoachDigest({ clients, loading, onPick, onPickTab }) {
               </span>
               <div style={{ minWidth: 0 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 600 }}>{it.name}</span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text-2)', letterSpacing: '0.02em' }}> — {it.msg}</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--text-2)', letterSpacing: '0.02em' }}> - {it.msg}</span>
               </div>
               <IconChevronRight size={14} style={{ color: 'var(--text-3)' }}/>
             </button>
@@ -748,7 +748,7 @@ function ClientsTab({ clients, loading, onPick, onInvite, onRemovePending }) {
           {filtered.length === 0 && (
             clients.length === 0 ? (
               <EmptyState icon="Group" title="No clients yet"
-                sub="Invite your first client — they’ll get an email link to set up their app."
+                sub="Invite your first client - they’ll get an email link to set up their app."
                 actionLabel="+ INVITE A CLIENT" onAction={onInvite} />
             ) : (
               <div className="card" style={{ padding: 24, textAlign: 'center' }}>
@@ -767,7 +767,7 @@ function ArchivedTab({ archived = [], loading, onRestore, onRemove }) {
   return (
     <>
       <div className="label" style={{ marginBottom: 10 }}>
-        // ARCHIVED CLIENTS — restore to your roster, or remove permanently
+        // ARCHIVED CLIENTS - restore to your roster, or remove permanently
       </div>
       {loading ? (
         <SkeletonCard rows={2} />
@@ -1127,7 +1127,7 @@ function AdhocTab({ workouts, loading, clients, trainerId, onNew, onEdit, onDupl
         </button>
       </div>
       <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8, marginBottom: 12 }}>
-        One-off sessions you can assign to any client on any date — no phases or weeks. Great for trials, makeup sessions or testing days.
+        One-off sessions you can assign to any client on any date - no phases or weeks. Great for trials, makeup sessions or testing days.
       </div>
       {loading ? (
         <SkeletonCard rows={2} />
@@ -1140,7 +1140,7 @@ function AdhocTab({ workouts, loading, clients, trainerId, onNew, onEdit, onDupl
           ))}
           {workouts.length === 0 && (
             <EmptyState icon="Lightning" title="No ad-hoc workouts yet"
-              sub="One-off sessions for trials, makeup days or testing — build once, assign to anyone."
+              sub="One-off sessions for trials, makeup days or testing - build once, assign to anyone."
               actionLabel="+ CREATE A WORKOUT" onAction={onNew} />
           )}
         </div>
@@ -1231,7 +1231,7 @@ function AssignAdhocSheet({ workout, clients, trainerId, onClose }) {
         <div className="scroller" style={{ flex: 1, padding: '16px 18px', minHeight: 0, display: 'grid', gap: 14, alignContent: 'start' }}>
           {dayId === null && (
             <div className="mono" style={{ fontSize: 10, color: 'var(--c-amber)', padding: '10px 12px', background: 'color-mix(in srgb, var(--c-amber) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--c-amber) 35%, transparent)', borderRadius: 8, lineHeight: 1.6 }}>
-              This workout has no session built yet — open it in EDIT and add some exercises first.
+              This workout has no session built yet - open it in EDIT and add some exercises first.
             </div>
           )}
           <div>
@@ -1355,7 +1355,7 @@ function TaskTemplatesTab({ trainerId }) {
             <div>
               <div className="label" style={{ marginBottom: 6 }}>FORM</div>
               <select value={formId} onChange={e => setFormId(e.target.value)} style={{ ...ttInputSt, appearance: 'auto' }}>
-                <option value="">— Select a form —</option>
+                <option value="">- Select a form -</option>
                 {forms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
               </select>
             </div>
@@ -1366,7 +1366,7 @@ function TaskTemplatesTab({ trainerId }) {
               <div style={{ width: 48, height: 48, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 10, background: 'var(--bg-3)', border: '1px solid var(--line)' }}>
                 {icon && hasBrandIcon(icon)
                   ? <BrandIcon name={icon} size={32} color={TT_COLOR[kind] || 'var(--accent)'} glow />
-                  : <span className="mono" style={{ fontSize: 13, color: 'var(--text-3)' }}>—</span>}
+                  : <span className="mono" style={{ fontSize: 13, color: 'var(--text-3)' }}>-</span>}
               </div>
               <select value={icon} onChange={e => setIcon(e.target.value)} style={{ ...ttInputSt, appearance: 'auto', flex: 1 }}>
                 <option value="">Default ({kind})</option>
@@ -1384,7 +1384,7 @@ function TaskTemplatesTab({ trainerId }) {
         <SkeletonCard rows={2} />
       ) : templates.length === 0 ? (
         <EmptyState icon="Checklist" title="No templates yet"
-          sub="Save tasks, goals or reminders you assign often — reuse them on any client in two taps." />
+          sub="Save tasks, goals or reminders you assign often - reuse them on any client in two taps." />
       ) : (
         <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
           {templates.map(t => {
@@ -1434,7 +1434,7 @@ function ScheduleTab({ schedule, clients, onPick }) {
 
       {schedule.length === 0 && (
         <EmptyState icon="Sunrise" title="Nothing scheduled today"
-          sub="A quiet day — assign workouts from a client’s Training tab and they’ll show here." />
+          sub="A quiet day - assign workouts from a client’s Training tab and they’ll show here." />
       )}
 
       <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
@@ -1518,7 +1518,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
       mc = created;
     }
 
-    // In-person-only clients don't use the app — no invite/email needed. Create
+    // In-person-only clients don't use the app - no invite/email needed. Create
     // the managed record and finish; the coach logs their progress via "assume
     // control" from the client's page.
     if (inPersonOnly) {
@@ -1548,7 +1548,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
         headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
       });
       if (!fnErr && !data?.error) setEmailed(true);
-      else setError('Client added, but the invite email couldn’t be sent — share the link below instead.');
+      else setError('Client added, but the invite email couldn’t be sent - share the link below instead.');
     }
 
     setSaving(false);
@@ -1610,7 +1610,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               <div className="label" style={{ marginBottom: 7 }}>// CLIENT EMAIL {inPersonOnly ? '(NOT NEEDED)' : '(OPTIONAL)'}</div>
               <input
                 type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)}
-                placeholder={inPersonOnly ? 'No app access — leave blank' : 'client@email.com'}
+                placeholder={inPersonOnly ? 'No app access - leave blank' : 'client@email.com'}
                 style={inviteInputSt}
               />
             </div>
@@ -1619,8 +1619,8 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
               padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8,
             }}>
               {inPersonOnly
-                ? 'In-person clients don\'t need the app. We\'ll add them to your roster and you can log their progress yourself via "assume control" on their page — no email or sign-up required.'
-                : 'Add an email and we\'ll send them an invite to join — they set a password and connect to you automatically. You\'ll also get a one-time link to share manually if you prefer.'}
+                ? 'In-person clients don\'t need the app. We\'ll add them to your roster and you can log their progress yourself via "assume control" on their page - no email or sign-up required.'
+                : 'Add an email and we\'ll send them an invite to join - they set a password and connect to you automatically. You\'ll also get a one-time link to share manually if you prefer.'}
             </div>
           </>
         ) : (
@@ -1641,7 +1641,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
                 {error}
               </div>
             )}
-            {/* Manual link is the fallback — only when no invite email was sent,
+            {/* Manual link is the fallback - only when no invite email was sent,
                 so a given email has exactly one onboarding route (no duplicates). */}
             {!emailed && (
               <>
@@ -1662,7 +1662,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
                   )}
                 </div>
                 <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.5, textAlign: 'center' }}>
-                  Share this link — they'll create their account and connect to you automatically.
+                  Share this link - they'll create their account and connect to you automatically.
                 </div>
               </>
             )}

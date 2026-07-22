@@ -1,9 +1,9 @@
 import { supabase } from './supabase'
 
 export const MODALITIES = ['Strength', 'Cardio', 'Mobility', 'Plyometric', 'Olympic', 'Bodyweight'];
-// Primary muscle group — the six groupings used across the app.
+// Primary muscle group - the six groupings used across the app.
 export const MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'];
-// Detailed muscles for the multi-select "muscles worked" — keys match the
+// Detailed muscles for the multi-select "muscles worked" - keys match the
 // muscle-map / volume groups so logged work lights up the right regions.
 export const ALL_MUSCLES = [
   { key: 'chest', label: 'Chest' },

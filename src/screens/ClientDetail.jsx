@@ -17,6 +17,7 @@ import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { ImportHistory } from './ImportHistory'
 import { toast } from '../lib/toast'
+import { setTaskComplete, RECURRENCE_OPTIONS } from '../lib/tasks'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
 import { Skel } from '../components/Loading'
@@ -111,7 +112,7 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go,
   );
 }
 
-// ── OVERVIEW — Everfit-style client home the coach jots notes on ──
+// ── OVERVIEW - Everfit-style client home the coach jots notes on ──
 const relDays = (iso) => {
   const n = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
   if (n <= 0) return 'today';
@@ -130,7 +131,7 @@ function MetricMini({ label, value }) {
   );
 }
 
-// Programme progress — how far the client is through their assigned programme.
+// Programme progress - how far the client is through their assigned programme.
 // ── ADHERENCE (behaviour over the last 8 weeks) ──────────────────
 // One bar per week: completed ÷ scheduled workouts. Header shows the 4-week
 // adherence % and how long since the client last trained.
@@ -173,7 +174,7 @@ function AdherenceCard({ clientId }) {
 
   if (weeks === null) return null;
   const { wk, lastDone } = weeks;
-  if (wk.every(w => w.total === 0)) return null; // nothing ever scheduled — stay quiet
+  if (wk.every(w => w.total === 0)) return null; // nothing ever scheduled - stay quiet
 
   const recent = wk.slice(4);
   const rDone = recent.reduce((n, w) => n + w.done, 0);
@@ -201,7 +202,7 @@ function AdherenceCard({ clientId }) {
         {lastLabel}
       </div>
 
-      {/* Weekly bars — height = that week's completed/scheduled ratio */}
+      {/* Weekly bars - height = that week's completed/scheduled ratio */}
       <div style={{ display: 'flex', gap: 5, alignItems: 'stretch', height: 62 }}>
         {wk.map((w, i) => {
           const p = w.total > 0 ? Math.round((w.done / w.total) * 100) : null;
@@ -223,7 +224,7 @@ function AdherenceCard({ clientId }) {
         {wk.map((w, i) => (
           <div key={i} style={{ flex: 1, textAlign: 'center' }}>
             <div className="mono" style={{ fontSize: 7.5, color: 'var(--text-3)', letterSpacing: '0.02em' }}>
-              {w.total > 0 ? `${w.done}/${w.total}` : '—'}
+              {w.total > 0 ? `${w.done}/${w.total}` : '-'}
             </div>
             {(i === 0 || i === 7) && (
               <div className="mono" style={{ fontSize: 6.5, color: 'var(--text-3)', letterSpacing: '0.04em', marginTop: 2 }}>
@@ -335,7 +336,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
           .order('scheduled_date', { ascending: true }),
         supabase.from('client_goals').select('title, description, target_date').eq('client_id', c.id)
           .eq('status', 'active').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        // managed_clients has no notes columns — skip to avoid a 400.
+        // managed_clients has no notes columns - skip to avoid a 400.
         c.managed
           ? Promise.resolve({ data: null })
           : supabase.from(table).select('coach_notes, medical_notes').eq('id', c.id).maybeSingle(),
@@ -387,7 +388,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      {/* Assume control — compact. Available for real (signed-up) clients and
+      {/* Assume control - compact. Available for real (signed-up) clients and
           for in-person managed clients (who have no app and are coach-logged). */}
       <div>
       {(!c.managed || c.client_status === 'in_person') ? (
@@ -401,7 +402,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
           ◉ ASSUME CONTROL
         </button>
       ) : (
-        <Mono>◉ AWAITING SIGN-UP — assume control unlocks once the client joins</Mono>
+        <Mono>◉ AWAITING SIGN-UP - assume control unlocks once the client joins</Mono>
       )}
       </div>
 
@@ -412,9 +413,9 @@ function OverviewTab({ c, go, onClose, onTab }) {
         <div className="card tappable" style={{ padding: 14 }}>
           <div className="label" style={{ marginBottom: 12 }}>// TRAINING</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
-            <TrainStat top="LAST 7 DAYS" big={d ? `${tracked(window7)}/${window7.length}` : '—'} sub="TRACKED" />
-            <TrainStat top="LAST 30 DAYS" big={d ? `${tracked(window30)}/${window30.length}` : '—'} sub="TRACKED" divider />
-            <TrainStat top="NEXT WEEK" big={d ? `${nextWeek.length}` : '—'} sub="ASSIGNED" divider />
+            <TrainStat top="LAST 7 DAYS" big={d ? `${tracked(window7)}/${window7.length}` : '-'} sub="TRACKED" />
+            <TrainStat top="LAST 30 DAYS" big={d ? `${tracked(window30)}/${window30.length}` : '-'} sub="TRACKED" divider />
+            <TrainStat top="NEXT WEEK" big={d ? `${nextWeek.length}` : '-'} sub="ASSIGNED" divider />
           </div>
           {d && lastWin && (
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -444,7 +445,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
                   <div>
                     <Mono style={{ marginBottom: 2 }}>WEIGHT</Mono>
                     <div className="h-bold" style={{ fontSize: 22 }}>
-                      {latestW != null ? <>{latestW}<span style={{ fontSize: 11, color: 'var(--text-3)' }}> kg</span></> : '—'}
+                      {latestW != null ? <>{latestW}<span style={{ fontSize: 11, color: 'var(--text-3)' }}> kg</span></> : '-'}
                     </div>
                   </div>
                   {wDelta != null && wDelta !== 0 && (
@@ -510,16 +511,16 @@ function OverviewTab({ c, go, onClose, onTab }) {
                 </div>
               )}
             </div>
-          ) : <Mono>No goal set — tap to add one</Mono>}
+          ) : <Mono>No goal set - tap to add one</Mono>}
         </div>
       </button>
         </div>
 
         <div className="ov-col">
-      {/* Coach notes — the jot-down area */}
+      {/* Coach notes - the jot-down area */}
       <NoteCard
         label="// NOTES"
-        placeholder="Jot down anything about this client — preferences, cues, conversations, reminders…"
+        placeholder="Jot down anything about this client - preferences, cues, conversations, reminders…"
         loading={!d}
         initial={d?.coachNotes || ''}
         onSave={saveNote('coach_notes')}
@@ -540,13 +541,13 @@ function OverviewTab({ c, go, onClose, onTab }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 12 }}>
           <KpiCard label="STREAK"   value={c.streak || 0} unit="d" color="var(--c-amber)" />
           <KpiCard label="CREDITS"  value={c.credits ?? 0}         color="var(--accent-2)" />
-          <KpiCard label="INJURIES" value={d ? d.injuries.length : '—'} color={d && d.injuries.length ? 'var(--c-coral)' : 'var(--text-2)'} />
+          <KpiCard label="INJURIES" value={d ? d.injuries.length : '-'} color={d && d.injuries.length ? 'var(--c-coral)' : 'var(--text-2)'} />
         </div>
       </div>
         </div>
       </div>
 
-      {/* Updates — full-width feed below both columns */}
+      {/* Updates - full-width feed below both columns */}
       <div style={{ display: 'grid', gap: 12 }}>
         <div className="label">// UPDATES</div>
         {!d && <Skel w="46%" h={11} style={{ margin: '4px 0' }} />}
@@ -646,7 +647,7 @@ function NoteCard({ label, placeholder, initial, onSave, loading, accent, childr
   );
 }
 
-// ── TRAINING — Everfit-style week calendar ───────────────────────
+// ── TRAINING - Everfit-style week calendar ───────────────────────
 const SECTION_LABEL = { MAIN: 'WORKOUT', PULSE_RAISER: 'PULSE RAISER', BANDED: 'ACTIVATION', COOLDOWN: 'COOLDOWN' };
 
 function mondayOf(d) {
@@ -659,7 +660,7 @@ const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 
 // True on phone-width screens, so the coach calendar can drop its 7-column
 // grid (which needs horizontal scrolling on a phone) for a vertical one-week
-// list — the same shape clients see.
+// list - the same shape clients see.
 function useIsNarrow(bp = 760) {
   const [narrow, setNarrow] = React.useState(() => typeof window !== 'undefined' && window.innerWidth < bp);
   React.useEffect(() => {
@@ -744,7 +745,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      {/* Assigned programme(s) — tap to open in the builder */}
+      {/* Assigned programme(s) - tap to open in the builder */}
       {assignedProgs.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span className="label">// ASSIGNED PROGRAMME</span>
@@ -864,7 +865,7 @@ function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, moving, setMovi
   }
   return (
     <div style={{ display: 'grid', gap: 4 }}>
-      {/* Month band — shows which month(s) this week falls in */}
+      {/* Month band - shows which month(s) this week falls in */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
         {Array.from({ length: 7 }, (_, i) => {
           const mark = monthMarks.find(m => m.col === i);
@@ -966,7 +967,7 @@ function WorkoutCell({ w, onClick, onDelete, onDragStart, onDragEnd }) {
   );
 }
 
-// Coach-side edit of a single scheduled workout — open it in the full
+// Coach-side edit of a single scheduled workout - open it in the full
 // programme builder, reschedule it, or remove it, straight from the calendar.
 function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
   const day = w.programme_days;
@@ -1037,7 +1038,7 @@ function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
             style={{ width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <IconCheck size={13} sw={3}/> EDIT LOGGED RESULTS →
           </button>
-          <Mono style={{ marginTop: 6 }}>Amend logged sets or fill in exercises the client missed — every prescribed movement is listed.</Mono>
+          <Mono style={{ marginTop: 6 }}>Amend logged sets or fill in exercises the client missed - every prescribed movement is listed.</Mono>
         </div>
       )}
 
@@ -1048,8 +1049,8 @@ function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
         </button>
         <Mono style={{ marginTop: 6 }}>
           {prog
-            ? 'Edits the programme template — all clients assigned this workout see the changes.'
-            : 'Programme not found — it may have been deleted.'}
+            ? 'Edits the programme template - all clients assigned this workout see the changes.'
+            : 'Programme not found - it may have been deleted.'}
         </Mono>
       </div>
 
@@ -1075,7 +1076,7 @@ function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
         color: removeConfirm ? 'var(--c-coral)' : 'var(--text-3)',
         fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
       }}>
-        {removeConfirm ? 'CONFIRM REMOVE — TAP AGAIN' : 'REMOVE FROM CALENDAR'}
+        {removeConfirm ? 'CONFIRM REMOVE - TAP AGAIN' : 'REMOVE FROM CALENDAR'}
       </button>
     </div>
   );
@@ -1153,7 +1154,7 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
 
   const save = async () => {
     setSaving(true);
-    // A missed exercise being filled in needs a session to attach to — create
+    // A missed exercise being filled in needs a session to attach to - create
     // one if this day was completed without a logged session.
     let sessionId = state.sessionId;
     const hasNewFilled = state.exercises.some(ex => ex.exId && ex.sets.some(s =>
@@ -1206,7 +1207,7 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
   return (
     <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="label">// EDIT LOGGED RESULTS{phaseName ? ` — ${phaseName.toUpperCase()}` : ''}</div>
+        <div className="label">// EDIT LOGGED RESULTS{phaseName ? ` - ${phaseName.toUpperCase()}` : ''}</div>
         <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
       </div>
 
@@ -1236,7 +1237,7 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
               </div>
               {ex.sets.map((s, si) => s._deleted ? (
                 <div key={s.id ?? `n${si}`} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5 }}>
-                  <Mono style={{ flex: 1 }}>SET {si + 1} — removed</Mono>
+                  <Mono style={{ flex: 1 }}>SET {si + 1} - removed</Mono>
                   <button onClick={() => upd(exi, si, { _deleted: false })} className="mono" style={{ all: 'unset', cursor: 'pointer', fontSize: 9, color: 'var(--accent)' }}>UNDO</button>
                 </div>
               ) : (
@@ -1348,7 +1349,7 @@ function BodyTab({ c, trainerId }) {
   return (
     <div style={{ display: 'grid', gap: 10, maxWidth: 1000, margin: '0 auto' }}>
       <div className="body-col">
-      {/* Mode toggle — TRAINED first (default) */}
+      {/* Mode toggle - TRAINED first (default) */}
       <div style={{ display: 'flex', gap: 8 }}>
         <BigToggle active={!isInjuryMode} onClick={() => { setMode('worked');   setPicked(null); setEditPanel(null); }}>MUSCLES WORKED</BigToggle>
         <BigToggle active={isInjuryMode}  onClick={() => { setMode('injuries'); setPicked(null); }}>INJURIES</BigToggle>
@@ -1358,7 +1359,7 @@ function BodyTab({ c, trainerId }) {
         <SideSlider side={side} onChange={(s) => { setSide(s); setPicked(null); }} />
       </div>
 
-      {/* Worked view — mirrors the client's muscle heatmap exactly */}
+      {/* Worked view - mirrors the client's muscle heatmap exactly */}
       {!isInjuryMode && <WorkedView userId={c.id} side={side} />}
 
       {/* Injury body map + legend */}
@@ -1432,7 +1433,7 @@ function BodyTab({ c, trainerId }) {
             />
           )}
 
-          {!editPanel && pickedInjuries.length === 0 && <Mono style={{ color: 'var(--text-3)' }}>No active injuries here — tap REPORT INJURY to log one.</Mono>}
+          {!editPanel && pickedInjuries.length === 0 && <Mono style={{ color: 'var(--text-3)' }}>No active injuries here - tap REPORT INJURY to log one.</Mono>}
           {!editPanel && pickedInjuries.map(inj => <InjuryRow key={inj.id} inj={inj} onOpen={() => setOpenId(inj.id)} />)}
         </div>
       )}
@@ -1495,7 +1496,7 @@ function InjuryForm({ group, side, onSave, onClose, defaultSide }) {
   return (
     <div className="card" style={{ padding: 14, border: '1px solid var(--c-coral)', display: 'grid', gap: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="label">// REPORT INJURY — {regionLabel(group).toUpperCase()}</div>
+        <div className="label">// REPORT INJURY - {regionLabel(group).toUpperCase()}</div>
         <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
       </div>
       <div>
@@ -1558,6 +1559,7 @@ function TasksTab({ c, trainerId }) {
   const [kind, setKind]     = React.useState('check');
   const [icon, setIcon]     = React.useState('');
   const [due, setDue]       = React.useState('');
+  const [recur, setRecur]   = React.useState('none');
   const [saving, setSaving] = React.useState(false);
   const [templates, setTemplates] = React.useState([]);
 
@@ -1580,8 +1582,9 @@ function TasksTab({ c, trainerId }) {
       title: t.title, kind: t.kind, due_date: t.due_date || null, form_id: t.kind === 'form' ? t.form_id : null,
     };
     if (t.icon) trow.icon = t.icon;
+    if (t.recurrence && t.recurrence !== 'none') trow.recurrence = t.recurrence;
     let { error } = await supabase.from('client_tasks').insert(trow);
-    if (error && trow.icon) { delete trow.icon; await supabase.from('client_tasks').insert(trow); }
+    if (error) { const { icon: _i, recurrence: _r, ...bare } = trow; await supabase.from('client_tasks').insert(bare); }
     notify({ recipientId: c.id, actorId: trainerId, kind: t.kind === 'form' ? 'form' : 'task',
       title: t.kind === 'form' ? 'New form to complete' : 'New task assigned', body: t.title, link: { screen: 'dashboard' } });
     reload();
@@ -1600,17 +1603,17 @@ function TasksTab({ c, trainerId }) {
       form_id: kind === 'form' ? formId : null,
     };
     if (icon) row.icon = icon;
+    if (recur !== 'none') row.recurrence = recur;
     let { error } = await supabase.from('client_tasks').insert(row);
-    // Fallback if migration 042 (task icon) isn't applied yet.
-    if (error && row.icon) { delete row.icon; ({ error } = await supabase.from('client_tasks').insert(row)); }
+    // Fallback if the icon (042) or recurrence (050) columns aren't applied yet.
+    if (error) { const { icon: _i, recurrence: _r, ...bare } = row; ({ error } = await supabase.from('client_tasks').insert(bare)); }
     notify({ recipientId: c.id, actorId: trainerId, kind: kind === 'form' ? 'form' : 'task',
       title: kind === 'form' ? 'New form to complete' : 'New task assigned', body: effTitle, link: { screen: 'dashboard' } });
-    setSaving(false); setAdding(false); setTitle(''); setDue(''); setFormId(''); setKind('check'); setIcon(''); reload();
+    setSaving(false); setAdding(false); setTitle(''); setDue(''); setFormId(''); setKind('check'); setIcon(''); setRecur('none'); reload();
   };
 
   const toggle = async (task) => {
-    const val = task.completed_at ? null : new Date().toISOString();
-    await supabase.from('client_tasks').update({ completed_at: val }).eq('id', task.id);
+    await setTaskComplete(task.id, !task.completed_at);
     reload();
   };
 
@@ -1678,10 +1681,23 @@ function TasksTab({ c, trainerId }) {
               <input type="date" value={due} onChange={e => setDue(e.target.value)} style={fieldSt}/>
             </FieldLabel>
           </div>
+          <FieldLabel label="REPEAT">
+            <div style={{ display: 'flex', gap: 4 }}>
+              {RECURRENCE_OPTIONS.map(o => (
+                <button key={o.id} onClick={() => setRecur(o.id)} style={{
+                  all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
+                  padding: '7px 0', borderRadius: 7, fontSize: 8.5, fontFamily: 'JetBrains Mono', fontWeight: 700,
+                  background: recur === o.id ? 'var(--accent-soft)' : 'var(--bg-3)',
+                  border: `1px solid ${recur === o.id ? 'var(--accent)' : 'var(--line)'}`,
+                  color: recur === o.id ? 'var(--accent)' : 'var(--text-3)',
+                }}>{o.label}</button>
+              ))}
+            </div>
+          </FieldLabel>
           {kind === 'form' && (
             <FieldLabel label="FORM">
               <select value={formId} onChange={e => setFormId(e.target.value)} style={{ ...fieldSt, appearance: 'auto' }}>
-                <option value="">— Select a form —</option>
+                <option value="">- Select a form -</option>
                 {forms.map(f => <option key={f.id} value={f.id}>{f.title}</option>)}
               </select>
             </FieldLabel>
@@ -1706,7 +1722,7 @@ function TasksTab({ c, trainerId }) {
       )}
 
       {tasks === null && <Skel w="46%" h={11} style={{ margin: '4px 0' }} />}
-      {tasks !== null && open.length === 0 && done.length === 0 && <EmptyState>No tasks yet — add one above</EmptyState>}
+      {tasks !== null && open.length === 0 && done.length === 0 && <EmptyState>No tasks yet - add one above</EmptyState>}
 
       {open.map(t => <TaskRow key={t.id} t={t} onToggle={toggle} onDelete={del}/>)}
 
@@ -1739,6 +1755,7 @@ function TaskRow({ t, onToggle, onDelete, faded }) {
         <div style={{ fontSize: 12, fontWeight: 600, textDecoration: t.completed_at ? 'line-through' : 'none', color: 'var(--text)' }}>{t.title}</div>
         <div className="mono" style={{ fontSize: 9, color: col, marginTop: 2, fontWeight: 700 }}>
           {TASK_ICON[t.kind]} {t.kind.toUpperCase()}<span style={{ color: 'var(--text-3)', fontWeight: 400 }}>{t.due_date ? ` · DUE ${new Date(t.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}</span>
+          {t.recurrence && t.recurrence !== 'none' && <span style={{ color: 'var(--accent)', fontWeight: 700 }}> · ↻ {t.recurrence.toUpperCase()}</span>}
         </div>
       </div>
       <button onClick={() => onDelete(t.id)} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}>
@@ -1787,9 +1804,7 @@ function GoalsTab({ c, trainerId }) {
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <div className="label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <BrandIcon name="Mountain" size={14} color="var(--c-amber)" glow /> // GOAL / OBJECTIVE
-      </div>
+      <div className="label">// GOAL / OBJECTIVE</div>
       <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
         <FieldLabel label="GOAL TITLE">
           <input value={title} onChange={e => onChange(() => setTitle(e.target.value))} placeholder="e.g. Run a 5k in under 25 minutes" style={fieldSt}/>
@@ -1967,7 +1982,7 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
         color: archiveConfirm ? 'var(--c-coral)' : 'var(--text-3)',
         fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
       }}>
-        {archiveConfirm ? 'CONFIRM ARCHIVE — TAP AGAIN' : 'ARCHIVE CLIENT'}
+        {archiveConfirm ? 'CONFIRM ARCHIVE - TAP AGAIN' : 'ARCHIVE CLIENT'}
       </button>
     </div>
   );
@@ -2026,7 +2041,7 @@ function VaultTab({ c, trainerId }) {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 8 }}>
-        Private documents — attach consent forms, PAR-Qs, contracts or any file for {c.name.split(' ')[0]}. Only you (and the client) can access these.
+        Private documents - attach consent forms, PAR-Qs, contracts or any file for {c.name.split(' ')[0]}. Only you (and the client) can access these.
       </div>
       <FileDrop onFiles={uploadFiles} accept="*/*" multiple busy={busy} label="DRAG & DROP OR TAP TO ADD DOCUMENTS" hint="PDF, images, docs · up to 20MB each" />
       {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)' }}>{err}</div>}
@@ -2147,7 +2162,7 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
   return (
     <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="label">// ASSIGN WORKOUT — {clientName.toUpperCase()}</div>
+        <div className="label">// ASSIGN WORKOUT - {clientName.toUpperCase()}</div>
         <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
       </div>
 
@@ -2159,7 +2174,7 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
       {/* Programme select */}
       <FieldLabel label="PROGRAMME">
         <select value={progId || ''} onChange={e => { setProgId(e.target.value || null); setPhaseIdx(0); setWeek(1); setDayId(null); }} style={{ ...fieldSt, appearance: 'auto' }}>
-          <option value="">— Select programme —</option>
+          <option value="">- Select programme -</option>
           {programmes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </FieldLabel>

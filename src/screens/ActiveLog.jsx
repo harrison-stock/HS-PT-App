@@ -15,7 +15,7 @@ import { BrandIcon } from '../components/BrandIcon'
 import { BANDS, bandOf } from '../components/bands'
 import { ExercisePicker } from './ProgrammeBuilder'
 
-// Active Workout — Everfit-style swipeable cards.
+// Active Workout - Everfit-style swipeable cards.
 // One full-page card per exercise; horizontal snap-scroll between them.
 // Phases (Pulse · Banded · Main · Cooldown) are pinned as a strip up top.
 // Tap exercise title to see/swap alternatives.
@@ -46,12 +46,12 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const [sectionIntros, setSectionIntros] = React.useState({}); // phase id → coach's slide text
   const sessionStartRef = React.useRef(new Date().toISOString());
 
-  // Session clock — anchored to the wall clock so it stays accurate even if
+  // Session clock - anchored to the wall clock so it stays accurate even if
   // the phone locks or the browser throttles timers in the background.
   const clockBaseRef = React.useRef(null);
   React.useEffect(() => {
     // Freeze the clock while paused or once the session is complete (results
-    // screen) — the elapsed time should stop the moment they finish.
+    // screen) - the elapsed time should stop the moment they finish.
     if (paused || complete) { clockBaseRef.current = null; return; }
     const tick = () => {
       if (clockBaseRef.current == null) return;
@@ -212,13 +212,13 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
               });
             });
           }
-          // A real assigned day must have exercises — never fall back to the
+          // A real assigned day must have exercises - never fall back to the
           // built-in demo against a client's actual session.
           if (rows.length > 0) setExercises(rows);
           else setLoadError(true);
           setDayIntro(data.intro || '');
           setSectionIntros(intros);
-          // Workout name (migration 045) — fetched separately so an un-migrated
+          // Workout name (migration 045) - fetched separately so an un-migrated
           // DB degrades gracefully rather than failing the whole load.
           supabase.from('programme_days').select('title').eq('id', dayId).maybeSingle()
             .then(({ data: t }) => { if (t) setDayTitle(t.title || ''); });
@@ -266,7 +266,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const saveSession = async () => {
     if (!dayId || !userId) return;
     try {
-      // Build the rows FIRST. Client-added exercises have non-DB ids — log them
+      // Build the rows FIRST. Client-added exercises have non-DB ids - log them
       // by name with a null exercise_id (the FK only accepts real rows).
       const isDbId = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id);
       const pendingSets = [];
@@ -319,7 +319,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
         // Notify the coach that the client finished a workout.
         const tId = await trainerOf(userId);
-        if (tId) notify({ recipientId: tId, actorId: userId, kind: 'done', title: 'Workout completed', body: 'A client finished a session — review their logged sets.', link: { screen: 'coach' } });
+        if (tId) notify({ recipientId: tId, actorId: userId, kind: 'done', title: 'Workout completed', body: 'A client finished a session - review their logged sets.', link: { screen: 'coach' } });
       }
     } catch (e) { console.error('saveSession', e); }
   };
@@ -405,9 +405,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
     setExercises((prev) => prev.map((e) => e.id !== exId ? e : (e.sets.length > 1 ? { ...e, sets: e.sets.slice(0, -1) } : e)));
   };
 
-  // Add an exercise mid-session — inserted at the end of the current phase.
+  // Add an exercise mid-session - inserted at the end of the current phase.
   const activeExRef = React.useRef(null);
-  const addPosRef = React.useRef('after'); // 'before' | 'after' — relative to current exercise
+  const addPosRef = React.useRef('after'); // 'before' | 'after' - relative to current exercise
   const addExercise = (ex) => {
     setExercises((prev) => {
       const curIdx = prev.findIndex((e) => e.id === activeExRef.current);
@@ -473,7 +473,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
     setSupersetForId(null);
   };
 
-  // Tick off every set of an exercise in one tap — no rest timer.
+  // Tick off every set of an exercise in one tap - no rest timer.
   const completeAllSets = (ids) => {
     const set = new Set(Array.isArray(ids) ? ids : [ids]);
     setExercises((prev) => prev.map((e) => !set.has(e.id) ? e : {
@@ -496,7 +496,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   // Build the rail: exercises (consecutive supersets merged into one card),
   // with a section-end divider slide at each phase boundary.
   const railItems = [];
-  // Intro slide first — the session opens on the coach's brief before any
+  // Intro slide first - the session opens on the coach's brief before any
   // exercise, so "start workout" lands on the intro page, not the pulse raiser.
   if (dayIntro && exercises.length) railItems.push({ type: 'intro' });
   for (let i = 0; i < exercises.length;) {
@@ -520,7 +520,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   }
   // End of the session: a "block complete" transition (styled like the between-
   // phase dividers) for the final phase, then a dedicated "ready to finish"
-  // slide — so the last block wraps up consistently before the finish CTA.
+  // slide - so the last block wraps up consistently before the finish CTA.
   if (exercises.length) {
     const lastPhase = exercises[exercises.length - 1].phase;
     railItems.push({ type: 'phasedone', phaseId: lastPhase });
@@ -590,7 +590,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           </button>
         </div>
 
-        {/* Phase strip — compact icons-only hexagon nodes */}
+        {/* Phase strip - compact icons-only hexagon nodes */}
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phaseCounts.length}, 1fr)`, gap: 8, marginBottom: 4 }} data-comment-anchor="86e6e73e80-div-154-9">
           {phaseCounts.map((p) => {
             const isCurrent = currentPhaseId === p.id;
@@ -719,13 +719,13 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         {activeItem.type !== 'finish' && (() => {
           const goNext = () => { if (activeIdx < lastIdx) { setActiveIdx(activeIdx + 1); } else { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} setComplete(true); } };
           const goPrev = () => activeIdx > 0 && setActiveIdx(activeIdx - 1);
-          // Intro page — one clear call to action into the workout.
+          // Intro page - one clear call to action into the workout.
           if (activeItem.type === 'intro') return (
             <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={goNext}>
               START WORKOUT <IconChevronRight size={14} />
             </button>
           );
-          // The card right before the finish slide is the last piece of work —
+          // The card right before the finish slide is the last piece of work -
           // its forward action reads CONTINUE. With several cards to move
           // between, navigation is a pair of arrows instead of one wide button.
           const isFinal = activeIdx >= lastIdx - 1;
@@ -766,7 +766,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       {/* Alternatives sheet */}
       {addingEx && <ExercisePicker title="ADD EXERCISE" onClose={() => setAddingEx(false)} onPick={addExercise} />}
 
-      {/* Superset picker — link the chosen exercise into a superset */}
+      {/* Superset picker - link the chosen exercise into a superset */}
       {supersetForId && <ExercisePicker title="SUPERSET EXERCISE" onClose={() => setSupersetForId(null)} onPick={supersetPick} />}
 
       {altsFor && <AlternativesSheet ex={altsFor} onClose={() => setAltsForId(null)} onPick={swapExercise} />}
@@ -783,11 +783,11 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         />
       )}
 
-      {/* Session complete — results screen */}
+      {/* Session complete - results screen */}
       {complete && <SessionComplete exercises={exercises} sessionTime={sessionTime} go={go}
         onEdit={() => { setComplete(false); setActiveIdx(0); }} />}
 
-      {/* Processing overlay — shown while the session is being saved. */}
+      {/* Processing overlay - shown while the session is being saved. */}
       {finishing && <LoadingTile label="Saving session…" variant="hex" />}
 
       {/* Paused overlay */}
@@ -894,7 +894,7 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
             <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{intro}</div>
           </div>
         )}
-        {/* Exercise video — YouTube embed slot (height-capped so the whole
+        {/* Exercise video - YouTube embed slot (height-capped so the whole
             card fits one viewport without scrolling) */}
         <div style={{
           position: 'relative', borderRadius: 'var(--radius-lg)', overflow: 'hidden',
@@ -902,7 +902,7 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
           height: 'min(22vh, 170px)',
           background: `linear-gradient(180deg, rgba(7,7,12,0.35) 0%, rgba(7,7,12,0.65) 100%), url('${ex.img}') center/cover`
         }}>
-          {/* YouTube play glyph — embed mounts here */}
+          {/* YouTube play glyph - embed mounts here */}
           <div style={{
             position: 'absolute', inset: 0, margin: 'auto',
             width: 52, height: 36, borderRadius: 9,
@@ -933,7 +933,7 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
               {ex.name.toUpperCase()}
             </span>
           </div>
-          {/* Tempo — sits between the title and the action buttons */}
+          {/* Tempo - sits between the title and the action buttons */}
           {ex.tempo &&
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 10,
@@ -1146,8 +1146,8 @@ function ExerciseComment() {
 }
 
 // ── FINAL SLIDE (after cooldown) ─────────────────────────────────
-// "Cooldown complete · ready to finish?" — last rail slide before results.
-// Terminal "block complete" slide — same treatment as the between-phase
+// "Cooldown complete · ready to finish?" - last rail slide before results.
+// Terminal "block complete" slide - same treatment as the between-phase
 // dividers, shown for the final block before the finish CTA. Advancing is
 // handled by the bottom action bar's CONTINUE button.
 function PhaseDoneSlide({ phaseId }) {
@@ -1292,7 +1292,7 @@ function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle
   );
 }
 
-// One exercise inside a superset — its own title row + set table, tinted with
+// One exercise inside a superset - its own title row + set table, tinted with
 // the superset accent and tagged A1/A2… so the grouping stays clear.
 function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onHistory, onComment }) {
   return (
@@ -1435,7 +1435,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
   const volume = exercises.reduce((n, e) => n + e.sets.filter((s) => s.done && s.kg).reduce((a, s) => a + s.kg * (typeof s.reps === 'number' ? s.reps : 0), 0), 0);
   const fmtT = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
-  // Top sets — heaviest done working set per weighted exercise.
+  // Top sets - heaviest done working set per weighted exercise.
   const prs = exercises
     .filter((e) => e.sets.some((s) => s.kg && s.done))
     .map((e) => {
@@ -1447,7 +1447,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
     .sort((a, b) => b.kg - a.kg)
     .slice(0, 2);
 
-  // Muscles trained — inferred from the names of exercises with completed sets.
+  // Muscles trained - inferred from the names of exercises with completed sets.
   const trained = React.useMemo(() => {
     const counts = {};
     exercises.forEach((e) => {
@@ -1551,7 +1551,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
           </div>
         </>}
 
-        {/* Session breakdown — grouped by zone, what was completed vs missed */}
+        {/* Session breakdown - grouped by zone, what was completed vs missed */}
         <div className="label" style={{ margin: '0 2px 8px' }}>// SESSION BREAKDOWN</div>
         <div style={{ display: 'grid', gap: 14, marginBottom: 18 }}>
           {PHASES.filter((ph) => exercises.some((e) => e.phase === ph.id)).map((ph) => {
@@ -1655,8 +1655,8 @@ const PHASE_ICON = {
 };
 
 const SECTION_BLURB = {
-  banded: 'Glutes fired and hips open — now load the pattern with banded activation and pre-stretches before your main lifts.',
-  main: 'Primed and warm. Time for the working sets — control the tempo, chase quality reps, and stop at your target RPE.',
+  banded: 'Glutes fired and hips open - now load the pattern with banded activation and pre-stretches before your main lifts.',
+  main: 'Primed and warm. Time for the working sets - control the tempo, chase quality reps, and stop at your target RPE.',
   cooldown: 'Heavy lifting done. Bring the heart rate down and lengthen everything you just trained with slow, nasal breathing.'
 };
 
@@ -1769,7 +1769,7 @@ function addSetBtnStyle(c) {
   };
 }
 
-// "ADD SET" (and optional "REMOVE") — change a set's status by tapping its
+// "ADD SET" (and optional "REMOVE") - change a set's status by tapping its
 // number/letter badge in the row.
 function AddSetControl({ onAdd, onRemove }) {
   return (
@@ -1799,7 +1799,7 @@ function AddSetControl({ onAdd, onRemove }) {
 
 }
 
-// Set badge — hex showing the working-set number (regular) or the type
+// Set badge - hex showing the working-set number (regular) or the type
 // letter (W/D/F/P). Tapping it opens a picker to change the set's status.
 function SetTypeBadge({ set, setNum, onKind }) {
   const [open, setOpen] = React.useState(false);
@@ -1819,7 +1819,7 @@ function SetTypeBadge({ set, setNum, onKind }) {
 
       {open &&
       <>
-        {/* Fixed scrim + centered sheet — escapes the card's overflow clip so it's always visible/scrollable */}
+        {/* Fixed scrim + centered sheet - escapes the card's overflow clip so it's always visible/scrollable */}
         <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(7,7,12,0.55)', backdropFilter: 'blur(2px)' }} />
         <div style={{
           position: 'fixed', zIndex: 61, left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
@@ -1900,7 +1900,7 @@ function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, onComplete
 
 }
 
-// Band selector for the client log — tap to pick a band colour.
+// Band selector for the client log - tap to pick a band colour.
 function BandCell({ band, done, onChange }) {
   const [open, setOpen] = React.useState(false);
   const b = bandOf(band);
@@ -1938,7 +1938,7 @@ function BandCell({ band, done, onChange }) {
   );
 }
 
-// Reps — a plain type-in field. Prescribed values can be ranges ("8-12"); the
+// Reps - a plain type-in field. Prescribed values can be ranges ("8-12"); the
 // client overwrites them with the actual reps done. Stored as a number when it
 // parses (so volume/PR maths work), otherwise the raw text.
 function RepsCell({ set, onChange }) {
@@ -1952,7 +1952,7 @@ function RepsCell({ set, onChange }) {
     <input
       value={set.reps === '' || set.reps == null ? '' : set.reps}
       onChange={(e) => commit(e.target.value)}
-      inputMode="numeric" placeholder="—" aria-label="Reps"
+      inputMode="numeric" placeholder="-" aria-label="Reps"
       style={{
         width: '100%', minWidth: 0, background: 'transparent', border: 0,
         color: set.done ? 'var(--text-2)' : 'var(--text)',
@@ -1996,7 +1996,7 @@ function evalExpr(s) {
   return Math.round(total * 100) / 100;
 }
 
-// Weight calculator keypad — tap a weight to open it. Supports plate maths
+// Weight calculator keypad - tap a weight to open it. Supports plate maths
 // (+/-) and a kg/lb toggle (lb is converted to kg on apply, since we store kg).
 function CalcKeypad({ value, unit = 'kg', mode = 'weight', onClose, onApply }) {
   const isWeight = mode === 'weight';
@@ -2022,7 +2022,7 @@ function CalcKeypad({ value, unit = 'kg', mode = 'weight', onClose, onApply }) {
     onApply(Math.max(0, Math.min(999, n))); // hard cap at 999
   };
 
-  // Hardware-keyboard support — type digits/operators directly (desktop),
+  // Hardware-keyboard support - type digits/operators directly (desktop),
   // while the on-screen keypad stays available for touch. No deps array so
   // the handler always closes over the current expression.
   React.useEffect(() => {
@@ -2159,7 +2159,7 @@ function printWorkout(exercises, meta = {}) {
   w.document.open(); w.document.write(html); w.document.close();
 }
 
-// Editable time field — always displays/edits in MM:SS (stopwatch style).
+// Editable time field - always displays/edits in MM:SS (stopwatch style).
 function TimeCell({ value, done, onChange }) {
   const display = formatMMSS(parseTimeToSeconds(value));
   const onInput = (e) => {
@@ -2185,7 +2185,7 @@ function TimeCell({ value, done, onChange }) {
 
 }
 
-// Difficulty — a 4-level rating: Light · Moderate · Challenging · Intense.
+// Difficulty - a 4-level rating: Light · Moderate · Challenging · Intense.
 // Stored as 1-4. Tapping the cell opens a 4-segment picker.
 const RPE_LEVELS = [
   { n: 1, label: 'LIGHT',       color: 'var(--text-3)' },
@@ -2201,7 +2201,7 @@ function RpeCell({ value, done, onChange }) {
   const [pos, setPos] = React.useState(null);
   const btnRef = React.useRef(null);
   const color = value == null ? 'var(--text-3)' : RPE_COLOR(value);
-  const short = value == null ? '—' : RPE_LABEL(value).slice(0, 3);
+  const short = value == null ? '-' : RPE_LABEL(value).slice(0, 3);
 
   const toggle = () => {
     if (open) { setOpen(false); return; }
@@ -2329,9 +2329,9 @@ function PriorProgressSheet({ ex, userId, onClose }) {
               if (r.actual_time_secs) return { warmup: false, label: formatMMSS(r.actual_time_secs) };
               const kg = r.actual_weight_kg ? parseFloat(r.actual_weight_kg) : null;
               const band = bandOf(r.actual_band);
-              if (band) return { warmup: false, label: `${band.short} × ${r.actual_reps ?? '—'}` };
-              if (kg != null) return { warmup: false, label: `${kg}kg × ${r.actual_reps ?? '—'}` };
-              return { warmup: false, label: `${r.actual_reps ?? '—'} reps` };
+              if (band) return { warmup: false, label: `${band.short} × ${r.actual_reps ?? '-'}` };
+              if (kg != null) return { warmup: false, label: `${kg}kg × ${r.actual_reps ?? '-'}` };
+              return { warmup: false, label: `${r.actual_reps ?? '-'} reps` };
             });
             const kgs = rows.map((r) => parseFloat(r.actual_weight_kg)).filter((v) => !isNaN(v));
             return {

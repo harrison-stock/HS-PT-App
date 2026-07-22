@@ -5,7 +5,7 @@ const HAVE = new Set(BRAND_ICONS);
 export const hasBrandIcon = (name) => HAVE.has(name);
 
 // Renders a brand SVG (public/icons/*.svg) as a CSS mask so the monochrome
-// artwork adopts `color` (currentColor by default) and can glow — same
+// artwork adopts `color` (currentColor by default) and can glow - same
 // recolour/glow behaviour as the built-in line icons.
 export function BrandIcon({ name, size = 20, color = 'currentColor', glow = false, style }) {
   if (!HAVE.has(name)) return null;

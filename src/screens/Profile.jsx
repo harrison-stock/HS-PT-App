@@ -36,8 +36,8 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
           boxShadow: '0 0 calc(22px * var(--glow)) var(--accent-glow)',
         }}>{initials}</Hex>
         <div style={{ textAlign: 'center' }}>
-          <div className="h-bold" style={{ fontSize: 18, color: 'var(--heading-deep)' }}>{user?.name || '—'}</div>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3, letterSpacing: '0.04em' }}>{user?.email || '—'}</div>
+          <div className="h-bold" style={{ fontSize: 18, color: 'var(--heading-deep)' }}>{user?.name || '-'}</div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3, letterSpacing: '0.04em' }}>{user?.email || '-'}</div>
         </div>
       </div>
 
@@ -69,7 +69,7 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
         <SubscriptionTab profile={profile} />
       )}
 
-      {/* Log out — always visible at the bottom of Settings */}
+      {/* Log out - always visible at the bottom of Settings */}
       <button onClick={onLogout} style={{
         width: '100%', marginTop: 24,
         padding: '14px 16px', borderRadius: 12,
@@ -113,7 +113,7 @@ function ProfileTab({ user, userId, onSave, theme, onThemeChange }) {
           <input value={user?.email || ''} readOnly type="email" placeholder="you@email.com"
             style={{ ...inputStyle, color: 'var(--text-3)', cursor: 'default' }} />
           <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.05em', marginTop: 5 }}>
-            Your login email — contact your coach to change it.
+            Your login email - contact your coach to change it.
           </div>
         </Field>
         <Field label="DATE OF BIRTH">
@@ -199,7 +199,7 @@ function ConnectedDevices({ userId }) {
     if (r.error) setErr(r.error);
   };
 
-  const fmt = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—';
+  const fmt = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '-';
 
   return (
     <div style={{ marginTop: 24 }}>

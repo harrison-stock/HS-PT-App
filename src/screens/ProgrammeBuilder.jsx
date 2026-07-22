@@ -20,7 +20,7 @@ const TAG_COLORS = {
   ENDURANCE: 'var(--accent-2)', HYBRID: 'var(--c-blue)', SPORT: 'var(--c-pink)',
 };
 
-// `startAt` ({ phaseIdx, weekIdx, dayIdx }) deep-links straight to one day —
+// `startAt` ({ phaseIdx, weekIdx, dayIdx }) deep-links straight to one day -
 // used by the coach's client calendar to jump to the exact assigned workout.
 export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trainerId, startAt }) {
   const isAdhoc = !!programme.is_adhoc;
@@ -108,7 +108,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         )
         .select('id').single());
     }
-    if (!dayRow) throw new Error(dayErr?.message || 'Save failed — have you run migration 3 (notes_tempo)?');
+    if (!dayRow) throw new Error(dayErr?.message || 'Save failed - have you run migration 3 (notes_tempo)?');
 
     await supabase.from('workout_sections').delete().eq('day_id', dayRow.id);
 
@@ -181,7 +181,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           phaseList: [{ ...(p.phaseList[0] || {}), id: phid, name: 'Workout', focus: 'Ad-hoc', weeks: 1 }] }));
       }
 
-      if (!phid) { setSaving(false); setSaveError('No phase to save into — open the roadmap first.'); return false; }
+      if (!phid) { setSaving(false); setSaveError('No phase to save into - open the roadmap first.'); return false; }
 
       await writeDay(phid);
       await supabase.from('programmes').update({ updated_at: new Date().toISOString() }).eq('id', pid);
@@ -255,11 +255,11 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     setExpandedExId(id);
   };
 
-  // ── Alternates — swap options the client can pick during a workout ──
+  // ── Alternates - swap options the client can pick during a workout ──
   const addAlternate = (sIdx, eIdx, ex) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, alternates: [...(e.alternates || []), { name: ex.name, img: ex.img }] }))); setDirty(true); };
   const delAlternate = (sIdx, eIdx, idx) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, alternates: (e.alternates || []).filter((_, i) => i !== idx) }))); setDirty(true); };
 
-  // ── Supersets — group an exercise with the one above it ────────
+  // ── Supersets - group an exercise with the one above it ────────
   const linkSuperset = (sIdx, eIdx) => {
     if (eIdx <= 0) return;
     setDay(d => ({ ...d, sections: d.sections.map((s, si) => {
@@ -401,7 +401,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           </div>
         </div>
       ) : (
-      /* Phase / Week / Day pickers — stacked on phones, one row on desktop */
+      /* Phase / Week / Day pickers - stacked on phones, one row on desktop */
       <div className="pb-pickers" style={{ borderBottom: '1px solid var(--line)', background: 'var(--bg-1)' }}>
         <div className="pb-picker-grid">
           <div>
@@ -502,7 +502,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               <textarea
                 value={day.intro || ''}
                 onChange={e => { setDay(d => ({ ...d, intro: e.target.value })); setDirty(true); }}
-                placeholder="Overview, goals, or context for this session — shown to the client at the top of the workout."
+                placeholder="Overview, goals, or context for this session - shown to the client at the top of the workout."
                 rows={3}
                 style={{
                   width: '100%', boxSizing: 'border-box',
@@ -695,7 +695,7 @@ function CopySheet({ weeks, curWeek, curDow, phases = [], curPhaseId, onClose, o
                     </button>
                   ))}
                 </div>
-                <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', marginTop: 5 }}>* current week — source slot is never overwritten</div>
+                <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', marginTop: 5 }}>* current week - source slot is never overwritten</div>
               </div>
               )}
 
@@ -809,7 +809,7 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
         .select('id').single();
       if (!newProg) {
         setSaving(false);
-        setSaveError(err?.message || 'Could not create programme — are you logged in as a trainer?');
+        setSaveError(err?.message || 'Could not create programme - are you logged in as a trainer?');
         return;
       }
       progId = newProg.id;
@@ -957,7 +957,7 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
           marginBottom: 18,
         }}>+ ADD PHASE</button>
 
-        {/* Live phase-split preview — updates as phases/weeks change */}
+        {/* Live phase-split preview - updates as phases/weeks change */}
         {phases.length > 0 && (
           <div className="card" style={{ padding: 14, marginBottom: 18 }}>
             <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: '0.12em', fontWeight: 600, marginBottom: 10 }}>// PHASE SPLIT</div>
@@ -1070,7 +1070,7 @@ function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSet
         <textarea
           value={s.intro || ''}
           onChange={e => onIntro(e.target.value)}
-          placeholder={`Shown to the client on the "next up: ${s.title}" slide between blocks — cues, focus, or encouragement…`}
+          placeholder={`Shown to the client on the "next up: ${s.title}" slide between blocks - cues, focus, or encouragement…`}
           rows={2}
           style={{
             width: '100%', boxSizing: 'border-box', marginBottom: 10,
@@ -1266,7 +1266,7 @@ function IconPickerSheet({ current, kind, color, onPick, onClose }) {
                 placeholder={'<svg viewBox="0 0 24 24">\n  <path d="…" />\n</svg>'}
                 style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 8, color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 11, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'vertical' }} />
               {raw.trim() && !safe && (
-                <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)', marginTop: 6 }}>Not a valid SVG — check the markup.</div>
+                <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)', marginTop: 6 }}>Not a valid SVG - check the markup.</div>
               )}
               <button onClick={() => safe && onPick(raw)} disabled={!safe} className="btn-primary"
                 style={{ width: '100%', marginTop: 12, opacity: safe ? 1 : 0.4, pointerEvents: safe ? 'auto' : 'none' }}>
@@ -1313,7 +1313,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
             <Toggle on={e.timed} onChange={v => onUpdateEx({ timed: v })}/>
           </div>
 
-          {/* Banded mode — track a band colour instead of weight */}
+          {/* Banded mode - track a band colour instead of weight */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
             <div>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>BANDED</div>
@@ -1322,7 +1322,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
             <Toggle on={e.banded} onChange={v => onUpdateEx({ banded: v })}/>
           </div>
 
-          {/* Unilateral — done one side at a time */}
+          {/* Unilateral - done one side at a time */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
             <div>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>EACH SIDE</div>
@@ -1388,7 +1388,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
             </div>
           </div>
 
-          {/* Alternates — swap options the client can switch to */}
+          {/* Alternates - swap options the client can switch to */}
           <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600, marginBottom: 8 }}>ALTERNATES <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· client can swap to these</span></div>
             <div style={{ display: 'grid', gap: 6 }}>
@@ -1440,9 +1440,9 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
         {timed ? <CellVal value={fmtSecs(st.time)}/>
           : banded ? (bandCol
               ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: bandCol.color, border: '1px solid rgba(255,255,255,0.35)', flexShrink: 0 }}/><span className="mono" style={{ fontSize: 9, color: 'var(--text-2)', fontWeight: 700 }}>{bandCol.short}</span></span>
-              : <CellVal value="—"/>)
+              : <CellVal value="-"/>)
           : <CellVal value={st.weight ? `${st.weight}` : 'BW'} unit={st.weight ? 'kg' : null}/>}
-        {timed ? <CellVal value={st.weight ? `${st.weight}` : '—'} unit={st.weight ? 'kg' : null}/> : <CellVal value={`× ${st.repsText||0}`}/>}
+        {timed ? <CellVal value={st.weight ? `${st.weight}` : '-'} unit={st.weight ? 'kg' : null}/> : <CellVal value={`× ${st.repsText||0}`}/>}
         <CellVal value={fmtSecs(st.rest)}/>
         <span style={{ width: 22, height: 20, borderRadius: 4, display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${intensityColor(st.intensity)} 18%, transparent)`, color: intensityColor(st.intensity), fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 10, border: `1px solid color-mix(in srgb, ${intensityColor(st.intensity)} 40%, transparent)` }}>{st.intensity}</span>
         <div style={{ color: 'var(--text-3)', transform: expanded?'rotate(90deg)':'rotate(0)', transition: 'transform .2s', display: 'grid', placeItems: 'center' }}><IconChevronRight size={11}/></div>
@@ -1682,7 +1682,7 @@ function CellVal({ value, unit }) {
   );
 }
 
-// Per-phase cover photo — drag/drop or tap; uploads to the public workout-photos
+// Per-phase cover photo - drag/drop or tap; uploads to the public workout-photos
 // bucket and returns a URL stored on the phase.
 function PhaseCover({ trainerId, url, onChange }) {
   const [busy, setBusy] = React.useState(false);
@@ -1693,7 +1693,7 @@ function PhaseCover({ trainerId, url, onChange }) {
     const { url: u, error } = await uploadWorkoutPhoto(trainerId, file);
     setBusy(false);
     if (u) { onChange(u); toast('Cover photo added'); }
-    else { toast('Upload failed — please try again', { kind: 'error' }); }
+    else { toast('Upload failed - please try again', { kind: 'error' }); }
   };
   if (url) {
     return (
@@ -1855,24 +1855,24 @@ function randId() { return 's'+Math.random().toString(36).slice(2); }
 
 function summarize(e) {
   const work = e.setsList.filter(s => !s.kind || s.kind === 'WORK' || s.kind === 'DROPSET' || s.kind === 'FAILURE' || s.kind === 'PARTIAL');
-  if (work.length===0) return '—';
+  if (work.length===0) return '-';
   const w = uniqueRange(work.map(s => s.weight));
   const side = e.unilateral ? '/side' : '';
   if (e.timed) { const t = uniqueRange(work.map(s => s.time), fmtSecs); return `${t}${side}${w!=='0'?' · '+w+'kg':''}`; }
-  const repsVal = work[0]?.repsText || '—';
+  const repsVal = work[0]?.repsText || '-';
   if (e.banded) { const b = bandOf(work[0]?.band); return `${b ? b.short : 'BAND'} × ${repsVal}${side}`; }
   return `${w==='0'?'BW':w+'kg'} × ${repsVal}${side}`;
 }
 
 function uniqueRange(arr, fmt=String) {
   const nums = arr.filter(v => typeof v==='number' && !isNaN(v));
-  if (nums.length===0) return '—';
+  if (nums.length===0) return '-';
   const mn=Math.min(...nums), mx=Math.max(...nums);
   return mn===mx ? fmt(mn) : `${fmt(mn)}–${fmt(mx)}`;
 }
 
 function fmtSecs(s) {
-  if (s==null) return '—';
+  if (s==null) return '-';
   if (s<60) return `${s}s`;
   const m=Math.floor(s/60), r=s%60;
   return r===0 ? `${m}m` : `${m}m${String(r).padStart(2,'0')}`;

@@ -28,7 +28,7 @@ export class ErrorBoundary extends React.Component {
           }}>!</div>
           <div className="h-bold" style={{ fontSize: 18, marginBottom: 8 }}>SOMETHING WENT WRONG</div>
           <div className="mono" style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 18 }}>
-            This screen hit an error. Your workout progress is saved — reload to carry on.
+            This screen hit an error. Your workout progress is saved - reload to carry on.
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
             <button onClick={() => window.location.reload()} className="btn-primary" style={{ width: '100%', color: 'var(--heading-deep)' }}>RELOAD</button>

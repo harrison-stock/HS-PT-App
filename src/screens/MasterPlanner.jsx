@@ -14,7 +14,7 @@ const IMG_FALLBACK = 'https://images.unsplash.com/photo-1599058917212-d750089bc0
 
 const fmtSecs = (s) => {
   s = parseInt(s) || 0;
-  if (!s) return '—';
+  if (!s) return '-';
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 const parseClock = (v) => {
@@ -26,7 +26,7 @@ const parseClock = (v) => {
 
 const SELECT = 'id, phase_id, week_index, day_of_week, intro, workout_sections(id, title, kind, sort_order, section_exercises(id, name, img_url, timed, banded, unilateral, alternates, superset_group, sort_order, exercise_sets(id, set_index, kind, reps_text, reps, weight_kg, band, rest_secs, time_secs)))';
 
-// Master Planner — every day of the programme pulled out at once, fully editable
+// Master Planner - every day of the programme pulled out at once, fully editable
 // inline. Two layouts: same day across all weeks ("Week by Week"), or all seven
 // days of one week ("Day by Day").
 export function MasterPlanner({ programme, onClose, onPickDay }) {
@@ -273,7 +273,7 @@ function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercis
   );
 }
 
-// Compact band cell — tap the swatch to cycle through band levels.
+// Compact band cell - tap the swatch to cycle through band levels.
 function BandCycle({ band, onChange }) {
   const b = bandOf(band);
   const next = () => {
@@ -294,7 +294,7 @@ function BandCycle({ band, onChange }) {
 function Cell({ value, format, onCommit }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState('');
-  const display = format ? format(value) : (value === '' || value == null ? '—' : value);
+  const display = format ? format(value) : (value === '' || value == null ? '-' : value);
   if (editing) {
     return (
       <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}

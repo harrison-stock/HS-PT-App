@@ -12,7 +12,7 @@ import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 };
 
-// Distinct brand colour per muscle — only used to highlight a *clicked* muscle;
+// Distinct brand colour per muscle - only used to highlight a *clicked* muscle;
 // the heatmap itself stays a single accent hue.
 const MUSCLE_TINT = {
   chest: '#3F84D9', upperBack: '#F39E1F', lats: '#F39E1F', lowerBack: '#F39E1F', traps: '#F39E1F', neck: '#F39E1F',
@@ -23,7 +23,7 @@ const MUSCLE_TINT = {
 
 const labelFor = (g) => REGION_LABELS[g] || MUSCLE_LABELS[g] || g.replace(/([A-Z])/g, ' $1').trim();
 
-// Client-facing Body Map — fifth tab. Two views: muscles worked (volume
+// Client-facing Body Map - fifth tab. Two views: muscles worked (volume
 // heatmap) and injuries (report / resolve / history).
 export function Body({ userId, trainerId, go }) {
   const [view, setView] = React.useState('worked');
@@ -36,14 +36,14 @@ export function Body({ userId, trainerId, go }) {
         <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>MUSCLE HEATMAP</div>
       </div>
 
-      {/* View switch — sliding segmented */}
+      {/* View switch - sliding segmented */}
       <div style={{ marginBottom: 10 }}>
         <Segmented value={view} onChange={setView} width="100%"
           options={[{ value: 'worked', label: 'MUSCLES WORKED' }, { value: 'injuries', label: 'INJURIES' }]}
           color={view === 'injuries' ? 'var(--c-coral)' : 'var(--accent)'} />
       </div>
 
-      {/* Front / back — compact sliding toggle */}
+      {/* Front / back - compact sliding toggle */}
       <div style={{ marginBottom: 12 }}>
         <SideSlider side={side} onChange={setSide} />
       </div>

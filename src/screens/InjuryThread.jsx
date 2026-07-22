@@ -84,7 +84,7 @@ export function InjuryThread({ injury, authorId, onBack, onChanged }) {
       {adding ? (
         <div style={{ display: 'grid', gap: 8 }}>
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} autoFocus
-            placeholder="Add an update — how it feels, progress, what your physio said…"
+            placeholder="Add an update - how it feels, progress, what your physio said…"
             style={{
               width: '100%', boxSizing: 'border-box', background: 'var(--bg-3)',
               border: '1px solid var(--line-strong)', borderRadius: 8, padding: '10px 11px',

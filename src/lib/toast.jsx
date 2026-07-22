@@ -1,7 +1,7 @@
 import React from 'react'
 import { Hex } from '../components/hex'
 
-// Tiny global toast bus — no dependencies, no context wiring at call sites.
+// Tiny global toast bus - no dependencies, no context wiring at call sites.
 // Call `toast('Saved')` from anywhere; mount a single <ToastHost/> in App.
 let seq = 0;
 const listeners = new Set();

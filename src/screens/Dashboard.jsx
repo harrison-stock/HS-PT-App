@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { HEX_RATIO, HexShape, Hex } from '../components/hex'
 import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc, IconChevronRight } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
+import { setTaskComplete } from '../lib/tasks'
 import { FormFill } from './FormFill'
 import { ProgrammeReport } from './ProgrammeReport'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
@@ -113,15 +114,13 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
 
   const toggleTask = async (t) => {
     if (t.kind === 'form' && !t.done) { setFormTask(t); return; }
-    await supabase.from('client_tasks')
-      .update({ completed_at: t.done ? null : new Date().toISOString() })
-      .eq('id', t.id);
+    await setTaskComplete(t.id, !t.done);
     if (!t.done && trainerId) notify({ recipientId: trainerId, actorId: userId, kind: 'task', title: `${firstName} completed a task`, body: t.title, link: { screen: 'coach' } });
     loadTasks();
   };
 
   const onFormSubmitted = async (t) => {
-    await supabase.from('client_tasks').update({ completed_at: new Date().toISOString() }).eq('id', t.id);
+    await setTaskComplete(t.id, true);
     if (trainerId) notify({ recipientId: trainerId, actorId: userId, kind: 'form', title: `${firstName} submitted a form`, body: t.title, link: { screen: 'coach' } });
     loadTasks();
   };
@@ -197,7 +196,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
         </div>
       </div>
 
-      {/* Week schedule strip — today highlighted, dots mark sessions */}
+      {/* Week schedule strip - today highlighted, dots mark sessions */}
       <WeekStrip userId={userId} go={go} />
 
       {/* Today's workout hero */}
@@ -272,7 +271,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       {/* Tasks */}
       <TasksSection tasks={tasks} onToggle={toggleTask} go={go} />
 
-      {/* Programme roadmap — tap through to the progress report */}
+      {/* Programme roadmap - tap through to the progress report */}
       <ProgrammeRoadmap userId={userId} onOpen={() => setShowReport(true)} />
       {showReport && (
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column',
@@ -283,7 +282,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
         </div>
       )}
 
-      {/* At-a-glance training strip (7/30-day) — taps through to Progress */}
+      {/* At-a-glance training strip (7/30-day) - taps through to Progress */}
       <TrainingStrip userId={userId} onOpen={() => go('progress')} />
 
       {/* Goal set by the coach */}
@@ -390,37 +389,57 @@ function WeekStrip({ userId, go }) {
 }
 
 // ── TRAINING STRIP (at-a-glance) ─────────────────────────────────
+// Three stats: 4-week compliance, sessions in the last 30 days, and total
+// volume lifted (kg) over the same window.
 function TrainingStrip({ userId, onOpen }) {
   const [s, setS] = React.useState(null);
   React.useEffect(() => {
-    if (!userId) { setS({ w7: 0, w30: 0 }); return; }
-    const d7  = new Date(Date.now() - 7 * 86400000).toISOString();
-    const d30 = new Date(Date.now() - 30 * 86400000).toISOString();
-    supabase.from('workout_sessions')
-      .select('completed_at')
-      .eq('client_id', userId)
-      .not('completed_at', 'is', null)
-      .gte('completed_at', d30)
-      .then(({ data }) => {
-        const rows = data || [];
-        setS({ w30: rows.length, w7: rows.filter(r => r.completed_at >= d7).length });
-      });
+    if (!userId) { setS({ compliance: null, w30: 0, kg: 0 }); return; }
+    let alive = true;
+    (async () => {
+      const d30    = new Date(Date.now() - 30 * 86400000).toISOString();
+      const today  = new Date().toISOString().slice(0, 10);
+      const since28 = new Date(Date.now() - 28 * 86400000).toISOString().slice(0, 10);
+      const [{ data: sess }, { data: sched }] = await Promise.all([
+        supabase.from('workout_sessions')
+          .select('completed_at, logged_sets(actual_reps, actual_weight_kg)')
+          .eq('client_id', userId).not('completed_at', 'is', null).gte('completed_at', d30),
+        supabase.from('client_workouts')
+          .select('status, scheduled_date')
+          .eq('client_id', userId).gte('scheduled_date', since28).lte('scheduled_date', today).neq('status', 'skipped'),
+      ]);
+      if (!alive) return;
+      const rows = sess || [];
+      const kg = rows.reduce((tot, r) => tot + (r.logged_sets || []).reduce((n, ls) =>
+        n + (Number(ls.actual_weight_kg) || 0) * (Number(ls.actual_reps) || 0), 0), 0);
+      const total = (sched || []).length;
+      const done  = (sched || []).filter(r => r.status === 'completed').length;
+      setS({ w30: rows.length, kg: Math.round(kg), compliance: total > 0 ? Math.round((done / total) * 100) : null });
+    })();
+    return () => { alive = false; };
   }, [userId]);
 
-  const Cell = ({ label, value }) => (
-    <div style={{ flex: 1, textAlign: 'center', padding: '12px 6px' }}>
-      <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--text-3)', marginBottom: 6 }}>{label}</div>
-      <div className="h-bold" style={{ fontSize: 22, color: 'var(--accent)', lineHeight: 1 }}>{s ? value : '—'}</div>
-      <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.1em', marginTop: 4 }}>SESSIONS</div>
+  const fmtKg = (v) => v >= 1000 ? v.toLocaleString('en-GB') : String(v);
+  const compColor = s?.compliance == null ? 'var(--text-3)'
+    : s.compliance >= 80 ? 'var(--accent)' : s.compliance >= 50 ? 'var(--c-amber)' : 'var(--c-coral)';
+
+  const Cell = ({ label, value, sub, color }) => (
+    <div style={{ flex: 1, minWidth: 0, textAlign: 'center', padding: '12px 6px' }}>
+      <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--text-3)', marginBottom: 6 }}>{label}</div>
+      <div className="h-bold" style={{ fontSize: 21, color: color || 'var(--accent)', lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s ? value : '-'}</div>
+      <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.1em', marginTop: 4 }}>{sub}</div>
     </div>
   );
+  const Div = () => <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--line)' }}/>;
   return (
     <button onClick={onOpen} style={{ all: 'unset', cursor: onOpen ? 'pointer' : 'default', display: 'block' }}>
       <div className={onOpen ? 'card tappable' : 'card'} style={{ padding: 0, display: 'flex', alignItems: 'center' }}>
-        <Cell label="LAST 7 DAYS"  value={s?.w7} />
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--line)' }}/>
-        <Cell label="LAST 30 DAYS" value={s?.w30} />
-        {onOpen && <IconChevronRight size={14} style={{ color: 'var(--text-3)', marginRight: 12, flexShrink: 0 }}/>}
+        <Cell label="COMPLIANCE" value={s?.compliance != null ? `${s.compliance}%` : '-'} sub="4 WEEKS" color={compColor} />
+        <Div />
+        <Cell label="LAST 30 DAYS" value={s?.w30} sub="SESSIONS" />
+        <Div />
+        <Cell label="TOTAL KG" value={s ? fmtKg(s.kg) : '-'} sub="LIFTED · 30D" color="var(--c-amber)" />
+        {onOpen && <IconChevronRight size={14} style={{ color: 'var(--text-3)', marginRight: 10, flexShrink: 0 }}/>}
       </div>
     </button>
   );
@@ -630,7 +649,7 @@ async function loadRoadmap(userId) {
   const main = Object.values(progMap).sort((a, b) => (b.lastDate || '').localeCompare(a.lastDate || ''))[0];
   if (!main) return null;
 
-  // Pull the full phase list for the programme so upcoming phases show too —
+  // Pull the full phase list for the programme so upcoming phases show too -
   // the roadmap reflects the assigned programme's structure, not just the
   // days that happen to have workouts.
   const { data: allPhases } = await supabase

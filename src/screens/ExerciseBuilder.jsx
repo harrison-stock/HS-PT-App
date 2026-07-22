@@ -100,7 +100,7 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
 
             <Section label="MUSCLES WORKED">
               <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.04em', marginBottom: 2 }}>
-                Select every muscle this exercise trains — these light up the client's muscle map &amp; volume.
+                Select every muscle this exercise trains - these light up the client's muscle map &amp; volume.
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {ALL_MUSCLES.map(m => {
@@ -123,7 +123,7 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
 
-              {/* Banded movement toggle — collects a band colour instead of weight */}
+              {/* Banded movement toggle - collects a band colour instead of weight */}
               <button onClick={() => set({ banded: !d.banded })} style={{
                 all: 'unset', cursor: 'pointer', marginTop: 10,
                 display: 'flex', alignItems: 'center', gap: 12, padding: '12px',
@@ -148,7 +148,7 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
                 </div>
               </button>
 
-              {/* Unilateral toggle — done one side at a time */}
+              {/* Unilateral toggle - done one side at a time */}
               <button onClick={() => set({ unilateral: !d.unilateral })} style={{
                 all: 'unset', cursor: 'pointer', marginTop: 10,
                 display: 'flex', alignItems: 'center', gap: 12, padding: '12px',
@@ -168,7 +168,7 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: d.unilateral ? 'var(--accent)' : 'var(--text)' }}>One side at a time</div>
                   <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.04em', marginTop: 2, lineHeight: 1.4 }}>
-                    Unilateral — reps are shown per side with an "EACH SIDE" badge
+                    Unilateral - reps are shown per side with an "EACH SIDE" badge
                   </div>
                 </div>
               </button>
@@ -228,7 +228,7 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
             </div>
           </div>
 
-          {/* RIGHT — Media */}
+          {/* RIGHT - Media */}
           <div style={{ flex: '1 1 320px', minWidth: 0, display: 'grid', gap: 18 }}>
             <div className="h-bold" style={{ fontSize: 18 }}>MEDIA</div>
 
@@ -291,7 +291,7 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
                 border: `1px solid color-mix(in srgb, var(--c-coral) ${confirmDel ? 60 : 35}%, var(--line))`,
                 color: confirmDel ? 'var(--c-coral)' : 'var(--text-3)',
                 fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
-              }}>{confirmDel ? 'CONFIRM DELETE — TAP AGAIN' : 'DELETE EXERCISE'}</button>
+              }}>{confirmDel ? 'CONFIRM DELETE - TAP AGAIN' : 'DELETE EXERCISE'}</button>
             )}
           </div>
         </div>
@@ -330,7 +330,7 @@ function DropRow({ label, value, options, onChange }) {
       padding: '12px 14px', borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--line)', cursor: 'pointer',
     }}>
       <span className="mono" style={{ fontSize: 12, color: 'var(--text-3)', flexShrink: 0 }}>{label}:</span>
-      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{value || '—'}</span>
+      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{value || '-'}</span>
       <span style={{ color: 'var(--text-3)' }}>▾</span>
       <select value={value} onChange={e => onChange(e.target.value)}
         style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}>

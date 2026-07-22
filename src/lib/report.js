@@ -8,7 +8,7 @@ import { muscleGroupsFor } from './muscleVolume'
 
 const DAY = 86_400_000;
 const dateOnly = (iso) => new Date(new Date(iso).toISOString().slice(0, 10));
-// Epley estimated 1-rep-max — a fair single number to compare sets across weeks.
+// Epley estimated 1-rep-max - a fair single number to compare sets across weeks.
 export const e1rm = (w, r) => (w > 0 && r > 0 ? w * (1 + r / 30) : 0);
 
 // Programmes this client has actually logged sessions against, newest last.

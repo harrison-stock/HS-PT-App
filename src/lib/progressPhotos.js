@@ -3,7 +3,7 @@ import { supabase } from './supabase'
 const BUCKET = 'progress-photos';
 
 // Loads a client's photos grouped by date, newest first, with signed URLs
-// (the bucket is private — clients see their own, trainers their clients').
+// (the bucket is private - clients see their own, trainers their clients').
 export async function loadPhotoHistory(clientId) {
   const { data: rows } = await supabase
     .from('progress_photos')

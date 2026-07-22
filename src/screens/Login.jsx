@@ -31,7 +31,7 @@ export function Login() {
         body: { email: addr, redirectTo: window.location.origin },
       })
       if (!fnErr && data && !data.error) {
-        setResetMsg(`If an account exists for ${addr}, a reset link is on its way — check your inbox (and spam).`)
+        setResetMsg(`If an account exists for ${addr}, a reset link is on its way - check your inbox (and spam).`)
         setResetting(false)
         return
       }
@@ -207,7 +207,7 @@ export function Login() {
   )
 }
 
-// Set-password screen — shown after an invite/recovery email link (the user has
+// Set-password screen - shown after an invite/recovery email link (the user has
 // a session but no usable password yet). Also used by the coach's reset flow.
 export function SetPassword({ onDone, onSignOut }) {
   const [pw, setPw] = React.useState('')
