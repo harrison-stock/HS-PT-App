@@ -17,7 +17,6 @@ import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { ImportHistory } from './ImportHistory'
 import { toast } from '../lib/toast'
-import { parseCronometerDaily, saveNutritionLogs, loadNutritionSummary } from '../lib/nutrition'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
 import { Skel } from '../components/Loading'
@@ -234,131 +233,6 @@ function AdherenceCard({ clientId }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ── NUTRITION (Cronometer import) ────────────────────────────────
-// Coach imports a client's "Daily Nutrition" CSV from Cronometer Pro; we
-// surface protein/calorie averages, a 14-day protein sparkline, and days
-// since last log. Also lets the coach set a protein target for adherence.
-function NutritionCard({ c }) {
-  const [sum, setSum] = React.useState(undefined);
-  const [target, setTarget] = React.useState(null);
-  const [busy, setBusy] = React.useState(false);
-  const [editTarget, setEditTarget] = React.useState(false);
-  const [targetInput, setTargetInput] = React.useState('');
-  const table = c.managed ? 'managed_clients' : 'profiles';
-
-  const refresh = React.useCallback(async () => {
-    const { data } = await supabase.from(table).select('protein_target_g').eq('id', c.id).maybeSingle();
-    const t = data?.protein_target_g ?? null;
-    setTarget(t);
-    setTargetInput(t != null ? String(t) : '');
-    setSum(await loadNutritionSummary(c.id, 56, t));
-  }, [c.id, table]);
-
-  React.useEffect(() => { refresh(); }, [refresh]);
-
-  const onImport = async (files) => {
-    const file = files[0];
-    if (!file) return;
-    setBusy(true);
-    try {
-      const text = await file.text();
-      const { rows, error } = parseCronometerDaily(text);
-      if (error) { toast(error, { kind: 'error' }); return; }
-      const { count, error: saveErr } = await saveNutritionLogs(c.id, rows);
-      if (saveErr) { toast('Could not save nutrition data', { kind: 'error' }); return; }
-      toast(`Imported ${count} day${count === 1 ? '' : 's'} of nutrition`);
-      await refresh();
-    } finally { setBusy(false); }
-  };
-
-  const saveTarget = async () => {
-    const v = parseInt(targetInput) || null;
-    await supabase.from(table).update({ protein_target_g: v }).eq('id', c.id);
-    setEditTarget(false);
-    refresh();
-  };
-
-  if (sum === undefined) return null;
-  const hasData = sum && sum.loggedDays > 0;
-  const stale = sum?.daysSince != null && sum.daysSince >= 7;
-
-  // 14-day protein sparkline
-  const last14 = (sum?.rows || []).slice(-14);
-  const maxP = Math.max(target || 0, ...last14.map(r => r.protein_g || 0), 1);
-
-  return (
-    <div className="card" style={{ padding: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: hasData ? 12 : 8 }}>
-        <div className="label">// NUTRITION · CRONOMETER</div>
-        {hasData && (
-          <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.08em', fontWeight: 700, color: stale ? 'var(--c-coral)' : 'var(--text-3)' }}>
-            {sum.daysSince === 0 ? 'LOGGED TODAY' : `LAST LOG ${sum.daysSince}D AGO`}
-          </span>
-        )}
-      </div>
-
-      {hasData ? (
-        <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <NutStat label="AVG PROTEIN" value={sum.avgProtein != null ? `${sum.avgProtein}g` : '—'} color="var(--c-amber)" />
-            <NutStat label="AVG CALORIES" value={sum.avgKcal != null ? sum.avgKcal : '—'} color="var(--c-blue)" divider />
-            <NutStat label={target ? 'PROT. ADHERENCE' : 'DAYS LOGGED'}
-              value={target ? (sum.proteinAdherence != null ? `${sum.proteinAdherence}%` : '—') : sum.loggedDays}
-              color={target && sum.proteinAdherence != null ? (sum.proteinAdherence >= 80 ? 'var(--accent)' : sum.proteinAdherence >= 50 ? 'var(--c-amber)' : 'var(--c-coral)') : 'var(--accent)'}
-              divider />
-          </div>
-
-          {/* 14-day protein sparkline vs target */}
-          <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: 40, marginBottom: 4 }}>
-            {last14.map((r, i) => {
-              const p = r.protein_g || 0;
-              const hit = target ? p >= target * 0.9 : true;
-              return (
-                <div key={i} style={{ flex: 1, height: `${Math.max((p / maxP) * 100, 4)}%`, borderRadius: 3,
-                  background: p === 0 ? 'var(--track)' : hit ? 'var(--c-amber)' : 'color-mix(in srgb, var(--c-amber) 40%, var(--track))' }} />
-              );
-            })}
-          </div>
-          <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.06em', marginBottom: 12 }}>
-            PROTEIN · LAST {last14.length} LOGGED DAYS{target ? ` · TARGET ${target}g` : ''}
-          </div>
-        </>
-      ) : (
-        <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 12 }}>
-          No nutrition imported yet. In Cronometer Pro, export {c.name.split(' ')[0]}’s data → <strong style={{ color: 'var(--text-2)' }}>Daily Nutrition</strong> (CSV), then drop it below.
-        </div>
-      )}
-
-      {/* Protein target control */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em' }}>PROTEIN TARGET</span>
-        {editTarget ? (
-          <>
-            <input value={targetInput} onChange={e => setTargetInput(e.target.value.replace(/[^\d]/g, ''))} inputMode="numeric" placeholder="g/day"
-              style={{ width: 66, boxSizing: 'border-box', background: 'var(--bg-3)', border: '1px solid var(--line-strong)', borderRadius: 7, padding: '6px 8px', color: 'var(--text)', outline: 'none', fontFamily: 'JetBrains Mono', fontSize: 12 }}/>
-            <button onClick={saveTarget} className="mono" style={{ all: 'unset', cursor: 'pointer', fontSize: 9, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.08em' }}>SAVE</button>
-          </>
-        ) : (
-          <button onClick={() => setEditTarget(true)} className="mono" style={{ all: 'unset', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: target ? 'var(--text)' : 'var(--accent)' }}>
-            {target ? `${target}g/DAY · EDIT` : 'SET A TARGET'}
-          </button>
-        )}
-      </div>
-
-      <FileDrop onFiles={onImport} accept=".csv,text/csv" busy={busy} label={hasData ? 'IMPORT AN UPDATED CSV' : 'DROP CRONOMETER CSV'} hint="Daily Nutrition export" />
-    </div>
-  );
-}
-
-function NutStat({ label, value, color, divider }) {
-  return (
-    <div style={{ flex: 1, paddingLeft: divider ? 8 : 0, borderLeft: divider ? '1px solid var(--line)' : 'none' }}>
-      <div className="h-bold" style={{ fontSize: 18, color, lineHeight: 1 }}>{value}</div>
-      <div className="mono" style={{ fontSize: 7.5, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 4 }}>{label}</div>
     </div>
   );
 }
@@ -654,7 +528,6 @@ function OverviewTab({ c, go, onClose, onTab }) {
       {/* Programme roadmap with phase milestones */}
       <ProgrammeProgressCard clientId={c.id} onTab={onTab} />
       <AdherenceCard clientId={c.id} />
-      <NutritionCard c={c} />
 
       {/* Profile */}
       <div className="card" style={{ padding: 14 }}>

@@ -9,13 +9,26 @@ import { notify } from '../lib/notifications'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
 import { SkeletonCard, EmptyState } from '../components/Loading'
-import { loadLastNutritionDays } from '../lib/nutrition'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
 // Stable, well-spread colour per client — hashing the whole id (not just the
 // first letter, which clustered same-initial names onto one colour).
 const hashStr = (s) => { let h = 0; for (let i = 0; i < (s || '').length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0; return h; };
 const accentFor = (key) => CLIENT_ACCENTS[hashStr(key) % CLIENT_ACCENTS.length];
+
+// Assign avatar colours across a roster so no two *visible* clients share one
+// (a per-id hash alone still collides). Each client starts at its stable hash
+// colour, then bumps to the next free slot if taken — so up to 7 clients are
+// always distinct, and colours stay stable as long as the roster is unchanged.
+function assignAccents(list) {
+  const used = new Set();
+  return list.map((c) => {
+    let idx = hashStr(c.id || c.name) % CLIENT_ACCENTS.length;
+    for (let t = 0; t < CLIENT_ACCENTS.length && used.has(idx); t++) idx = (idx + 1) % CLIENT_ACCENTS.length;
+    used.add(idx);
+    return { ...c, accent: CLIENT_ACCENTS[idx] };
+  });
+}
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 function computeStreak(daysSet, lastDate) {
@@ -116,7 +129,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     ]);
     const real    = (profiles || []).map(shapeClient);
     const pending = (managed  || []).map(shapeManagedClient);
-    setArchivedClients((archived || []).map(shapeClient));
+    setArchivedClients(assignAccents((archived || []).map(shapeClient)));
 
     // Batch-load session stats for real clients
     if (real.length > 0) {
@@ -152,10 +165,6 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
         c.compliance = b && b.total > 0 ? Math.round((b.done / b.total) * 100) : null;
       });
 
-      // Days since each client's last imported nutrition log (for the digest).
-      const nutDays = await loadLastNutritionDays(ids);
-      real.forEach(c => { c.nutritionDays = nutDays[c.id] ?? null; });
-
       const week7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const statsByClient = {};
       ids.forEach(id => { statsByClient[id] = { sessionsThisWeek: 0, days: new Set(), lastDate: null }; });
@@ -181,7 +190,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
       });
     }
 
-    setClients([...real, ...pending]);
+    setClients(assignAccents([...real, ...pending]));
     setLoadingClients(false);
   };
 
@@ -653,10 +662,6 @@ function buildDigest(clients) {
     // Low adherence over the 4-week window.
     if (c.compliance != null && c.compliance < 50) {
       items.push({ id: c.id, sev: 2, tab: null, name: c.name, msg: `4-week adherence down at ${c.compliance}%` });
-    }
-    // Nutrition gone quiet — only flag clients who've logged before.
-    if (c.nutritionDays != null && c.nutritionDays >= 7) {
-      items.push({ id: c.id, sev: 2, tab: null, name: c.name, msg: `no nutrition logged in ${c.nutritionDays} days` });
     }
   }
   // Highest severity first; keep it digestible.
