@@ -143,14 +143,16 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
             </FieldLabel>
           </div>
           <FieldLabel label="PHOTO (OPTIONAL)">
-            {d.img
-              ? (
-                <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', aspectRatio: '16/9', background: `url('${d.img}') center/cover, var(--bg-3)` }}>
-                  <button onClick={() => set({ img: '' })} aria-label="Remove photo" style={{ all: 'unset', cursor: 'pointer', position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'rgba(10,15,20,0.7)', color: '#fff' }}><IconX2 size={13}/></button>
-                </div>
-              )
-              : <FileDrop onFiles={uploadImg} accept="image/*" busy={imgBusy} label="DRAG & DROP OR TAP TO ADD A PHOTO" hint="JPG / PNG" />}
-            <input value={d.img} onChange={e => set({ img: e.target.value })} placeholder="…or paste an image URL" style={{ ...fieldSt, marginTop: 8 }}/>
+            <div style={{ maxWidth: 260 }}>
+              {d.img
+                ? (
+                  <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', aspectRatio: '4/3', background: `url('${d.img}') center/cover, var(--bg-3)` }}>
+                    <button onClick={() => set({ img: '' })} aria-label="Remove photo" style={{ all: 'unset', cursor: 'pointer', position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'rgba(10,15,20,0.7)', color: '#fff' }}><IconX2 size={13}/></button>
+                  </div>
+                )
+                : <FileDrop onFiles={uploadImg} accept="image/*" busy={imgBusy} label="TAP TO ADD A PHOTO" hint="JPG / PNG" />}
+            </div>
+            <input value={d.img} onChange={e => set({ img: e.target.value })} placeholder="…or paste an image URL" style={{ ...fieldSt, marginTop: 8, maxWidth: 260 }}/>
           </FieldLabel>
         </Section>
 
