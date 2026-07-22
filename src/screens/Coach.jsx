@@ -9,6 +9,7 @@ import { notify } from '../lib/notifications'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
 import { SkeletonCard, EmptyState } from '../components/Loading'
+import { loadLastNutritionDays } from '../lib/nutrition'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
 // Stable, well-spread colour per client — hashing the whole id (not just the
@@ -150,6 +151,10 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
         const b = compBy[c.id];
         c.compliance = b && b.total > 0 ? Math.round((b.done / b.total) * 100) : null;
       });
+
+      // Days since each client's last imported nutrition log (for the digest).
+      const nutDays = await loadLastNutritionDays(ids);
+      real.forEach(c => { c.nutritionDays = nutDays[c.id] ?? null; });
 
       const week7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const statsByClient = {};
@@ -648,6 +653,10 @@ function buildDigest(clients) {
     // Low adherence over the 4-week window.
     if (c.compliance != null && c.compliance < 50) {
       items.push({ id: c.id, sev: 2, tab: null, name: c.name, msg: `4-week adherence down at ${c.compliance}%` });
+    }
+    // Nutrition gone quiet — only flag clients who've logged before.
+    if (c.nutritionDays != null && c.nutritionDays >= 7) {
+      items.push({ id: c.id, sev: 2, tab: null, name: c.name, msg: `no nutrition logged in ${c.nutritionDays} days` });
     }
   }
   // Highest severity first; keep it digestible.
