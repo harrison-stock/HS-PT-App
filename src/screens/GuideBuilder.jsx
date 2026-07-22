@@ -1,18 +1,19 @@
 import React from 'react'
 import { Hex, HexBackButton } from '../components/hex'
-import { IconCheck, IconPlay } from '../components/icons'
+import { IconCheck, IconPlay, IconDoc } from '../components/icons'
 import { GUIDE_KINDS, GUIDE_CATEGORIES, saveGuide, deleteGuide, uploadGuideImage } from '../lib/guides'
 import { videoThumb } from '../lib/exercises'
 import { FileDrop } from '../components/FileDrop'
 import { toast } from '../lib/toast'
 
-const emptyDraft = () => ({ id: null, title: '', kind: 'ARTICLE', category: 'TECHNIQUE', minutes: '', img: '', video: '', link: '', body: '' });
+const emptyDraft = () => ({ id: null, title: '', kind: 'ARTICLE', category: 'TECHNIQUE', minutes: '', img: '', video: '', link: '', body: '', file: '', fileName: '' });
 
 // Coach guide/article/video builder (mirrors the recipe maker).
 export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
   const [d, setD] = React.useState(() => guide ? { ...emptyDraft(), ...guide, minutes: String(guide.minutes || '') } : emptyDraft());
   const [saving, setSaving] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
+  const [uploadingFile, setUploadingFile] = React.useState(false);
   const [confirmDel, setConfirmDel] = React.useState(false);
   const imgInput = React.useRef(null);
 
@@ -43,6 +44,15 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
     setUploading(false);
     if (url) set({ img: url });
     else alert('Image upload failed — please try again.' + (error?.message ? `\n\n${error.message}` : ''));
+  };
+  const pickFile = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    setUploadingFile(true);
+    const { url, error } = await uploadGuideImage(trainerId, file);
+    setUploadingFile(false);
+    if (url) set({ file: url, fileName: file.name });
+    else { toast('File upload failed', { kind: 'error' }); alert('File upload failed — please try again.' + (error?.message ? `\n\n${error.message}` : '')); }
   };
 
   return (
@@ -107,6 +117,19 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
                 <button onClick={() => set({ img: '' })} className="btn-ghost" style={{ width: '100%', marginTop: 8, fontSize: 11, color: 'var(--c-coral)', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line-strong))' }}>
                   REMOVE IMAGE
                 </button>
+              )}
+            </Field>
+
+            <Field label="ATTACHED FILE (PDF)">
+              {!d.file && <FileDrop onFiles={(files) => pickFile({ target: { files, value: '' } })} accept="application/pdf,.pdf" busy={uploadingFile} label="DRAG & DROP OR TAP TO UPLOAD" hint="PDF" />}
+              {d.file && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 10 }}>
+                  <IconDoc size={18} />
+                  <a href={d.file} target="_blank" rel="noopener" className="mono" style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--accent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}>
+                    {d.fileName || 'View file'}
+                  </a>
+                  <button onClick={() => set({ file: '', fileName: '' })} aria-label="Remove file" style={{ all: 'unset', cursor: 'pointer', color: 'var(--c-coral)', fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>REMOVE</button>
+                </div>
               )}
             </Field>
 

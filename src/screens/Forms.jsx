@@ -2,6 +2,7 @@ import React from 'react'
 import { IconPlus, IconChevronRight } from '../components/icons'
 import { loadForms } from '../lib/forms'
 import { FormBuilder } from './FormBuilder'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 // Coach hub for all forms — build, edit and review check-in / intake forms.
 export function Forms({ trainerId }) {
@@ -45,19 +46,16 @@ export function Forms({ trainerId }) {
       </div>
 
       {forms === null ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
+        <SkeletonCard rows={3} />
       ) : all.length === 0 ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7, marginBottom: 12 }}>
-            NO FORMS YET<br/><span style={{ fontSize: 9 }}>Build check-ins, intake or feedback forms to assign to clients</span>
-          </div>
-          <button onClick={() => setBuilder(null)} className="btn-primary" style={{ fontSize: 11, padding: '10px 18px' }}>+ CREATE FIRST FORM</button>
-        </div>
+        <EmptyState icon="Checklist" title="No forms yet"
+          sub="Build check-ins, intake or feedback forms once, then assign them to any client."
+          actionLabel="+ CREATE FIRST FORM" onAction={() => setBuilder(null)} />
       ) : (
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
           {filtered.map(f => (
             <button key={f.id} onClick={() => setBuilder(f)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-              <div className="card" style={{ padding: 14, display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' }}>
+              <div className="card tappable" style={{ padding: 14, display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{f.title}</div>
                   <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 4 }}>

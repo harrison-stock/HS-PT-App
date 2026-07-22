@@ -8,7 +8,8 @@ import { GuideBuilder } from './GuideBuilder'
 import { loadExercises, videoThumb, ALL_MUSCLES } from '../lib/exercises'
 import { exerciseMatches } from '../lib/exerciseSearch'
 import { HEX_RATIO, HEX_PATH, HexShape, Hex, HexBackButton } from '../components/hex'
-import { IconHeart, IconFlame, IconBolt, IconClock, IconChevronRight, IconPlus, IconCamera2, IconPlay, IconCheck, IconDumbbell } from '../components/icons'
+import { IconHeart, IconFlame, IconBolt, IconClock, IconChevronRight, IconPlus, IconCamera2, IconPlay, IconCheck, IconDumbbell, IconDoc } from '../components/icons'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const MUSCLE_LABEL = Object.fromEntries(ALL_MUSCLES.map(m => [m.key, m.label]));
 
@@ -21,6 +22,7 @@ export function Resources({ go, userId, isTrainer }) {
   const [builderGuide, setBuilderGuide] = React.useState(undefined);
   const [query, setQuery] = React.useState('');
   const [openRecipe, setOpenRecipe] = React.useState(null);
+  const [openGuideDetail, setOpenGuideDetail] = React.useState(null);
   const [favs, setFavs] = React.useState(() => new Set());
   const [exercises, setExercises] = React.useState(null);   // glossary
   const [openExercise, setOpenExercise] = React.useState(null);
@@ -42,10 +44,7 @@ export function Resources({ go, userId, isTrainer }) {
     setFavourite(userId, type, id, makeFav);
   };
 
-  const openGuide = (g) => {
-    const url = g.video || g.link;
-    if (url) window.open(url, '_blank', 'noopener');
-  };
+  const openGuide = (g) => setOpenGuideDetail(g);
 
   const recipeList = recipes || [];
   const guideList  = guides || [];
@@ -154,40 +153,28 @@ export function Resources({ go, userId, isTrainer }) {
       }
 
       {/* List */}
-      {tab === 'recipes' && recipesLoading &&
-      <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>
-        LOADING…
-      </div>
-      }
+      {tab === 'recipes' && recipesLoading && <SkeletonCard rows={4} />}
       {tab === 'recipes' && !recipesLoading &&
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {filtered.map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={favs.has(r.id)} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {recipeList.length === 0 &&
-          <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-              NO RECIPES YET<br/>
-              <span style={{ fontSize: 9 }}>{isTrainer ? 'Tap NEW RECIPE to build your first one' : 'Your coach hasn’t added any recipes yet'}</span>
-            </div>
-          </div>}
+          <EmptyState icon="Recipe" title="No recipes yet"
+            sub={isTrainer ? 'Build your first recipe and it lands in every client’s library.' : 'Your coach hasn’t added any recipes yet — check back soon.'}
+            actionLabel={isTrainer ? '+ NEW RECIPE' : undefined} onAction={isTrainer ? () => setBuilderRecipe(null) : undefined} />}
         </div>
       }
-      {tab === 'guides' && guidesLoading &&
-      <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
-      }
+      {tab === 'guides' && guidesLoading && <SkeletonCard rows={4} />}
       {tab === 'guides' && !guidesLoading &&
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {filtered.map((g) => <GuideCard key={g.id} g={g} isFav={favs.has(g.id)} onToggleFav={() => toggleFav(g.id, 'guide')} onEdit={isTrainer ? () => setBuilderGuide(g) : null} onOpen={() => openGuide(g)} />)}
           {guideList.length === 0 &&
-          <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-              NO GUIDES YET<br/>
-              <span style={{ fontSize: 9 }}>{isTrainer ? 'Tap NEW GUIDE to add one' : 'Your coach hasn’t added any guides yet'}</span>
-            </div>
-          </div>}
+          <EmptyState icon="Book" title="No guides yet"
+            sub={isTrainer ? 'Articles, videos and PDFs you add appear here for every client.' : 'Your coach hasn’t added any guides yet — check back soon.'}
+            actionLabel={isTrainer ? '+ NEW GUIDE' : undefined} onAction={isTrainer ? () => setBuilderGuide(null) : undefined} />}
         </div>
       }
       {tab === 'favourites' &&
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {recipeList.filter((r) => favs.has(r.id) && r.title.toLowerCase().includes(query.toLowerCase()))
             .map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={true} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {guideList.filter((g) => favs.has(g.id) && g.title.toLowerCase().includes(query.toLowerCase()))
@@ -198,33 +185,26 @@ export function Resources({ go, userId, isTrainer }) {
       }
 
       {favs.size === 0 && tab === 'favourites' &&
-      <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-          <IconHeart size={26} style={{ color: 'var(--text-3)', margin: '0 auto 10px' }} />
-          <div style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>No favourites yet</div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 6, lineHeight: 1.5 }}>
-            TAP THE ♥ ON ANY RECIPE,<br />GUIDE OR EXERCISE TO SAVE IT HERE
-          </div>
-        </div>
+      <EmptyState icon="Heart" title="No favourites yet"
+        sub="Tap the ♥ on any recipe, guide or exercise to pin it here for quick access."
+        actionLabel="BROWSE RECIPES" onAction={() => setTab('recipes')} />
       }
 
       {/* Exercise glossary — read-only reference of the coach's library */}
       {tab === 'exercises' && (
         exercises === null ? (
-          <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
+          <SkeletonCard rows={4} />
         ) : (() => {
           const exFiltered = exercises.filter((e) => exerciseMatches(e.name, query, e.muscle_group || ''));
           if (exercises.length === 0) return (
-            <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-                NO EXERCISES YET<br/><span style={{ fontSize: 9 }}>{isTrainer ? 'Build your library in the Exercises tab' : 'Your coach hasn’t added any exercises yet'}</span>
-              </div>
-            </div>
+            <EmptyState icon="Dumbbell" title="No exercises yet"
+              sub={isTrainer ? 'Build your library in the Exercises tab.' : 'Your coach hasn’t added any exercises yet.'} />
           );
           if (exFiltered.length === 0) return (
             <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)' }}><div style={{ fontSize: 13 }}>No exercises match "{query}"</div></div>
           );
           return (
-            <div style={{ display: 'grid', gap: 10 }}>
+            <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
               {exFiltered.map((e) => <ExerciseGlossaryCard key={e.id} e={e} onOpen={() => setOpenExercise(e)} isFav={favs.has(e.id)} onToggleFav={() => toggleFav(e.id, 'exercise')} />)}
             </div>
           );
@@ -246,6 +226,10 @@ export function Resources({ go, userId, isTrainer }) {
 
       {openExercise && <ExerciseGlossaryDetail e={openExercise} onClose={() => setOpenExercise(null)}
       isFav={favs.has(openExercise.id)} onToggleFav={() => toggleFav(openExercise.id, 'exercise')} />}
+
+      {openGuideDetail && <GuideDetail g={openGuideDetail} onClose={() => setOpenGuideDetail(null)}
+      isFav={favs.has(openGuideDetail.id)} onToggleFav={() => toggleFav(openGuideDetail.id, 'guide')}
+      onEdit={isTrainer ? () => { setOpenGuideDetail(null); setBuilderGuide(openGuideDetail); } : null} />}
     </div>);
 
 }
@@ -254,7 +238,7 @@ export function Resources({ go, userId, isTrainer }) {
 function ExerciseGlossaryCard({ e, onOpen, isFav, onToggleFav }) {
   const thumb = e.thumbnail_url || videoThumb(e.video_url) || (e.photos && e.photos[0]) || '';
   return (
-    <div className="card" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: 'pointer', position: 'relative' }}>
+    <div className="card tappable" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: 'pointer', position: 'relative' }}>
       <div style={{ width: 88, flexShrink: 0, background: `url('${thumb}') center/cover, var(--bg-3)`, position: 'relative' }}>
         {e.video_url && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#eceff4' }}><IconPlay size={18}/></div>}
       </div>
@@ -363,6 +347,92 @@ function ExerciseGlossaryDetail({ e, onClose, isFav, onToggleFav }) {
   );
 }
 
+// ── GUIDE DETAIL ──────────────────────────────────────────────────
+// Full-screen guide/article view: hero, meta, body copy, and actions to
+// watch a linked video, open an external reference, or download an
+// attached PDF.
+function GuideDetail({ g, onClose, isFav, onToggleFav, onEdit }) {
+  const paras = (g.body || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const kindColor = g.kind === 'VIDEO' ? 'var(--pink)' : g.kind === 'GUIDE' ? 'var(--accent)' : 'var(--purple)';
+  const openVideo = () => { if (g.video) window.open(g.video, '_blank', 'noopener'); };
+  const hasActions = g.video || g.link || g.file;
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(7,7,12,0.7)', backdropFilter: 'blur(8px)', animation: 'fadeIn .2s ease' }}>
+      <div onClick={(ev) => ev.stopPropagation()} style={{ position: 'absolute', inset: 0, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column', animation: 'slideUp .25s ease' }}>
+        {/* Hero */}
+        <div style={{ height: 220, position: 'relative', flexShrink: 0, background: `linear-gradient(180deg, rgba(7,7,12,0.35) 0%, transparent 30%, var(--bg-0) 100%), url('${g.img}') center/cover, var(--bg-3)` }}>
+          <HexBackButton onClick={onClose} variant="overlay" size={38} style={{ position: 'absolute', top: 14, left: 14, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}/>
+          {onEdit &&
+          <button onClick={onEdit} aria-label="Edit guide" style={{
+            position: 'absolute', top: 22, right: 64, zIndex: 2, all: 'unset', cursor: 'pointer', padding: '7px 12px', borderRadius: 999,
+            background: 'rgba(10,15,20,0.82)', border: '1px solid rgba(255,255,255,0.3)', color: '#eceff4',
+            fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', backdropFilter: 'blur(8px)',
+          }}>EDIT</button>
+          }
+          {onToggleFav &&
+          <button onClick={onToggleFav} aria-label="Favourite guide" style={{ position: 'absolute', top: 14, right: 14, zIndex: 2, all: 'unset', cursor: 'pointer' }}>
+            <Hex size={38} square style={{
+              background: isFav ? 'var(--c-coral)' : 'rgba(10,15,20,0.82)',
+              border: '1.5px solid ' + (isFav ? 'var(--c-coral)' : 'rgba(255,255,255,0.45)'),
+              backdropFilter: 'blur(8px)', color: '#eceff4',
+              boxShadow: isFav ? '0 0 calc(12px * var(--glow)) color-mix(in srgb, var(--c-coral) 65%, transparent)' : '0 2px 10px rgba(0,0,0,0.5)',
+            }}>
+              <IconHeart size={15} fill={isFav ? '#fff' : 'none'} />
+            </Hex>
+          </button>
+          }
+          {g.video && (
+            <button onClick={openVideo} aria-label="Play video" style={{ all: 'unset', cursor: 'pointer', position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+              <Hex size={58} square style={{ background: 'rgba(0,0,0,0.55)', color: '#eceff4' }}><IconPlay size={22}/></Hex>
+            </button>
+          )}
+          <div style={{ position: 'absolute', left: 18, right: 18, bottom: 14 }}>
+            <div className="h-bold text-glow" style={{ fontSize: 24, lineHeight: 1.1, color: 'var(--accent)' }}>{(g.title || '').toUpperCase()}</div>
+          </div>
+        </div>
+
+        <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '16px 18px 40px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+            <span className="chip" style={{ fontSize: 9, color: kindColor, borderColor: 'currentColor' }}>{g.kind}</span>
+            {g.category && <span className="chip" style={{ fontSize: 9 }}>{g.category}</span>}
+            {g.minutes > 0 && <span className="chip" style={{ fontSize: 9 }}>{g.minutes} MIN</span>}
+          </div>
+
+          {paras.length > 0 && (
+            <div style={{ marginBottom: hasActions ? 20 : 0, display: 'grid', gap: 12 }}>
+              {paras.map((p, i) => (
+                <p key={i} style={{ margin: 0, fontSize: 14, lineHeight: 1.65, color: 'var(--text-2)' }}>{p}</p>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gap: 10 }}>
+            {g.video && (
+              <button onClick={openVideo} className="btn-primary" style={{ width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--heading-deep)' }}>
+                <IconPlay size={14}/> WATCH VIDEO
+              </button>
+            )}
+            {g.file && (
+              <a href={g.file} target="_blank" rel="noopener" download={g.fileName || undefined} className="btn-ghost" style={{ display: 'flex', width: '100%', boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none' }}>
+                <IconDoc size={15}/> {g.fileName ? `OPEN ${g.fileName.toUpperCase()}` : 'OPEN ATTACHED FILE'}
+              </a>
+            )}
+            {g.link && (
+              <a href={g.link} target="_blank" rel="noopener" className="btn-ghost" style={{ display: 'flex', width: '100%', boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none' }}>
+                OPEN REFERENCE LINK <IconChevronRight size={14}/>
+              </a>
+            )}
+          </div>
+
+          {paras.length === 0 && !hasActions && (
+            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', padding: '20px 0' }}>No extra detail added for this guide yet.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ResTab({ active, onClick, icon, label, big }) {
   return (
     <button onClick={onClick} style={{
@@ -374,7 +444,8 @@ function ResTab({ active, onClick, icon, label, big }) {
       color: active ? 'var(--accent)' : 'var(--text-2)',
       fontFamily: 'JetBrains Mono', fontSize: big ? 12.5 : 10, fontWeight: 700, letterSpacing: '0.06em',
       textTransform: 'uppercase',
-      boxShadow: active ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none'
+      boxShadow: active ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none',
+      transition: 'background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease'
     }}>
       <span style={{ display: 'inline-flex', flexShrink: 0 }}>{icon}</span>
       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
@@ -404,18 +475,15 @@ function VaultView({ docs }) {
     const { data } = await supabase.storage.from('client-vault').createSignedUrl(doc.path, 120);
     if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener');
   };
-  if (docs === null) return <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>;
+  if (docs === null) return <SkeletonCard rows={3} />;
   if (docs.length === 0) return (
-    <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-        NO DOCUMENTS<br/><span style={{ fontSize: 9 }}>Your coach hasn’t shared any documents with you yet</span>
-      </div>
-    </div>
+    <EmptyState icon="Notes" title="No documents"
+      sub="Plans, PDFs and paperwork your coach shares with you will appear here." />
   );
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
+    <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
       {docs.map(doc => (
-        <button key={doc.id} onClick={() => open(doc)} className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left', border: '1px solid var(--line)' }}>
+        <button key={doc.id} onClick={() => open(doc)} className="card tappable" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', textAlign: 'left', border: '1px solid var(--line)' }}>
           <span style={{ color: 'var(--accent)', flexShrink: 0 }}><IconVaultDoc size={22} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</div>
@@ -432,7 +500,7 @@ function VaultView({ docs }) {
 
 function RecipeCard({ r, onOpen, isFav, onToggleFav, onEdit }) {
   return (
-    <div className="card" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: onOpen ? 'pointer' : 'default', position: 'relative' }}>
+    <div className="card tappable" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', cursor: onOpen ? 'pointer' : 'default', position: 'relative' }}>
       <div style={{
         width: 88, flexShrink: 0,
         background: `url('${r.img}') center/cover, var(--bg-3)`
@@ -495,7 +563,7 @@ function Macro({ v, l, c }) {
 function GuideCard({ g, isFav, onToggleFav, onEdit, onOpen }) {
   const kindColor = g.kind === 'VIDEO' ? 'var(--pink)' : g.kind === 'GUIDE' ? 'var(--accent)' : 'var(--purple)';
   return (
-    <div className="card" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', position: 'relative', cursor: onOpen ? 'pointer' : 'default' }}>
+    <div className="card tappable" onClick={onOpen} style={{ padding: 0, overflow: 'hidden', display: 'flex', position: 'relative', cursor: onOpen ? 'pointer' : 'default' }}>
       <div style={{
         width: 88, flexShrink: 0,
         background: `linear-gradient(135deg, transparent, rgba(0,0,0,0.5)), url('${g.img}') center/cover, var(--bg-3)`,
@@ -833,6 +901,12 @@ function ExportSheet({ recipe, servings, totalKcal, macros, onClose }) {
   const [pickedApp, setPickedApp] = React.useState(null);
   const [sent, setSent] = React.useState(false);
 
+  // Trackers log a single serving, so always export the PER-SERVING macros
+  // (the caller passes totals for the previewed number of servings).
+  const s = Math.max(1, servings || 1);
+  const kcal1 = totalKcal / s;
+  const p1 = macros[0].v / s, c1 = macros[1].v / s, f1 = macros[2].v / s;
+
   const apps = [
   { id: 'myfitnesspal', name: 'MyFitnessPal', tag: 'CALORIE TRACKER', glyph: 'MFP', tint: 'var(--c-blue)' },
   { id: 'cronometer', name: 'Cronometer', tag: 'MICRONUTRIENTS', glyph: 'CRO', tint: 'var(--accent)' },
@@ -844,7 +918,7 @@ function ExportSheet({ recipe, servings, totalKcal, macros, onClose }) {
   // Real action: copy a macro summary to the clipboard to paste into the
   // chosen tracker (rather than a simulated "send").
   const send = (app) => {
-    const text = `${recipe.title} — ${servings} serving${servings > 1 ? 's' : ''}: ${Math.round(totalKcal)} kcal · ${Math.round(macros[0].v)}g protein · ${Math.round(macros[1].v)}g carbs · ${Math.round(macros[2].v)}g fat`;
+    const text = `${recipe.title} — per serving: ${Math.round(kcal1)} kcal · ${Math.round(p1)}g protein · ${Math.round(c1)}g carbs · ${Math.round(f1)}g fat`;
     try { navigator.clipboard?.writeText(text); } catch (e) { /* ignore */ }
     setPickedApp(app);
     setSent(true);
@@ -885,7 +959,7 @@ function ExportSheet({ recipe, servings, totalKcal, macros, onClose }) {
               COPIED TO CLIPBOARD
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.55, marginBottom: 18 }}>
-              {Math.round(totalKcal)} kcal · {servings} serving{servings > 1 ? 's' : ''} of <strong style={{ color: 'var(--text)' }}>{recipe.title}</strong>
+              {Math.round(kcal1)} kcal · per serving of <strong style={{ color: 'var(--text)' }}>{recipe.title}</strong>
               <br />Paste it into your {pickedApp.name} diary.
             </div>
             <button className="btn-primary" style={{ width: '100%' }} onClick={onClose}>DONE</button>
@@ -898,12 +972,12 @@ function ExportSheet({ recipe, servings, totalKcal, macros, onClose }) {
               EXPORT MACROS
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 14 }}>
-              Send <strong style={{ color: 'var(--text)' }}>{Math.round(totalKcal)} kcal</strong>
+              Send <strong style={{ color: 'var(--text)' }}>{Math.round(kcal1)} kcal</strong>
               {' · '}
-              <span style={{ color: '#F39E1F' }}>{Math.round(macros[0].v)}P</span> /
-              <span style={{ color: '#46BBC0' }}> {Math.round(macros[1].v)}C</span> /
-              <span style={{ color: '#EE6A6A' }}> {Math.round(macros[2].v)}F</span>
-              {' '}({servings} serving{servings > 1 ? 's' : ''}) to your calorie tracker.
+              <span style={{ color: '#F39E1F' }}>{Math.round(p1)}P</span> /
+              <span style={{ color: '#46BBC0' }}> {Math.round(c1)}C</span> /
+              <span style={{ color: '#EE6A6A' }}> {Math.round(f1)}F</span>
+              {' '}(per serving) to your calorie tracker.
             </div>
 
             {/* Macro summary card */}
@@ -914,10 +988,10 @@ function ExportSheet({ recipe, servings, totalKcal, macros, onClose }) {
             display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0
           }}>
               {[
-            { l: 'KCAL', v: Math.round(totalKcal), c: 'var(--c-blue)' },
-            { l: 'PROT', v: Math.round(macros[0].v) + 'g', c: '#F39E1F' },
-            { l: 'CARB', v: Math.round(macros[1].v) + 'g', c: '#46BBC0' },
-            { l: 'FAT', v: Math.round(macros[2].v) + 'g', c: '#EE6A6A' }].
+            { l: 'KCAL', v: Math.round(kcal1), c: 'var(--c-blue)' },
+            { l: 'PROT', v: Math.round(p1) + 'g', c: '#F39E1F' },
+            { l: 'CARB', v: Math.round(c1) + 'g', c: '#46BBC0' },
+            { l: 'FAT', v: Math.round(f1) + 'g', c: '#EE6A6A' }].
             map((s, i) =>
             <div key={i} style={{
               textAlign: 'center',

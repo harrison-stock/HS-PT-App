@@ -88,16 +88,15 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
 
 function ProfileTab({ user, userId, onSave, theme, onThemeChange }) {
   const [name, setName] = React.useState(user?.name || '');
-  const [email, setEmail] = React.useState(user?.email || '');
   const [dob, setDob] = React.useState(user?.dob || '');
   const [showInstall, setShowInstall] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
 
-  const dirty = name.trim() !== (user?.name || '') || email.trim() !== (user?.email || '') || dob !== (user?.dob || '');
+  const dirty = name.trim() !== (user?.name || '') || dob !== (user?.dob || '');
 
   const save = () => {
     if (!dirty || !name.trim()) return;
-    onSave({ name: name.trim(), email: email.trim(), dob });
+    onSave({ name: name.trim(), email: (user?.email || '').trim(), dob });
     setSaved(true);
     setTimeout(() => setSaved(false), 1600);
   };
@@ -111,8 +110,11 @@ function ProfileTab({ user, userId, onSave, theme, onThemeChange }) {
             style={inputStyle} />
         </Field>
         <Field label="EMAIL">
-          <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="you@email.com"
-            style={inputStyle} />
+          <input value={user?.email || ''} readOnly type="email" placeholder="you@email.com"
+            style={{ ...inputStyle, color: 'var(--text-3)', cursor: 'default' }} />
+          <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.05em', marginTop: 5 }}>
+            Your login email — contact your coach to change it.
+          </div>
         </Field>
         <Field label="DATE OF BIRTH">
           <input value={dob} onChange={e => setDob(e.target.value)} type="date"

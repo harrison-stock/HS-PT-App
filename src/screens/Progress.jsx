@@ -10,6 +10,7 @@ import { MUSCLE_LABELS } from '../data/index'
 import { MUSCLE_BODY } from '../data/musclePaths'
 import { HexBackButton, Hex, HexShape } from '../components/hex'
 import { IconHeart, IconDumbbell, IconCamera2, IconChevronRight, IconPlus, IconTrophy, IconCheck, IconBand, IconFlame, IconLeaf } from '../components/icons'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const ZONE_COLOR_ALL = {
   chest: '#3F84D9', back: '#F39E1F', legs: '#E0A5B8',
@@ -309,19 +310,12 @@ function PhotosTab({ userId }) {
 
       {/* History */}
       <div className="label" style={{ margin: '18px 2px 8px' }}>// HISTORY</div>
-      {history === null && (
-        <div className="card" style={{ padding: 20, textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.12em' }}>LOADING…</div>
-        </div>
-      )}
+      {history === null && <SkeletonCard rows={2} />}
       {history?.length === 0 && (
-        <div className="card" style={{ padding: 20, textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', lineHeight: 1.6 }}>
-            NO PHOTOS YET — SUBMIT YOUR FIRST SET ABOVE
-          </div>
-        </div>
+        <EmptyState icon="Camera" title="No photos yet"
+          sub="Submit your first set above — future you will thank you for the before shot." />
       )}
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
         {(history || []).map((h) =>
         <div key={h.date} className="card" style={{ padding: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -448,11 +442,7 @@ function BodyTab({ userId }) {
   const sel = m[selected] || m[keys[0]];
   const heroSeries = React.useMemo(() => sel ? filterByRange(sel.series, range) : [], [sel, range]);
 
-  if (rows === null) return (
-    <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em' }}>LOADING…</div>
-    </div>
-  );
+  if (rows === null) return <SkeletonCard rows={3} />;
 
   const AddCustomBtn = (
     <button onClick={() => setAddingCustom(true)} className="btn-ghost" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 }}>
@@ -464,12 +454,9 @@ function BodyTab({ userId }) {
     <>
       {logging && <LogMeasurementSheet userId={userId} metrics={m} customDefs={customDefs} onClose={() => setLogging(false)} onSaved={reload} />}
       {addingCustom && <AddCustomMetricSheet userId={userId} onClose={() => setAddingCustom(false)} onSaved={reload} />}
-      <div className="card" style={{ padding: 28, textAlign: 'center', marginBottom: 14 }}>
-        <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-          NO MEASUREMENTS YET<br/>
-          <span style={{ fontSize: 9 }}>Log your first weigh-in to start tracking</span>
-        </div>
-      </div>
+      <EmptyState icon="Weight Scales" title="No measurements yet"
+        sub="Log your first weigh-in to start the trend line — one number is all it takes."
+        style={{ marginBottom: 14 }} />
       <button onClick={() => setLogging(true)} className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         <IconPlus size={14} /> LOG MEASUREMENT
       </button>
@@ -1017,11 +1004,7 @@ function WeightTab({ range, userId }) {
     return <CategoryDrill cat={cat} onBack={() => setCatId(null)} onPick={id => setExId(id)} exs={exs} />;
   }
 
-  if (dbLoading) return (
-    <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em' }}>LOADING…</div>
-    </div>
-  );
+  if (dbLoading) return <SkeletonCard rows={3} />;
 
   // Muscle map lives in its own BODY tab now — Metrics shows categories only.
   return (
@@ -1127,12 +1110,8 @@ function CategoriesView({ onPick, onPickEx, cats, exs }) {
   const SECTION_KINDS = new Set(['MAIN', 'BANDED', 'PULSE_RAISER', 'COOLDOWN']);
 
   if (!cats.length) return (
-    <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-        NO SESSIONS LOGGED YET<br/>
-        <span style={{ fontSize: 9 }}>Complete workouts to see your exercise history here</span>
-      </div>
-    </div>
+    <EmptyState icon="Graph (Ascending)" title="No sessions logged yet"
+      sub="Complete workouts and every lift’s history, PRs and trends will build up here." />
   );
 
   const query = q.trim().toLowerCase();
@@ -1340,19 +1319,11 @@ function MuscleMapView({ range, userId }) {
 
   const labels = MUSCLE_LABELS;
 
-  if (data === null) return (
-    <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em' }}>LOADING…</div>
-    </div>
-  );
+  if (data === null) return <SkeletonCard rows={2} />;
 
   if (Object.keys(data).length === 0) return (
-    <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-        NO TRAINING DATA IN THE LAST {range.toUpperCase()}<br/>
-        <span style={{ fontSize: 9 }}>Complete sessions to light up the heatmap</span>
-      </div>
-    </div>
+    <EmptyState icon="Flexed Bicep" title={`No training data in the last ${range}`}
+      sub="Complete sessions to light up the heatmap — every logged set colours in a muscle." />
   );
 
   // Compute intensity (0..1) per muscle from set count

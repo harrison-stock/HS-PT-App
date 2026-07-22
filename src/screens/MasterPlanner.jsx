@@ -4,6 +4,7 @@ import { HexBackButton } from '../components/hex'
 import { IconChevronRight, IconPlus, IconX2 } from '../components/icons'
 import { ExercisePicker } from './ProgrammeBuilder'
 import { BANDS, bandOf } from '../components/bands'
+import { SkeletonCard } from '../components/Loading'
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const SECTION_LABEL = { MAIN: 'Workout', PULSE_RAISER: 'Pulse Raiser', BANDED: 'Activation', COOLDOWN: 'Cooldown' };
@@ -126,7 +127,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
       {!phaseIds.length ? (
         <Centered>SAVE THE PROGRAMME FIRST<br/><span style={{ fontSize: 9 }}>The master planner shows saved phases, weeks and days.</span></Centered>
       ) : days === null ? (
-        <Centered>LOADING…</Centered>
+        <div style={{ padding: 14 }}><SkeletonCard rows={2} /></div>
       ) : columns.length === 0 ? (
         <Centered>NOTHING TO SHOW</Centered>
       ) : (

@@ -4,6 +4,7 @@ import { IconPlus, IconPlay, IconChevronRight } from '../components/icons'
 import { loadExercises, videoThumb, MODALITIES } from '../lib/exercises'
 import { exerciseMatches } from '../lib/exerciseSearch'
 import { ExerciseBuilder } from './ExerciseBuilder'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const MOD_COLOR = {
   Strength: 'var(--accent)', Cardio: 'var(--c-coral)', Mobility: 'var(--accent-2)',
@@ -68,16 +69,13 @@ export function Exercises({ trainerId }) {
       </div>
 
       {list === null ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center', color: 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.12em' }}>LOADING…</div>
+        <SkeletonCard rows={4} />
       ) : all.length === 0 ? (
-        <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7, marginBottom: 12 }}>
-            NO EXERCISES YET<br/><span style={{ fontSize: 9 }}>Build your reusable exercise library</span>
-          </div>
-          <button onClick={() => setBuilder(null)} className="btn-primary" style={{ fontSize: 11, padding: '10px 18px' }}>+ CREATE FIRST EXERCISE</button>
-        </div>
+        <EmptyState icon="Dumbbell" title="No exercises yet"
+          sub="Build your reusable library — every exercise you add is available in the programme builder."
+          actionLabel="+ CREATE FIRST EXERCISE" onAction={() => setBuilder(null)} />
       ) : (
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
           {filtered.map(e => <ExerciseRow key={e.id} e={e} onOpen={() => setBuilder(e)} />)}
           {filtered.length === 0 && (
             <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>No exercises match</div>
@@ -93,7 +91,7 @@ function ExerciseRow({ e, onOpen }) {
   const col = MOD_COLOR[e.modality] || 'var(--accent)';
   return (
     <button onClick={onOpen} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-      <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', alignItems: 'stretch', borderLeft: `2px solid ${col}` }}>
+      <div className="card tappable" style={{ padding: 0, overflow: 'hidden', display: 'flex', alignItems: 'stretch', borderLeft: `2px solid ${col}` }}>
         <div style={{ width: 72, flexShrink: 0, position: 'relative', background: thumb ? `url('${thumb}') center/cover` : 'var(--bg-3)' }}>
           {(e.video_url) && (
             <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#eceff4' }}><IconPlay size={16}/></div>

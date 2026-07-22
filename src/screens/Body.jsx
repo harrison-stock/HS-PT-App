@@ -8,6 +8,7 @@ import { InjuryThread } from './InjuryThread'
 import { IconPlus, IconX2, IconChevronRight } from '../components/icons'
 import { SEV_COLOR, SEV_LABEL, SEV_VAL, LAT_LABEL, injuryTitle, loadInjuries, reportInjury } from '../lib/injuries'
 import { notify } from '../lib/notifications'
+import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 };
 
@@ -391,21 +392,11 @@ function Stat({ label, value, unit }) {
 }
 
 function Loading() {
-  return (
-    <div className="card" style={{ padding: 28, textAlign: 'center' }}>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em' }}>LOADING…</div>
-    </div>
-  );
+  return <SkeletonCard rows={2} />;
 }
 
 function Empty({ title, sub }) {
-  return (
-    <div className="card" style={{ padding: 24, textAlign: 'center' }}>
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>
-        {title}<br/><span style={{ fontSize: 9 }}>{sub}</span>
-      </div>
-    </div>
-  );
+  return <EmptyState icon="Flexed Bicep" title={title} sub={sub} />;
 }
 
 function Mono({ children, style }) {
