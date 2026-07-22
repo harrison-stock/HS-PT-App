@@ -8,7 +8,7 @@ import { GuideBuilder } from './GuideBuilder'
 import { loadExercises, videoThumb, ALL_MUSCLES } from '../lib/exercises'
 import { exerciseMatches } from '../lib/exerciseSearch'
 import { HEX_RATIO, HEX_PATH, HexShape, Hex, HexBackButton } from '../components/hex'
-import { IconHeart, IconFlame, IconBolt, IconClock, IconChevronRight, IconPlus, IconCamera2, IconPlay, IconCheck, IconDumbbell, IconDoc } from '../components/icons'
+import { IconHeart, IconFlame, IconBolt, IconClock, IconChevronRight, IconPlus, IconCamera2, IconPlay, IconCheck, IconDumbbell } from '../components/icons'
 import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const MUSCLE_LABEL = Object.fromEntries(ALL_MUSCLES.map(m => [m.key, m.label]));
@@ -22,7 +22,6 @@ export function Resources({ go, userId, isTrainer }) {
   const [builderGuide, setBuilderGuide] = React.useState(undefined);
   const [query, setQuery] = React.useState('');
   const [openRecipe, setOpenRecipe] = React.useState(null);
-  const [openGuideDetail, setOpenGuideDetail] = React.useState(null);
   const [favs, setFavs] = React.useState(() => new Set());
   const [exercises, setExercises] = React.useState(null);   // glossary
   const [openExercise, setOpenExercise] = React.useState(null);
@@ -44,7 +43,14 @@ export function Resources({ go, userId, isTrainer }) {
     setFavourite(userId, type, id, makeFav);
   };
 
-  const openGuide = (g) => setOpenGuideDetail(g);
+  // Open a guide's asset directly (like the documents tab) — an attached PDF,
+  // a linked video/article, or failing those the cover image itself.
+  const FALLBACK_GUIDE_IMG = 'photo-1517836357463';
+  const openGuide = (g) => {
+    const realImg = g.img && !g.img.includes(FALLBACK_GUIDE_IMG) ? g.img : '';
+    const url = g.file || g.video || g.link || realImg;
+    if (url) window.open(url, '_blank', 'noopener');
+  };
 
   const recipeList = recipes || [];
   const guideList  = guides || [];
@@ -226,10 +232,6 @@ export function Resources({ go, userId, isTrainer }) {
 
       {openExercise && <ExerciseGlossaryDetail e={openExercise} onClose={() => setOpenExercise(null)}
       isFav={favs.has(openExercise.id)} onToggleFav={() => toggleFav(openExercise.id, 'exercise')} />}
-
-      {openGuideDetail && <GuideDetail g={openGuideDetail} onClose={() => setOpenGuideDetail(null)}
-      isFav={favs.has(openGuideDetail.id)} onToggleFav={() => toggleFav(openGuideDetail.id, 'guide')}
-      onEdit={isTrainer ? () => { setOpenGuideDetail(null); setBuilderGuide(openGuideDetail); } : null} />}
     </div>);
 
 }
@@ -340,92 +342,6 @@ function ExerciseGlossaryDetail({ e, onClose, isFav, onToggleFav }) {
 
           {steps.length === 0 && muscles.length === 0 && !e.video_url && !e.link_url && (
             <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', padding: '20px 0' }}>No extra detail added for this exercise yet.</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── GUIDE DETAIL ──────────────────────────────────────────────────
-// Full-screen guide/article view: hero, meta, body copy, and actions to
-// watch a linked video, open an external reference, or download an
-// attached PDF.
-function GuideDetail({ g, onClose, isFav, onToggleFav, onEdit }) {
-  const paras = (g.body || '').split('\n').map(s => s.trim()).filter(Boolean);
-  const kindColor = g.kind === 'VIDEO' ? 'var(--pink)' : g.kind === 'GUIDE' ? 'var(--accent)' : 'var(--purple)';
-  const openVideo = () => { if (g.video) window.open(g.video, '_blank', 'noopener'); };
-  const hasActions = g.video || g.link || g.file;
-  return (
-    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(7,7,12,0.7)', backdropFilter: 'blur(8px)', animation: 'fadeIn .2s ease' }}>
-      <div onClick={(ev) => ev.stopPropagation()} style={{ position: 'absolute', inset: 0, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column', animation: 'slideUp .25s ease' }}>
-        {/* Hero */}
-        <div style={{ height: 220, position: 'relative', flexShrink: 0, background: `linear-gradient(180deg, rgba(7,7,12,0.35) 0%, transparent 30%, var(--bg-0) 100%), url('${g.img}') center/cover, var(--bg-3)` }}>
-          <HexBackButton onClick={onClose} variant="overlay" size={38} style={{ position: 'absolute', top: 14, left: 14, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}/>
-          {onEdit &&
-          <button onClick={onEdit} aria-label="Edit guide" style={{
-            position: 'absolute', top: 22, right: 64, zIndex: 2, all: 'unset', cursor: 'pointer', padding: '7px 12px', borderRadius: 999,
-            background: 'rgba(10,15,20,0.82)', border: '1px solid rgba(255,255,255,0.3)', color: '#eceff4',
-            fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', backdropFilter: 'blur(8px)',
-          }}>EDIT</button>
-          }
-          {onToggleFav &&
-          <button onClick={onToggleFav} aria-label="Favourite guide" style={{ position: 'absolute', top: 14, right: 14, zIndex: 2, all: 'unset', cursor: 'pointer' }}>
-            <Hex size={38} square style={{
-              background: isFav ? 'var(--c-coral)' : 'rgba(10,15,20,0.82)',
-              border: '1.5px solid ' + (isFav ? 'var(--c-coral)' : 'rgba(255,255,255,0.45)'),
-              backdropFilter: 'blur(8px)', color: '#eceff4',
-              boxShadow: isFav ? '0 0 calc(12px * var(--glow)) color-mix(in srgb, var(--c-coral) 65%, transparent)' : '0 2px 10px rgba(0,0,0,0.5)',
-            }}>
-              <IconHeart size={15} fill={isFav ? '#fff' : 'none'} />
-            </Hex>
-          </button>
-          }
-          {g.video && (
-            <button onClick={openVideo} aria-label="Play video" style={{ all: 'unset', cursor: 'pointer', position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-              <Hex size={58} square style={{ background: 'rgba(0,0,0,0.55)', color: '#eceff4' }}><IconPlay size={22}/></Hex>
-            </button>
-          )}
-          <div style={{ position: 'absolute', left: 18, right: 18, bottom: 14 }}>
-            <div className="h-bold text-glow" style={{ fontSize: 24, lineHeight: 1.1, color: 'var(--accent)' }}>{(g.title || '').toUpperCase()}</div>
-          </div>
-        </div>
-
-        <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '16px 18px 40px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-            <span className="chip" style={{ fontSize: 9, color: kindColor, borderColor: 'currentColor' }}>{g.kind}</span>
-            {g.category && <span className="chip" style={{ fontSize: 9 }}>{g.category}</span>}
-            {g.minutes > 0 && <span className="chip" style={{ fontSize: 9 }}>{g.minutes} MIN</span>}
-          </div>
-
-          {paras.length > 0 && (
-            <div style={{ marginBottom: hasActions ? 20 : 0, display: 'grid', gap: 12 }}>
-              {paras.map((p, i) => (
-                <p key={i} style={{ margin: 0, fontSize: 14, lineHeight: 1.65, color: 'var(--text-2)' }}>{p}</p>
-              ))}
-            </div>
-          )}
-
-          <div style={{ display: 'grid', gap: 10 }}>
-            {g.video && (
-              <button onClick={openVideo} className="btn-primary" style={{ width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--heading-deep)' }}>
-                <IconPlay size={14}/> WATCH VIDEO
-              </button>
-            )}
-            {g.file && (
-              <a href={g.file} target="_blank" rel="noopener" download={g.fileName || undefined} className="btn-ghost" style={{ display: 'flex', width: '100%', boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none' }}>
-                <IconDoc size={15}/> {g.fileName ? `OPEN ${g.fileName.toUpperCase()}` : 'OPEN ATTACHED FILE'}
-              </a>
-            )}
-            {g.link && (
-              <a href={g.link} target="_blank" rel="noopener" className="btn-ghost" style={{ display: 'flex', width: '100%', boxSizing: 'border-box', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none' }}>
-                OPEN REFERENCE LINK <IconChevronRight size={14}/>
-              </a>
-            )}
-          </div>
-
-          {paras.length === 0 && !hasActions && (
-            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', padding: '20px 0' }}>No extra detail added for this guide yet.</div>
           )}
         </div>
       </div>
@@ -661,28 +577,30 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
           height: 240, position: 'relative', flexShrink: 0,
           background: `linear-gradient(180deg, rgba(7,7,12,0.4) 0%, transparent 30%, rgba(7,7,12,0.95) 100%), url('${r.img}') center/cover, var(--bg-3)`
         }}>
-          {/* Hex back/like buttons */}
+          {/* Back (left) + edit/favourite grouped on the right so they never
+              collide with the back button on any width. */}
           <HexBackButton onClick={onClose} variant="overlay" size={38} style={hexBtnStyle('left')} />
-          {onEdit &&
-          <button onClick={onEdit} aria-label="Edit recipe" style={{
-            position: 'absolute', top: 22, right: 64, zIndex: 2,
-            all: 'unset', cursor: 'pointer', padding: '7px 12px', borderRadius: 999,
-            background: 'rgba(10,15,20,0.82)', border: '1px solid rgba(255,255,255,0.3)',
-            color: '#eceff4', fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
-            backdropFilter: 'blur(8px)',
-          }}>EDIT</button>
-          }
-          <button onClick={onToggleFav} aria-label="Favourite" style={hexBtnStyle('right')}>
-            <Hex size={38} square style={{
-              background: isFav ? 'var(--c-coral)' : 'rgba(10,15,20,0.82)',
-              border: '1.5px solid ' + (isFav ? 'var(--c-coral)' : 'rgba(255,255,255,0.45)'),
+          <div style={{ position: 'absolute', top: 14, right: 14, zIndex: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {onEdit &&
+            <button onClick={onEdit} aria-label="Edit recipe" style={{
+              all: 'unset', cursor: 'pointer', padding: '9px 13px', borderRadius: 999,
+              background: 'rgba(10,15,20,0.82)', border: '1px solid rgba(255,255,255,0.3)',
+              color: '#eceff4', fontFamily: 'JetBrains Mono', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
               backdropFilter: 'blur(8px)',
-              color: '#eceff4',
-              boxShadow: isFav ? '0 0 calc(12px * var(--glow)) color-mix(in srgb, var(--c-coral) 65%, transparent)' : '0 2px 10px rgba(0,0,0,0.5)'
-            }}>
-              <IconHeart size={15} fill={isFav ? '#fff' : 'none'} />
-            </Hex>
-          </button>
+            }}>EDIT</button>
+            }
+            <button onClick={onToggleFav} aria-label="Favourite" style={{ all: 'unset', cursor: 'pointer' }}>
+              <Hex size={38} square style={{
+                background: isFav ? 'var(--c-coral)' : 'rgba(10,15,20,0.82)',
+                border: '1.5px solid ' + (isFav ? 'var(--c-coral)' : 'rgba(255,255,255,0.45)'),
+                backdropFilter: 'blur(8px)',
+                color: '#eceff4',
+                boxShadow: isFav ? '0 0 calc(12px * var(--glow)) color-mix(in srgb, var(--c-coral) 65%, transparent)' : '0 2px 10px rgba(0,0,0,0.5)'
+              }}>
+                <IconHeart size={15} fill={isFav ? '#fff' : 'none'} />
+              </Hex>
+            </button>
+          </div>
           <div style={{ position: 'absolute', left: 16, right: 16, bottom: 14 }}>
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
               <span style={{
