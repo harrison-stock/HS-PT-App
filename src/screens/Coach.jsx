@@ -15,6 +15,20 @@ const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5
 // first letter, which clustered same-initial names onto one colour).
 const hashStr = (s) => { let h = 0; for (let i = 0; i < (s || '').length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0; return h; };
 const accentFor = (key) => CLIENT_ACCENTS[hashStr(key) % CLIENT_ACCENTS.length];
+
+// Assign avatar colours across a roster so no two *visible* clients share one
+// (a per-id hash alone still collides). Each client starts at its stable hash
+// colour, then bumps to the next free slot if taken — so up to 7 clients are
+// always distinct, and colours stay stable as long as the roster is unchanged.
+function assignAccents(list) {
+  const used = new Set();
+  return list.map((c) => {
+    let idx = hashStr(c.id || c.name) % CLIENT_ACCENTS.length;
+    for (let t = 0; t < CLIENT_ACCENTS.length && used.has(idx); t++) idx = (idx + 1) % CLIENT_ACCENTS.length;
+    used.add(idx);
+    return { ...c, accent: CLIENT_ACCENTS[idx] };
+  });
+}
 const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 function computeStreak(daysSet, lastDate) {
@@ -115,18 +129,41 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     ]);
     const real    = (profiles || []).map(shapeClient);
     const pending = (managed  || []).map(shapeManagedClient);
-    setArchivedClients((archived || []).map(shapeClient));
+    setArchivedClients(assignAccents((archived || []).map(shapeClient)));
 
     // Batch-load session stats for real clients
     if (real.length > 0) {
       const ids   = real.map(c => c.id);
       const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: sessions } = await supabase
-        .from('workout_sessions')
-        .select('client_id, started_at')
-        .in('client_id', ids)
-        .gte('started_at', since)
-        .order('started_at', { ascending: false });
+      const today28   = new Date().toISOString().slice(0, 10);
+      const since28   = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const [{ data: sessions }, { data: schedRows }] = await Promise.all([
+        supabase
+          .from('workout_sessions')
+          .select('client_id, started_at')
+          .in('client_id', ids)
+          .gte('started_at', since)
+          .order('started_at', { ascending: false }),
+        // 4-week adherence: completed vs scheduled workouts up to today.
+        supabase
+          .from('client_workouts')
+          .select('client_id, status, scheduled_date')
+          .in('client_id', ids)
+          .gte('scheduled_date', since28)
+          .lte('scheduled_date', today28)
+          .neq('status', 'skipped'),
+      ]);
+
+      const compBy = {};
+      (schedRows || []).forEach(w => {
+        const b = compBy[w.client_id] = compBy[w.client_id] || { done: 0, total: 0 };
+        b.total += 1;
+        if (w.status === 'completed') b.done += 1;
+      });
+      real.forEach(c => {
+        const b = compBy[c.id];
+        c.compliance = b && b.total > 0 ? Math.round((b.done / b.total) * 100) : null;
+      });
 
       const week7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const statsByClient = {};
@@ -147,12 +184,13 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
         c.streak = computeStreak(st.days, st.lastDate);
         if (st.lastDate) {
           const d = Math.floor((Date.now() - new Date(st.lastDate).getTime()) / 86_400_000);
+          c.lastSeenDays = d;
           c.lastSeen = d === 0 ? 'Today' : d === 1 ? 'Yesterday' : `${d}d ago`;
         }
       });
     }
 
-    setClients([...real, ...pending]);
+    setClients(assignAccents([...real, ...pending]));
     setLoadingClients(false);
   };
 
@@ -390,6 +428,10 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
       <CoachHeader clientCount={clients.length} pendingCount={pendingCount} go={go} unread={unread}/>
       <KPIRow kpis={kpis}/>
 
+      <CoachDigest clients={clients} loading={loadingClients}
+        onPick={(id) => setClientId(id)}
+        onPickTab={(id, t) => { setClientInitialTab(t); setClientId(id); }} />
+
       <div style={{ display: 'flex', gap: 4, marginTop: 16, marginBottom: 14 }}>
         {tabs.map(t => (
           <CTab key={t.id} active={tab === t.id} onClick={() => setTab(t.id)} label={t.label} count={t.count}/>
@@ -595,6 +637,83 @@ function KPIRow({ kpis }) {
   );
 }
 
+// ── COACH DIGEST ─────────────────────────────────────────────────
+// An at-a-glance triage of who needs attention this week, built from the
+// roster data already loaded (adherence, last-session, scheduling, invites).
+// Each item taps through to the relevant client. No nutrition data required.
+function buildDigest(clients) {
+  const items = [];
+  for (const c of clients || []) {
+    if (c.managed) {
+      items.push({ id: c.id, sev: 1, tab: null, name: c.name, msg: 'invite not yet accepted — resend or nudge' });
+      continue;
+    }
+    // Never trained / no scheduled work at all → likely needs a programme.
+    if (c.compliance == null && (c.lastSeenDays == null)) {
+      items.push({ id: c.id, sev: 3, tab: 'training', name: c.name, msg: 'no programme assigned — nothing scheduled' });
+      continue;
+    }
+    // Gone quiet.
+    if (c.lastSeenDays == null) {
+      items.push({ id: c.id, sev: 3, tab: 'training', name: c.name, msg: 'no session in the last month — needs a nudge' });
+    } else if (c.lastSeenDays >= 7) {
+      items.push({ id: c.id, sev: 2, tab: 'training', name: c.name, msg: `hasn’t trained in ${c.lastSeenDays} days` });
+    }
+    // Low adherence over the 4-week window.
+    if (c.compliance != null && c.compliance < 50) {
+      items.push({ id: c.id, sev: 2, tab: null, name: c.name, msg: `4-week adherence down at ${c.compliance}%` });
+    }
+  }
+  // Highest severity first; keep it digestible.
+  return items.sort((a, b) => b.sev - a.sev).slice(0, 5);
+}
+
+function CoachDigest({ clients, loading, onPick, onPickTab }) {
+  const items = React.useMemo(() => buildDigest(clients), [clients]);
+  if (loading) return null;
+
+  const sevColor = (s) => s >= 3 ? 'var(--c-coral)' : s === 2 ? 'var(--c-amber)' : 'var(--accent-2)';
+
+  return (
+    <div className="card" style={{ marginTop: 12, padding: 14, background: 'linear-gradient(135deg, rgba(238,106,106,0.05), transparent 60%), var(--bg-2)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: items.length ? 12 : 0 }}>
+        <div className="label">// COACH DIGEST</div>
+        <span className="mono" style={{ fontSize: 8.5, letterSpacing: '0.1em', color: items.length ? 'var(--c-amber)' : 'var(--accent)', fontWeight: 700 }}>
+          {items.length ? `${items.length} NEED${items.length === 1 ? 'S' : ''} ATTENTION` : 'ALL CLEAR'}
+        </span>
+      </div>
+
+      {items.length === 0 ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <BrandIcon name="Trophy" size={30} color="var(--accent)" />
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
+            Roster’s in good shape — everyone’s training and on track this week.
+          </div>
+        </div>
+      ) : (
+        <div className="stagger-in" style={{ display: 'grid', gap: 6 }}>
+          {items.map((it, i) => (
+            <button key={`${it.id}-${i}`} onClick={() => it.tab ? onPickTab(it.id, it.tab) : onPick(it.id)} style={{
+              all: 'unset', cursor: 'pointer', display: 'grid', gridTemplateColumns: '20px 1fr auto', gap: 10, alignItems: 'center',
+              padding: '9px 10px', borderRadius: 10, background: 'var(--bg-3)',
+              borderLeft: `2px solid ${sevColor(it.sev)}`,
+            }}>
+              <span style={{ display: 'grid', placeItems: 'center', color: sevColor(it.sev) }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600 }}>{it.name}</span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--text-2)', letterSpacing: '0.02em' }}> — {it.msg}</span>
+              </div>
+              <IconChevronRight size={14} style={{ color: 'var(--text-3)' }}/>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── CLIENTS TAB ─────────────────────────────────────────────────
 function ClientsTab({ clients, loading, onPick, onInvite, onRemovePending }) {
   const [q, setQ] = React.useState('');
@@ -728,6 +847,11 @@ function ArchivedClientRow({ c, onRestore, onRemove }) {
   );
 }
 
+// Adherence colour bands: green ≥80, amber 50–79, coral below.
+export function complianceColor(p) {
+  return p == null ? 'var(--text-3)' : p >= 80 ? 'var(--accent)' : p >= 50 ? 'var(--c-amber)' : 'var(--c-coral)';
+}
+
 function ClientRow({ c, onPick, onRemovePending }) {
   const [confirm, setConfirm] = React.useState(false);
   const statusColor = c.status === 'invited'         ? 'var(--c-amber)'
@@ -780,7 +904,17 @@ function ClientRow({ c, onPick, onRemovePending }) {
             border: `1px solid color-mix(in srgb, var(--c-coral) ${confirm ? 60 : 30}%, var(--line))`,
           }}>{confirm ? 'CONFIRM' : 'REMOVE'}</button>
         ) : (
-          <IconChevronRight size={16} style={{ color: 'var(--text-3)' }}/>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {c.compliance != null && (
+              <div style={{ textAlign: 'right' }}>
+                <div className="mono" style={{ fontSize: 13, fontWeight: 800, lineHeight: 1, color: complianceColor(c.compliance) }}>
+                  {c.compliance}%
+                </div>
+                <div className="mono" style={{ fontSize: 7, letterSpacing: '0.1em', color: 'var(--text-3)', marginTop: 3 }}>4-WK ADHERENCE</div>
+              </div>
+            )}
+            <IconChevronRight size={16} style={{ color: 'var(--text-3)' }}/>
+          </div>
         )}
       </div>
     </div>

@@ -107,6 +107,11 @@ export default function App() {
     } catch (e) { return false; }
   });
   const [unread, setUnread] = React.useState(0);
+  // Console-style boot splash, shown once when the user actively signs in
+  // (never on session restores or token refreshes).
+  const [showSplash, setShowSplash] = React.useState(false);
+  const sessionRef = React.useRef(null);
+  React.useEffect(() => { sessionRef.current = session; }, [session]);
 
   React.useEffect(() => {
     let done = false;
@@ -123,6 +128,7 @@ export default function App() {
         try { sessionStorage.setItem('hs_set_pw', '1'); } catch (e) {}
         setNeedsPassword(true);
       }
+      if (_event === 'SIGNED_IN' && session && !sessionRef.current) setShowSplash(true);
       setSession(session);
       if (session) fetchProfile(session.user.id);
       else { setProfile(null); setAuthLoading(false); setNeedsPassword(false); }
@@ -396,7 +402,37 @@ export default function App() {
 
       {showInstall && !resumePrompt && screen !== 'log' && <InstallPrompt onClose={closeInstall}/>}
 
+      {showSplash && <SignInSplash onDone={() => setShowSplash(false)} />}
+
       <ToastHost />
+    </div>
+  );
+}
+
+// Console-style boot splash after an active sign-in: the brand hex blooms in
+// from a blur, the wordmark tracks in, then the overlay fades and unmounts.
+function SignInSplash({ onDone }) {
+  React.useEffect(() => {
+    const t = setTimeout(onDone, 2400);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div onClick={onDone} style={{
+      position: 'fixed', inset: 0, zIndex: 600, background: 'var(--bg-0)',
+      display: 'grid', placeItems: 'center',
+      animation: 'splashOut 2.4s ease forwards',
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+        <div style={{ animation: 'splashLogo 1.1s cubic-bezier(.22,.61,.36,1) both' }}>
+          <BrandIcon name="HS PT App" size={104} color="var(--accent)" glow />
+        </div>
+        <div className="h-bold" style={{ fontSize: 15, color: 'var(--heading-deep)', animation: 'splashText .9s cubic-bezier(.22,.61,.36,1) .4s both' }}>
+          HS PERSONAL TRAINING
+        </div>
+        <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.3em', color: 'var(--text-3)', animation: 'splashSub .7s ease .9s both' }}>
+          WELCOME BACK
+        </div>
+      </div>
     </div>
   );
 }
@@ -441,6 +477,14 @@ function BottomNav({ screen, go, isTrainer }) {
 
   return (
     <div className="bnav">
+      {/* Brand header — only visible in the desktop sidebar layout */}
+      <div className="bnav-brand">
+        <BrandIcon name="HS PT App" size={38} color="var(--accent)" glow />
+        <div>
+          <div className="h-bold" style={{ fontSize: 13, lineHeight: 1.1, color: 'var(--heading-deep)' }}>HS PT</div>
+          <div className="mono" style={{ fontSize: 7.5, letterSpacing: '0.16em', color: 'var(--text-3)', marginTop: 2 }}>COACH PORTAL</div>
+        </div>
+      </div>
       {items.map(it => {
         const active = screen === it.id;
         return (

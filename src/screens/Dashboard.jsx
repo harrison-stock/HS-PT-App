@@ -197,6 +197,9 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
         </div>
       </div>
 
+      {/* Week schedule strip — today highlighted, dots mark sessions */}
+      <WeekStrip userId={userId} go={go} />
+
       {/* Today's workout hero */}
       <div className="card" style={{
         padding: 0, overflow: 'hidden', position: 'relative',
@@ -255,7 +258,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
                   </button>
                 </div>
               ) : (
-                <button className="btn-primary"
+                <button className="btn-primary btn-pulse"
                   style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--heading-deep)' }}
                   onClick={() => todayWorkout.dayId ? go('log', { dayId: todayWorkout.dayId }) : go('workouts')}>
                   <IconPlay size={14}/> START SESSION
@@ -298,6 +301,92 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       )}
     </div>);
 
+}
+
+// ── WEEK SCHEDULE STRIP ──────────────────────────────────────────
+// A 7-day ribbon (Mon–Sun) under the greeting: today is the highlighted
+// pill, dots mark scheduled sessions (filled when done, coral when missed),
+// with a done/planned count. Taps through to the Train screen.
+function WeekStrip({ userId, go }) {
+  const [byDate, setByDate] = React.useState(null);
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Build the current Mon–Sun week in the same UTC-date convention the rest
+  // of the app uses for scheduled_date comparisons.
+  const week = React.useMemo(() => {
+    const base = new Date(todayStr + 'T00:00:00Z');
+    const dow = (base.getUTCDay() + 6) % 7; // Mon = 0
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base.getTime() + (i - dow) * 86400000);
+      return { date: d.toISOString().slice(0, 10), dayNum: d.getUTCDate(), label: DAY_LABELS[i].toUpperCase() };
+    });
+  }, [todayStr]);
+
+  React.useEffect(() => {
+    if (!userId) { setByDate({}); return; }
+    let alive = true;
+    supabase.from('client_workouts')
+      .select('scheduled_date, status')
+      .eq('client_id', userId)
+      .gte('scheduled_date', week[0].date)
+      .lte('scheduled_date', week[6].date)
+      .neq('status', 'skipped')
+      .then(({ data }) => {
+        if (!alive) return;
+        const map = {};
+        (data || []).forEach(w => {
+          const cur = map[w.scheduled_date];
+          // A completed session wins over a merely-scheduled one on the same day.
+          map[w.scheduled_date] = cur === 'completed' ? cur : w.status;
+        });
+        setByDate(map);
+      });
+    return () => { alive = false; };
+  }, [userId, week]);
+
+  const rows = byDate || {};
+  const planned = Object.keys(rows).length;
+  const done = Object.values(rows).filter(s => s === 'completed').length;
+
+  return (
+    <button onClick={() => go('workouts')} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
+      <div className="card tappable" style={{ padding: '12px 12px 10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, padding: '0 2px' }}>
+          <div className="label">// SCHEDULE</div>
+          <span className="mono" style={{ fontSize: 9, letterSpacing: '0.1em', fontWeight: 700, color: planned > 0 ? 'var(--accent)' : 'var(--text-3)' }}>
+            {byDate === null ? '…' : planned > 0 ? `${done}/${planned} DONE` : 'NO SESSIONS PLANNED'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {week.map(d => {
+            const isToday = d.date === todayStr;
+            const status = rows[d.date];
+            const missed = status && status !== 'completed' && d.date < todayStr;
+            const dotColor = !status ? 'transparent'
+              : status === 'completed' ? 'var(--accent)'
+              : missed ? 'var(--c-coral)'
+              : 'color-mix(in srgb, var(--accent) 45%, var(--line-strong))';
+            return (
+              <div key={d.date} style={{
+                flex: 1, textAlign: 'center', padding: '7px 0 6px', borderRadius: 10,
+                background: isToday ? 'var(--accent-soft)' : 'transparent',
+                border: `1px solid ${isToday ? 'var(--accent)' : 'transparent'}`,
+                boxShadow: isToday ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none',
+              }}>
+                <div className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: isToday ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700 }}>{d.label}</div>
+                <div className="h-bold" style={{ fontSize: 15, marginTop: 3, lineHeight: 1, color: isToday ? 'var(--accent)' : 'var(--text-2)' }}>{d.dayNum}</div>
+                <div style={{
+                  width: 5, height: 5, borderRadius: 999, margin: '5px auto 0',
+                  background: dotColor,
+                  boxShadow: status === 'completed' ? '0 0 calc(5px * var(--glow)) var(--accent-glow)' : 'none',
+                }} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </button>
+  );
 }
 
 // ── TRAINING STRIP (at-a-glance) ─────────────────────────────────
