@@ -721,17 +721,19 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
           </>}
         </div>
 
-        {/* Sticky bottom action */}
-        <div style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0,
-          padding: '14px 16px 28px',
-          background: 'linear-gradient(180deg, transparent, var(--bg-0) 30%)'
-        }}>
-          <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-          onClick={() => setExporting(true)}>
-            <IconPlus size={14} /> ADD TO TRACKER
-          </button>
-        </div>
+        {/* Sticky bottom action - hidden for now (ADD TO TRACKER paused) */}
+        {false && (
+          <div style={{
+            position: 'absolute', left: 0, right: 0, bottom: 0,
+            padding: '14px 16px 28px',
+            background: 'linear-gradient(180deg, transparent, var(--bg-0) 30%)'
+          }}>
+            <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+            onClick={() => setExporting(true)}>
+              <IconPlus size={14} /> ADD TO TRACKER
+            </button>
+          </div>
+        )}
 
         {/* Export sheet */}
         {exporting && <ExportSheet recipe={r} servings={servings} totalKcal={totalKcal} macros={macros}
