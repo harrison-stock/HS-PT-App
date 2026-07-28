@@ -5,6 +5,7 @@ import { IconChevronRight, IconPlus, IconX2 } from '../components/icons'
 import { ExercisePicker } from './ProgrammeBuilder'
 import { BANDS, bandOf } from '../components/bands'
 import { SkeletonCard } from '../components/Loading'
+import { useDesktop } from '../lib/useDesktop'
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const SECTION_LABEL = { MAIN: 'Workout', PULSE_RAISER: 'Pulse Raiser', BANDED: 'Activation', COOLDOWN: 'Cooldown' };
@@ -82,6 +83,22 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
     setDays(prev => mapExercises(prev, exId, ex => ({ ...ex, ...patch })));
     supabase.from('section_exercises').update(patch).eq('id', exId).then(() => {});
   };
+  // Reorder within a section: renumber sort_order and persist each row. The
+  // planner has no save step, so the new order is written immediately.
+  const moveExercise = (sectionId, from, to) => {
+    const sec = findSection(days, sectionId);
+    if (!sec) return;
+    const items = [...(sec.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
+    if (from === to || to < 0 || to >= items.length) return;
+    const [moved] = items.splice(from, 1);
+    items.splice(to, 0, moved);
+    const ordered = items.map((ex, i) => ({ ...ex, sort_order: i }));
+    setDays(prev => mapSection(prev, sectionId, s => ({ ...s, section_exercises: ordered })));
+    ordered.forEach((ex, i) => {
+      supabase.from('section_exercises').update({ sort_order: i }).eq('id', ex.id).then(() => {});
+    });
+  };
+
   const addExercise = async (sectionId, ex, count) => {
     const { data: row } = await supabase.from('section_exercises')
       .insert({ section_id: sectionId, name: ex.name, img_url: ex.img, timed: false, sort_order: count })
@@ -149,7 +166,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
               <PlannerColumn key={col.key} col={col}
                 onPatchSet={patchSet} onAddSet={addSet} onDelSet={delSet}
                 onDelExercise={delExercise} onAddExercise={(sectionId, count) => setAddingTo({ sectionId, count })}
-                onOpenOptions={(ex) => setOptionsExId(ex.id)}/>
+                onOpenOptions={(ex) => setOptionsExId(ex.id)} onMoveExercise={moveExercise}/>
             ))}
           </div>
         </div>
@@ -174,7 +191,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
   );
 }
 
-function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions }) {
+function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, onMoveExercise }) {
   const day = col.day;
   const sections = day ? [...(day.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order) : [];
   return (
@@ -201,7 +218,8 @@ function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onA
           {sections.map(s => (
             <PlannerSection key={s.id} s={s}
               onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet}
-              onDelExercise={onDelExercise} onAddExercise={onAddExercise} onOpenOptions={onOpenOptions}/>
+              onDelExercise={onDelExercise} onAddExercise={onAddExercise} onOpenOptions={onOpenOptions}
+              onMoveExercise={onMoveExercise}/>
           ))}
         </div>
       )}
@@ -209,9 +227,45 @@ function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onA
   );
 }
 
-function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions }) {
+function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, onMoveExercise }) {
   const col = sectionColor(s.kind);
   const exercises = [...(s.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
+
+  // Drag to reorder - laptop only, same as the main builder. Listeners live on
+  // the window because reordering moves the handle's node, which can drop a
+  // pointer capture mid-drag.
+  const isDesktop = useDesktop();
+  const [dragId, setDragId] = React.useState(null);
+  const rowRefs = React.useRef({});
+
+  React.useEffect(() => {
+    if (dragId == null) return;
+    const move = (ev) => {
+      const idx = exercises.findIndex(it => it.id === dragId);
+      if (idx < 0) return;
+      const y = ev.clientY;
+      const prev = idx > 0 ? rowRefs.current[exercises[idx - 1].id] : null;
+      if (prev) {
+        const r = prev.getBoundingClientRect();
+        if (y < r.top + r.height / 2) { onMoveExercise(s.id, idx, idx - 1); return; }
+      }
+      const next = idx < exercises.length - 1 ? rowRefs.current[exercises[idx + 1].id] : null;
+      if (next) {
+        const r = next.getBoundingClientRect();
+        if (y > r.top + r.height / 2) { onMoveExercise(s.id, idx, idx + 1); return; }
+      }
+    };
+    const end = () => setDragId(null);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+  }, [dragId, exercises, onMoveExercise, s.id]);
+
   return (
     <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', borderLeft: `2px solid ${col}`, borderBottom: '1px solid var(--line)' }}>
@@ -222,7 +276,12 @@ function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAd
         {exercises.map((ex, i) => (
           <PlannerExercise key={ex.id} ex={ex} idx={i}
             onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet} onDelExercise={onDelExercise}
-            onOpenOptions={onOpenOptions}/>
+            onOpenOptions={onOpenOptions}
+            rowRef={(el) => { if (el) rowRefs.current[ex.id] = el; else delete rowRefs.current[ex.id]; }}
+            dragging={dragId === ex.id}
+            dragHandle={isDesktop && exercises.length > 1
+              ? { onPointerDown: (ev) => { ev.preventDefault(); ev.stopPropagation(); setDragId(ex.id); } }
+              : null}/>
         ))}
         <button onClick={() => onAddExercise(s.id, exercises.length)} style={{
           all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '7px 0', borderRadius: 7,
@@ -234,12 +293,29 @@ function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAd
   );
 }
 
-function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercise, onOpenOptions }) {
+function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercise, onOpenOptions, rowRef, dragging, dragHandle }) {
   const sets = [...(ex.exercise_sets || [])].sort((a, b) => a.set_index - b.set_index);
   const alts = Array.isArray(ex.alternates) ? ex.alternates : [];
   return (
-    <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: '7px 8px' }}>
+    <div ref={rowRef} style={{
+      background: 'var(--bg-1)', border: `1px solid ${dragging ? 'var(--accent)' : 'var(--line)'}`,
+      borderRadius: 8, padding: '7px 8px',
+      boxShadow: dragging ? '0 8px 20px rgba(0,0,0,0.45)' : 'none',
+      position: dragging ? 'relative' : 'static', zIndex: dragging ? 5 : 'auto',
+      transition: 'box-shadow .12s ease, border-color .12s ease',
+    }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: sets.length ? 6 : 0 }}>
+        {dragHandle && (
+          <span {...dragHandle} aria-label={`Reorder ${ex.name}`} title="Drag to reorder"
+            style={{ flexShrink: 0, display: 'grid', placeItems: 'center', cursor: 'grab', touchAction: 'none',
+              color: dragging ? 'var(--accent)' : 'var(--text-3)', padding: '0 1px' }}>
+            <svg width="8" height="13" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+              <circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/>
+              <circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/>
+              <circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/>
+            </svg>
+          </span>
+        )}
         <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, flexShrink: 0 }}>{idx + 1}.</span>
         {/* Tap the movement to open its full options (same set as the builder). */}
         <button onClick={() => onOpenOptions(ex)} className="phase-btn" title="Exercise options"
@@ -444,6 +520,27 @@ function OptToggle({ label, sub, on, onChange }) {
       </span>
     </button>
   );
+}
+
+// Find a section by id anywhere in the day map.
+function findSection(map, sectionId) {
+  for (const k in (map || {})) {
+    const hit = (map[k].workout_sections || []).find(s => s.id === sectionId);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Replace a section (by id) anywhere in the day map.
+function mapSection(map, sectionId, fn) {
+  const next = { ...map };
+  for (const k in next) {
+    const d = next[k];
+    let changed = false;
+    const ws = (d.workout_sections || []).map(s => s.id === sectionId ? (changed = true, fn(s)) : s);
+    if (changed) { next[k] = { ...d, workout_sections: ws }; break; }
+  }
+  return next;
 }
 
 // Find an exercise by id anywhere in the day map.
