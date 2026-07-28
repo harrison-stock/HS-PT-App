@@ -288,7 +288,7 @@ body:has([data-role="trainer"]) {
   flex-shrink: 0;
   z-index: 5;
   display: grid; grid-template-columns: repeat(5, 1fr);
-  padding: 10px 8px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  padding: 8px 8px calc(env(safe-area-inset-bottom, 0px) + 6px);
   background: linear-gradient(180deg, var(--nav-from), var(--nav-to) 60%);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--line);
@@ -375,6 +375,8 @@ body:has([data-role="trainer"]) {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 .scroller { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 .scroller::-webkit-scrollbar { width: 10px; }
