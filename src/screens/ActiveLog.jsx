@@ -43,7 +43,6 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const [loadError, setLoadError] = React.useState(false);
   const [dayIntro, setDayIntro] = React.useState('');
   const [dayTitle, setDayTitle] = React.useState('');
-  const [sectionIntros, setSectionIntros] = React.useState({}); // phase id → coach's slide text
   const sessionStartRef = React.useRef(new Date().toISOString());
 
   // Session clock - anchored to the wall clock so it stays accurate even if
@@ -131,10 +130,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         if (data) {
           const SECTION_TO_PHASE = { PULSE_RAISER: 'pulse', BANDED: 'banded', MAIN: 'main', COOLDOWN: 'cooldown' };
           const rows = [];
-          const intros = {};
           for (const sec of (data.workout_sections || []).sort((a, b) => a.sort_order - b.sort_order)) {
             const phase = SECTION_TO_PHASE[sec.kind] || 'main';
-            if (sec.intro && !intros[phase]) intros[phase] = sec.intro;
             for (const ex of (sec.section_exercises || []).sort((a, b) => a.sort_order - b.sort_order)) {
               const sets = (ex.exercise_sets || [])
                 .sort((a, b) => a.set_index - b.set_index)
@@ -217,7 +214,6 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           if (rows.length > 0) setExercises(rows);
           else setLoadError(true);
           setDayIntro(data.intro || '');
-          setSectionIntros(intros);
           // Workout name (migration 045) - fetched separately so an un-migrated
           // DB degrades gracefully rather than failing the whole load.
           supabase.from('programme_days').select('title').eq('id', dayId).maybeSingle()
@@ -494,36 +490,27 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   }));
 
   // Build the rail: exercises (consecutive supersets merged into one card),
-  // with a section-end divider slide at each phase boundary.
+  // flowing straight from one phase into the next with no interim slide.
   const railItems = [];
   // Intro slide first - the session opens on the coach's brief before any
-  // exercise, so "start workout" lands on the intro page, not the pulse raiser.
+  // exercise, so "start workout" lands on the intro page, not the first block.
   if (dayIntro && exercises.length) railItems.push({ type: 'intro' });
   for (let i = 0; i < exercises.length;) {
     const e = exercises[i];
-    let last = e;
     if (e.ss != null) {
       const group = [e];
       let j = i + 1;
       while (j < exercises.length && exercises[j].ss === e.ss) { group.push(exercises[j]); j++; }
       railItems.push({ type: 'superset', group, exIdx: i });
-      last = group[group.length - 1];
       i = j;
     } else {
       railItems.push({ type: 'ex', ex: e, exIdx: i });
       i += 1;
     }
-    const next = exercises[i];
-    if (next && next.phase !== last.phase) {
-      railItems.push({ type: 'divider', phaseId: last.phase, nextPhaseId: next.phase });
-    }
   }
-  // End of the session: a "block complete" transition (styled like the between-
-  // phase dividers) for the final phase, then a dedicated "ready to finish"
-  // slide - so the last block wraps up consistently before the finish CTA.
+  // A dedicated "ready to finish" slide caps the session before the finish CTA.
   if (exercises.length) {
     const lastPhase = exercises[exercises.length - 1].phase;
-    railItems.push({ type: 'phasedone', phaseId: lastPhase });
     railItems.push({ type: 'finish', phaseId: lastPhase });
   }
   // Resolve each phase's first rail index for the strip nav
@@ -638,12 +625,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         {railItems.map((it, i) =>
         it.type === 'intro' ?
         <IntroSlide key={`intro`} title={dayTitle} intro={dayIntro} onContinue={() => setActiveIdx(i + 1)} /> :
-        it.type === 'phasedone' ?
-        <PhaseDoneSlide key={`pd${i}`} phaseId={it.phaseId} /> :
         it.type === 'finish' ?
         <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
-        it.type === 'divider' ?
-        <SectionDivider key={`d${i}`} phaseId={it.phaseId} nextPhaseId={it.nextPhaseId} exercises={exercises} slideText={sectionIntros[it.nextPhaseId]} onContinue={() => setActiveIdx(i + 1)} /> :
         it.type === 'superset' ?
         <SupersetCard key={`ss${it.group[0].id}`} group={it.group}
           onComplete={(exId, si) => completeSet(exId, si)}
@@ -1147,46 +1130,6 @@ function ExerciseComment() {
 
 // ── FINAL SLIDE (after cooldown) ─────────────────────────────────
 // "Cooldown complete · ready to finish?" - last rail slide before results.
-// Terminal "block complete" slide - same treatment as the between-phase
-// dividers, shown for the final block before the finish CTA. Advancing is
-// handled by the bottom action bar's CONTINUE button.
-function PhaseDoneSlide({ phaseId }) {
-  const phase = PHASES.find((p) => p.id === phaseId) || {};
-  const color = phase.accent || 'var(--accent)';
-  const confetti = ['var(--c-amber)', 'var(--c-blue)', 'var(--c-coral)', 'var(--accent)', 'var(--c-pink)'];
-  return (
-    <div style={{
-      flex: '0 0 100%', width: '100%', height: '100%',
-      scrollSnapAlign: 'center', padding: '0 14px', overflow: 'hidden',
-      display: 'flex', flexDirection: 'column'
-    }}>
-      <div className="scroller" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', paddingBottom: 10 }}>
-        <div style={{ position: 'relative', width: '100%', height: 0 }}>
-          {confetti.concat(confetti).map((c, i) => {
-            const seed = (i * 137.5) % 100;
-            return (
-              <span key={i} style={{
-                position: 'absolute', left: `${seed}%`, top: `${-90 - (i % 5) * 28}px`,
-                width: i % 2 ? 7 : 9, height: i % 3 ? 9 : 6,
-                background: c, borderRadius: 1, transform: `rotate(${seed * 3.6}deg)`, opacity: 0.85
-              }} />);
-          })}
-        </div>
-        <div style={{ display: 'grid', placeItems: 'center', color, marginBottom: 26 }}>
-          {(PHASE_ICON[phaseId] || PHASE_ICON._default)(140)}
-        </div>
-        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color, marginBottom: 10 }}>
-          ✓ {(phase.label || 'COOLDOWN').toUpperCase()} COMPLETE
-        </div>
-        <div className="h-bold" style={{ fontSize: 26, marginBottom: 18 }}>GREAT JOB!</div>
-        <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300 }}>
-          That's every block finished. Continue to wrap up your session.
-        </div>
-      </div>
-    </div>);
-
-}
-
 function FinishSlide({ phaseId, onFinish }) {
   const phase = PHASES.find((p) => p.id === phaseId) || {};
   const confetti = ['var(--c-amber)', 'var(--c-blue)', 'var(--c-coral)', 'var(--accent)', 'var(--c-pink)'];
@@ -1371,54 +1314,6 @@ function IntroSlide({ title, intro, onContinue }) {
         {intro
           ? <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--text-2)', maxWidth: 320, whiteSpace: 'pre-line' }}>{intro}</div>
           : <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300 }}>Take a moment to get set, then continue to your pulse raiser.</div>}
-      </div>
-    </div>);
-
-}
-
-function SectionDivider({ phaseId, nextPhaseId, exercises, slideText, onContinue }) {
-  const phase = PHASES.find((p) => p.id === phaseId) || {};
-  const next = PHASES.find((p) => p.id === nextPhaseId) || {};
-  const color = phase.accent || 'var(--accent)';
-  const count = exercises.filter((e) => e.phase === phaseId).length;
-  const blurb = slideText || SECTION_BLURB[nextPhaseId] || 'Take a breath and reset before the next block.';
-  const confetti = ['var(--c-amber)', 'var(--c-blue)', 'var(--c-coral)', 'var(--accent)', 'var(--c-pink)'];
-  return (
-    <div style={{
-      flex: '0 0 100%', width: '100%', height: '100%',
-      scrollSnapAlign: 'center', padding: '0 14px', overflow: 'hidden',
-      display: 'flex', flexDirection: 'column'
-    }}>
-      <div className="scroller" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', paddingBottom: 10 }}>
-        {/* Confetti */}
-        <div style={{ position: 'relative', width: '100%', height: 0 }}>
-          {confetti.concat(confetti).map((c, i) => {
-            const seed = (i * 137.5) % 100;
-            return (
-              <span key={i} style={{
-                position: 'absolute',
-                left: `${seed}%`, top: `${-90 - (i % 5) * 28}px`,
-                width: i % 2 ? 7 : 9, height: i % 3 ? 9 : 6,
-                background: c, borderRadius: 1,
-                transform: `rotate(${seed * 3.6}deg)`, opacity: 0.85
-              }} />);
-          })}
-        </div>
-
-        {/* Big brand icon (fills the hex footprint, phase-coloured, no badge) */}
-        <div style={{ display: 'grid', placeItems: 'center', color, marginBottom: 26 }}>
-          {(PHASE_ICON[phaseId] || PHASE_ICON._default)(140)}
-        </div>
-
-        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color, marginBottom: 10 }}>
-          ✓ {phase.label ? phase.label.toUpperCase() : 'SECTION'} COMPLETE
-        </div>
-        <div className="h-bold" style={{ fontSize: 26, marginBottom: 18 }}>
-          NEXT · {next.label ? next.label.toUpperCase() : ''}
-        </div>
-        <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300 }}>
-          {blurb}
-        </div>
       </div>
     </div>);
 
@@ -1653,13 +1548,6 @@ const PHASE_ICON = {
   cooldown: (s) => <BrandIcon name="Cooldown" size={s} />,
   _default: (s) => <IconActivity size={s} />
 };
-
-const SECTION_BLURB = {
-  banded: 'Glutes fired and hips open - now load the pattern with banded activation and pre-stretches before your main lifts.',
-  main: 'Primed and warm. Time for the working sets - control the tempo, chase quality reps, and stop at your target RPE.',
-  cooldown: 'Heavy lifting done. Bring the heart rate down and lengthen everything you just trained with slow, nasal breathing.'
-};
-
 
 function AlternativesSheet({ ex, onClose, onPick }) {
   return (

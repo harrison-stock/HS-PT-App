@@ -531,9 +531,9 @@ function OverviewTab({ c, go, onClose, onTab }) {
       <AdherenceCard clientId={c.id} />
 
       {/* Profile */}
-      <div className="card" style={{ padding: 14 }}>
+      <div className="card" style={{ padding: 14, minWidth: 0 }}>
         <div className="label" style={{ marginBottom: 10 }}>// PROFILE</div>
-        <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ display: 'grid', gap: 8, minWidth: 0 }}>
           {c.email && <ProfileRow k="EMAIL" v={c.email} />}
           {c.timezone && <ProfileRow k="TIMEZONE" v={c.timezone} />}
           <ProfileRow k="PROGRAMME" v={currentProg || 'None assigned'} accent={!!currentProg} />
@@ -555,7 +555,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
         {d?.sessions.map(s => {
           const dur = s.completed_at ? Math.round((new Date(s.completed_at) - new Date(s.started_at)) / 60000) : null;
           return (
-            <div key={s.id} className="card" style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div key={s.id} className="card" style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <span style={{ fontSize: 12, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {c.name.split(' ')[0]} logged a workout for {new Date(s.started_at).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
               </span>
@@ -582,7 +582,7 @@ function TrainStat({ top, big, sub, divider }) {
 
 function ProfileRow({ k, v, accent }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, minWidth: 0 }}>
       <Mono style={{ flexShrink: 0 }}>{k}</Mono>
       <span style={{ fontSize: 12, color: accent ? 'var(--accent)' : 'var(--text-2)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{v}</span>
     </div>
