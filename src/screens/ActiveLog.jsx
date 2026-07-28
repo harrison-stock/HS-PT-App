@@ -238,7 +238,10 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   React.useEffect(() => { liveRef.current = { sessionTime, activeIdx, exercises }; }, [sessionTime, activeIdx, exercises]);
 
   const persist = React.useCallback(() => {
-    if (!dayId || !userId || complete) return;
+    // Amending an already-logged session is not a live workout - snapshotting
+    // it left a "continue your workout?" prompt behind on the way out, which
+    // had to be dismissed after every edit.
+    if (!dayId || !userId || complete || edit) return;
     const cur = liveRef.current;
     saveActiveWorkout(userId, {
       dayId, startedAt: sessionStartRef.current,
@@ -246,15 +249,19 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       label: dayIntro || '',
       exercises: cur.exercises.map(ex => ({ id: ex.id, sets: (ex.sets || []).map(s => ({ done: !!s.done, reps: s.reps, kg: s.kg, band: s.band, rpe: s.rpe })) })),
     });
-  }, [dayId, userId, complete, dayIntro]);
+  }, [dayId, userId, complete, dayIntro, edit]);
 
   // Snapshot on meaningful progress, plus a heartbeat for the running clock.
   React.useEffect(() => { if (!dbLoading) persist(); }, [exercises, activeIdx, dbLoading, persist]);
   React.useEffect(() => {
-    if (!dayId || !userId) return;
+    if (!dayId || !userId || edit) return;
     const t = setInterval(() => { if (!paused && !complete) persist(); }, 5000);
     return () => clearInterval(t);
-  }, [dayId, userId, paused, complete, persist]);
+  }, [dayId, userId, paused, complete, persist, edit]);
+
+  // Opening an edit clears any stale snapshot, so amending a past session can
+  // never leave a phantom "resume workout" prompt behind.
+  React.useEffect(() => { if (edit && userId) clearActiveWorkout(userId); }, [edit, userId]);
 
   // Once finished, drop the snapshot so we don't re-prompt.
   React.useEffect(() => { if (complete && userId) clearActiveWorkout(userId); }, [complete, userId]);
@@ -518,6 +525,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   phaseCounts.forEach((p) => {
     p.firstRailIdx = railItems.findIndex((it) => railPhase(it) === p.id);
   });
+  // Only blocks this workout actually contains are worth showing - a node for
+  // an absent block has nothing to jump to and reads as a broken button.
+  const navPhases = phaseCounts.filter((p) => p.count > 0 && p.firstRailIdx >= 0);
 
   const activeItem = railItems[activeIdx] || railItems[0];
   const ex = activeItem.type === 'ex' ? activeItem.ex
@@ -577,36 +587,44 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           </button>
         </div>
 
-        {/* Phase strip - compact icons-only hexagon nodes */}
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phaseCounts.length}, 1fr)`, gap: 8, marginBottom: 4 }} data-comment-anchor="86e6e73e80-div-154-9">
-          {phaseCounts.map((p) => {
-            const isCurrent = currentPhaseId === p.id;
-            const allDone = p.count > 0 && p.done === p.count;
-            return (
-              <button key={p.id} onClick={() => p.firstRailIdx >= 0 && setActiveIdx(p.firstRailIdx)}
-              aria-label={`${p.label} · ${p.done}/${p.count}`}
-              style={{
-                all: 'unset', cursor: 'pointer', boxSizing: 'border-box',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: '4px 2px', borderRadius: 10,
-                background: isCurrent ? `color-mix(in srgb, ${p.accent} 12%, transparent)` : 'transparent',
-                border: isCurrent ? `1.5px solid ${p.accent}` : '1.5px solid transparent',
-                boxShadow: isCurrent ? `0 0 calc(10px * var(--glow)) color-mix(in srgb, ${p.accent} 35%, transparent)` : 'none'
-              }}>
-                {allDone ?
-                <Hex size={26} square style={{
-                  background: p.accent, color: 'var(--on-accent)',
-                  boxShadow: `0 0 calc(7px * var(--glow)) color-mix(in srgb, ${p.accent} 55%, transparent)`
+        {/* Phase strip - tap a block to jump straight to it. Only blocks that
+            actually contain exercises are shown, so every node is live. */}
+        {navPhases.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${navPhases.length}, 1fr)`, gap: 8, marginBottom: 4 }} data-comment-anchor="86e6e73e80-div-154-9">
+            {navPhases.map((p) => {
+              const isCurrent = currentPhaseId === p.id;
+              const allDone = p.done === p.count;
+              return (
+                <button key={p.id} className="phase-btn" onClick={() => setActiveIdx(p.firstRailIdx)}
+                aria-label={`Go to ${p.label} - ${p.done} of ${p.count} done`}
+                style={{
+                  all: 'unset', cursor: 'pointer', boxSizing: 'border-box',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+                  padding: '3px 2px', borderRadius: 10,
+                  background: isCurrent ? `color-mix(in srgb, ${p.accent} 12%, transparent)` : 'transparent',
+                  border: isCurrent ? `1.5px solid ${p.accent}` : '1.5px solid transparent',
+                  boxShadow: isCurrent ? `0 0 calc(10px * var(--glow)) color-mix(in srgb, ${p.accent} 35%, transparent)` : 'none'
                 }}>
-                  <IconCheck size={11} sw={3} />
-                </Hex> :
-                <span style={{ display: 'grid', placeItems: 'center', width: 30, height: 28, color: p.accent }}>
-                  {(PHASE_ICON[p.id] || PHASE_ICON._default)(28)}
-                </span>}
-              </button>);
+                  {allDone ?
+                  <Hex size={24} square style={{
+                    background: p.accent, color: 'var(--on-accent)',
+                    boxShadow: `0 0 calc(7px * var(--glow)) color-mix(in srgb, ${p.accent} 55%, transparent)`
+                  }}>
+                    <IconCheck size={10} sw={3} />
+                  </Hex> :
+                  <span style={{ display: 'grid', placeItems: 'center', width: 26, height: 24, color: p.accent }}>
+                    {(PHASE_ICON[p.id] || PHASE_ICON._default)(24)}
+                  </span>}
+                  <span className="mono" style={{
+                    fontSize: 7, letterSpacing: '0.06em', fontWeight: 700, lineHeight: 1,
+                    color: isCurrent ? p.accent : 'var(--text-3)',
+                    maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{p.label.toUpperCase()}</span>
+                </button>);
 
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </div>
 
       {/* Horizontal swipeable rail */}
