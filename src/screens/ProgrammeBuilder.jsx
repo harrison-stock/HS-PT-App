@@ -259,6 +259,19 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const addAlternate = (sIdx, eIdx, ex) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, alternates: [...(e.alternates || []), { name: ex.name, img: ex.img }] }))); setDirty(true); };
   const delAlternate = (sIdx, eIdx, idx) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, alternates: (e.alternates || []).filter((_, i) => i !== idx) }))); setDirty(true); };
 
+  // ── Reorder exercises within a section (drag & drop) ───────────
+  const moveEx = (sIdx, from, to) => {
+    setDay(d => ({ ...d, sections: d.sections.map((s, si) => {
+      if (si !== sIdx) return s;
+      if (from === to || to < 0 || to >= s.items.length) return s;
+      const items = [...s.items];
+      const [moved] = items.splice(from, 1);
+      items.splice(to, 0, moved);
+      return { ...s, items: normaliseSupersets(items) };
+    }) }));
+    setDirty(true);
+  };
+
   // ── Supersets - group an exercise with the one above it ────────
   const linkSuperset = (sIdx, eIdx) => {
     if (eIdx <= 0) return;
@@ -525,6 +538,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
                 onUpdateEx={(eIdx, patch) => updateEx(sIdx, eIdx, patch)}
                 onDupEx={(eIdx) => dupEx(sIdx, eIdx)}
                 onDelEx={(eIdx) => delEx(sIdx, eIdx)}
+                onMoveEx={(from, to) => moveEx(sIdx, from, to)}
                 onAddEx={() => setAddingSection(sIdx)}
                 onSwitchEx={(eIdx) => setSwitchingEx({ sIdx, eIdx })}
                 onSuperset={(eIdx) => linkSuperset(sIdx, eIdx)}
@@ -1005,11 +1019,55 @@ function RestDay({ onAdd }) {
 }
 
 // ── SECTION ───────────────────────────────────────────────────────
-function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll, onMoveEx }) {
   const color = sectionColor(s.kind);
   const [slideOpen, setSlideOpen] = React.useState(false);
   const [iconOpen, setIconOpen] = React.useState(false);
   const [confirmDel, setConfirmDel] = React.useState(false);
+
+  // ── Drag to reorder ──
+  // Pointer events (not HTML5 drag-and-drop, which doesn't fire on touch) so
+  // this works with a finger as well as a mouse. As the pointer crosses a
+  // neighbouring card's midpoint we swap immediately, so the list reflows live
+  // under the finger and there's nothing to reconcile on drop.
+  const [dragId, setDragId] = React.useState(null);
+  const rowRefs = React.useRef({});
+
+  const startDrag = (id) => (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    setDragId(id);
+  };
+
+  // Listen on the window rather than the handle: reordering makes React move
+  // the handle's DOM node, which can drop a pointer capture mid-drag.
+  React.useEffect(() => {
+    if (dragId == null) return;
+    const move = (ev) => {
+      const idx = s.items.findIndex(it => it.id === dragId);
+      if (idx < 0) return;
+      const y = ev.clientY;
+      const prev = idx > 0 ? rowRefs.current[s.items[idx - 1].id] : null;
+      if (prev) {
+        const r = prev.getBoundingClientRect();
+        if (y < r.top + r.height / 2) { onMoveEx(idx, idx - 1); return; }
+      }
+      const next = idx < s.items.length - 1 ? rowRefs.current[s.items[idx + 1].id] : null;
+      if (next) {
+        const r = next.getBoundingClientRect();
+        if (y > r.top + r.height / 2) { onMoveEx(idx, idx + 1); return; }
+      }
+    };
+    const end = () => setDragId(null);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+  }, [dragId, s.items, onMoveEx]);
   const showSlide = slideOpen || !!s.intro;
   // Superset labels: A1/A2, B1/B2… per consecutive grouped run.
   const seen = {}; let li = 0; const cnt = {};
@@ -1083,6 +1141,9 @@ function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSet
       <div style={{ display: 'grid', gap: 9 }}>
         {s.items.map((e, eIdx) => (
           <ExerciseEditor key={e.id} e={e} color={color}
+            rowRef={(el) => { if (el) rowRefs.current[e.id] = el; else delete rowRefs.current[e.id]; }}
+            dragging={dragId === e.id}
+            dragHandle={s.items.length > 1 ? { onPointerDown: startDrag(e.id) } : null}
             expanded={expandedExId === e.id} expandedSetId={expandedSetId}
             ssLabel={ssLabels[eIdx]} canSuperset={eIdx > 0} grouped={e.ssGroup != null}
             onSuperset={() => onSuperset(eIdx)} onUnsuperset={() => onUnsuperset(eIdx)}
@@ -1281,13 +1342,38 @@ function IconPickerSheet({ current, kind, color, onPick, onClose }) {
 }
 
 // ── EXERCISE EDITOR ───────────────────────────────────────────────
-function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperset, grouped, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll }) {
+function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperset, grouped, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll, rowRef, dragging, dragHandle }) {
   const workSets = e.setsList.filter(s => s.kind !== 'WARMUP');
   const summary  = workSets.length === 0 ? `${e.setsList.length} warm-up` : `${e.setsList.length} sets · ${summarize(e)}`;
 
   return (
-    <div style={{ background: 'var(--bg-2)', border: '1px solid '+(expanded?color:'var(--line)'), borderLeft: grouped ? '2px solid var(--accent-2)' : `2px solid ${color}`, borderRadius: 10, overflow: 'hidden', boxShadow: expanded ? `0 0 calc(8px * var(--glow)) color-mix(in srgb, ${color} 30%, transparent)` : 'none' }}>
-      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', width: '100%', display: 'grid', gridTemplateColumns: '46px 1fr auto', gap: 12, alignItems: 'center', padding: 12 }}>
+    <div ref={rowRef} style={{
+      background: 'var(--bg-2)', border: '1px solid '+(expanded?color:'var(--line)'),
+      borderLeft: grouped ? '2px solid var(--accent-2)' : `2px solid ${color}`,
+      borderRadius: 10, overflow: 'hidden',
+      // Lift the card being dragged so it reads as picked up.
+      transform: dragging ? 'scale(1.02)' : 'none',
+      boxShadow: dragging ? '0 10px 26px rgba(0,0,0,0.45)'
+        : expanded ? `0 0 calc(8px * var(--glow)) color-mix(in srgb, ${color} 30%, transparent)` : 'none',
+      position: dragging ? 'relative' : 'static', zIndex: dragging ? 5 : 'auto',
+      transition: 'transform .12s ease, box-shadow .12s ease',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        {dragHandle && (
+          <div {...dragHandle} aria-label={`Reorder ${e.name}`} title="Drag to reorder"
+            style={{
+              flexShrink: 0, width: 26, display: 'grid', placeItems: 'center',
+              cursor: 'grab', touchAction: 'none', color: dragging ? color : 'var(--text-3)',
+              borderRight: '1px solid var(--line)', background: dragging ? `color-mix(in srgb, ${color} 12%, transparent)` : 'transparent',
+            }}>
+            <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+              <circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/>
+              <circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/>
+              <circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/>
+            </svg>
+          </div>
+        )}
+      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: '46px 1fr auto', gap: 12, alignItems: 'center', padding: 12 }}>
         <div style={{ width: 46, height: 46, borderRadius: 9, background: `url('${e.img}') center/cover, var(--bg-3)`, border: '1px solid var(--line)' }}/>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1301,6 +1387,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           <IconChevronRight size={14}/>
         </div>
       </button>
+      </div>
 
       {expanded && (
         <div style={{ padding: '0 10px 12px', borderTop: '1px solid var(--line)' }}>
@@ -1829,6 +1916,25 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
 function clampIdx(v, len) {
   const n = Number.isInteger(v) ? v : 0;
   return Math.max(0, Math.min(n, (len || 1) - 1));
+}
+
+// A superset only makes sense as a consecutive run of two or more. Reordering
+// can split a group apart, so after a move we keep each group's longest
+// contiguous run and un-group whatever was left stranded.
+function normaliseSupersets(items) {
+  const idxByGroup = {};
+  items.forEach((it, i) => { if (it.ssGroup != null) (idxByGroup[it.ssGroup] = idxByGroup[it.ssGroup] || []).push(i); });
+  const keep = new Set();
+  Object.values(idxByGroup).forEach(idxs => {
+    let best = [], run = [idxs[0]];
+    for (let k = 1; k < idxs.length; k++) {
+      if (idxs[k] === idxs[k - 1] + 1) run.push(idxs[k]);
+      else { if (run.length > best.length) best = run; run = [idxs[k]]; }
+    }
+    if (run.length > best.length) best = run;
+    if (best.length >= 2) best.forEach(i => keep.add(i));
+  });
+  return items.map((it, i) => (it.ssGroup != null && !keep.has(i)) ? { ...it, ssGroup: null } : it);
 }
 
 function mapDay(day, sIdx, eIdx, mapEx) {
