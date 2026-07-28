@@ -12,6 +12,7 @@ import { RoadmapTrack } from '../components/Roadmap'
 import { FileDrop } from '../components/FileDrop'
 import { toast } from '../lib/toast'
 import { SkeletonCard } from '../components/Loading'
+import { useDesktop } from '../lib/useDesktop'
 
 const IMG_FALLBACK = 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70';
 const TAGS = ['STRENGTH','ONBOARD','REHAB','ENDURANCE','HYBRID','SPORT'];
@@ -1025,11 +1026,12 @@ function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSet
   const [iconOpen, setIconOpen] = React.useState(false);
   const [confirmDel, setConfirmDel] = React.useState(false);
 
-  // ── Drag to reorder ──
-  // Pointer events (not HTML5 drag-and-drop, which doesn't fire on touch) so
-  // this works with a finger as well as a mouse. As the pointer crosses a
-  // neighbouring card's midpoint we swap immediately, so the list reflows live
-  // under the finger and there's nothing to reconcile on drop.
+  // ── Drag to reorder (laptop only) ──
+  // Deliberately mouse-only: on a phone a drag handle competes with touch
+  // scrolling, so handles are hidden unless there's a fine pointer on a wide
+  // screen. As the pointer crosses a neighbouring card's midpoint we swap
+  // immediately, so the list reflows live and there's nothing to reconcile.
+  const isDesktop = useDesktop();
   const [dragId, setDragId] = React.useState(null);
   const rowRefs = React.useRef({});
 
@@ -1143,7 +1145,7 @@ function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSet
           <ExerciseEditor key={e.id} e={e} color={color}
             rowRef={(el) => { if (el) rowRefs.current[e.id] = el; else delete rowRefs.current[e.id]; }}
             dragging={dragId === e.id}
-            dragHandle={s.items.length > 1 ? { onPointerDown: startDrag(e.id) } : null}
+            dragHandle={isDesktop && s.items.length > 1 ? { onPointerDown: startDrag(e.id) } : null}
             expanded={expandedExId === e.id} expandedSetId={expandedSetId}
             ssLabel={ssLabels[eIdx]} canSuperset={eIdx > 0} grouped={e.ssGroup != null}
             onSuperset={() => onSuperset(eIdx)} onUnsuperset={() => onUnsuperset(eIdx)}
