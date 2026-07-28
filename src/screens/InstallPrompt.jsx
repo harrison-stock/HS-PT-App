@@ -37,8 +37,15 @@ export function InstallPrompt({ onClose }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 410, background: 'rgba(6,10,12,0.66)', backdropFilter: 'blur(6px)', display: 'grid', placeItems: 'center', padding: 24, animation: 'fadeIn .15s ease' }}>
       <div onClick={e => e.stopPropagation()} className="card" style={{ width: '100%', maxWidth: 340, padding: 22, background: 'var(--bg-2)', textAlign: 'center' }}>
-        <div style={{ padding: 14, margin: '4px auto 14px', width: 'fit-content' }}>
-          <img src="/logo-mark.png" alt="HS PT" width={84} style={{ display: 'block', height: 'auto', filter: 'drop-shadow(0 6px 18px rgba(0,0,0,0.35))' }}/>
+        {/* The real home-screen app icon, shown as it will appear once added -
+            rounded like an installed icon so it's instantly recognisable. */}
+        <div style={{ margin: '4px auto 16px', width: 'fit-content' }}>
+          <img src="/web-app-manifest-192x192.png" alt="HS PT app icon" width={78} height={78}
+            style={{
+              display: 'block', width: 78, height: 78, borderRadius: 18,
+              boxShadow: '0 8px 22px rgba(0,0,0,0.4)',
+              border: '1px solid var(--line-strong)',
+            }}/>
         </div>
         <div className="h-bold" style={{ fontSize: 19, marginBottom: 8 }}>INSTALL THE HS PT APP</div>
         <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.55, marginBottom: 18 }}>

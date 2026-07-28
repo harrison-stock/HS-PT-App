@@ -529,6 +529,11 @@ body:has([data-role="trainer"]) {
 /* Progress-bar fills ease into place instead of snapping. */
 .bar > span { transition: width .7s cubic-bezier(.22,.61,.36,1); }
 
+/* Workout phase-strip nodes - tapping jumps to that block, so give them a
+   clear press response rather than looking like a passive progress readout. */
+.phase-btn { transition: transform .12s ease, background .18s ease, border-color .18s ease; }
+.phase-btn:active { transform: scale(0.92); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .001ms !important;
