@@ -557,7 +557,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       {/* Top bar */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
-        padding: 'max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 14px 10px',
+        padding: 'max(54px, calc(var(--safe-top) + 14px)) 14px 10px',
         background: 'linear-gradient(180deg, var(--bg-0) 70%, transparent)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -1366,7 +1366,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
       animation: 'fadeIn .25s ease'
     }}>
       <div style={{
-        flexShrink: 0, padding: 'max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 18px 18px', textAlign: 'center', position: 'relative', overflow: 'hidden',
+        flexShrink: 0, padding: 'max(54px, calc(var(--safe-top) + 14px)) 18px 18px', textAlign: 'center', position: 'relative', overflow: 'hidden',
         background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, var(--bg-1)), var(--bg-1))'
       }}>
         {onClose &&

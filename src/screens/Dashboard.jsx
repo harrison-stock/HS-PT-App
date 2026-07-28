@@ -1,7 +1,7 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
 import { HEX_RATIO, HexShape, Hex } from '../components/hex'
-import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc, IconChevronRight } from '../components/icons'
+import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc, IconChevronRight, IconDumbbell } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
 import { setTaskComplete } from '../lib/tasks'
 import { FormFill } from './FormFill'
@@ -156,7 +156,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
   }, [userId, today]);
 
   return (
-    <div className="scroller dash-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 16px 28px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
+    <div className="scroller dash-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 16px 28px', paddingTop: 'calc(var(--safe-top) + 18px)' }}>
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
@@ -275,8 +275,10 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       <ProgrammeRoadmap userId={userId} onOpen={() => setShowReport(true)} />
       {showReport && (
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column',
+          // Viewport-positioned, so this must clear the notch itself (the real
+          // inset) rather than --safe-top, which is zeroed while impersonating.
           top: impersonating ? 'calc(env(safe-area-inset-top, 0px) + 45px)' : 0 }}>
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'calc(env(safe-area-inset-top, 0px) + 14px) 16px 40px' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'calc(var(--safe-top) + 14px) 16px 40px' }}>
             <ProgrammeReport clientId={userId} clientName={user?.name || ''} embedded onClose={() => setShowReport(false)} />
           </div>
         </div>
@@ -303,9 +305,10 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
 }
 
 // ── WEEK SCHEDULE STRIP ──────────────────────────────────────────
-// A 7-day ribbon (Mon–Sun) under the greeting: today is the highlighted
-// pill, dots mark scheduled sessions (filled when done, coral when missed),
-// with a done/planned count. Taps through to the Train screen.
+// A 7-day ribbon (Mon-Sun) under the greeting. Today is the highlighted
+// pill. Under each day: a hex tick once that session is logged, a dumbbell
+// glyph when a workout is prescribed but not yet done (coral if the day has
+// already passed), and nothing on rest days. Taps through to the Train screen.
 function WeekStrip({ userId, go }) {
   const [byDate, setByDate] = React.useState(null);
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -360,25 +363,31 @@ function WeekStrip({ userId, go }) {
           {week.map(d => {
             const isToday = d.date === todayStr;
             const status = rows[d.date];
-            const missed = status && status !== 'completed' && d.date < todayStr;
-            const dotColor = !status ? 'transparent'
-              : status === 'completed' ? 'var(--accent)'
-              : missed ? 'var(--c-coral)'
-              : 'color-mix(in srgb, var(--accent) 45%, var(--line-strong))';
+            const logged = status === 'completed';
+            const missed = status && !logged && d.date < todayStr;
+            // Prescribed-but-not-done days show a dumbbell; logged days a hex tick.
+            const markColor = logged ? 'var(--accent)' : missed ? 'var(--c-coral)' : 'var(--accent-2)';
             return (
               <div key={d.date} style={{
-                flex: 1, textAlign: 'center', padding: '7px 0 6px', borderRadius: 10,
+                flex: 1, minWidth: 0, textAlign: 'center', padding: '7px 0 6px', borderRadius: 10,
                 background: isToday ? 'var(--accent-soft)' : 'transparent',
                 border: `1px solid ${isToday ? 'var(--accent)' : 'transparent'}`,
                 boxShadow: isToday ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none',
               }}>
                 <div className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: isToday ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700 }}>{d.label}</div>
                 <div className="h-bold" style={{ fontSize: 15, marginTop: 3, lineHeight: 1, color: isToday ? 'var(--accent)' : 'var(--text-2)' }}>{d.dayNum}</div>
-                <div style={{
-                  width: 5, height: 5, borderRadius: 999, margin: '5px auto 0',
-                  background: dotColor,
-                  boxShadow: status === 'completed' ? '0 0 calc(5px * var(--glow)) var(--accent-glow)' : 'none',
-                }} />
+                <div style={{ height: 16, marginTop: 4, display: 'grid', placeItems: 'center' }}>
+                  {logged ? (
+                    <Hex size={15} square style={{
+                      background: 'var(--accent)', color: 'var(--on-accent)',
+                      boxShadow: '0 0 calc(6px * var(--glow)) var(--accent-glow)',
+                    }}>
+                      <IconCheck size={8} sw={3.5} />
+                    </Hex>
+                  ) : status ? (
+                    <IconDumbbell size={13} style={{ color: markColor, opacity: missed ? 1 : 0.85 }} />
+                  ) : null}
+                </div>
               </div>
             );
           })}

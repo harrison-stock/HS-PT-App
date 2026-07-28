@@ -114,7 +114,7 @@ export function Progress({ go, userId, embedded }) {
   const [range, setRange] = React.useState('90d');
 
   return (
-    <div className={embedded ? '' : 'scroller'} style={{ padding: embedded ? '0 0 24px' : '0 16px 28px', paddingTop: embedded ? 0 : 'calc(env(safe-area-inset-top, 0px) + 18px)' }} data-comment-anchor="2e58f3c1e8-div-7-5">
+    <div className={embedded ? '' : 'scroller'} style={{ padding: embedded ? '0 0 24px' : '0 16px 28px', paddingTop: embedded ? 0 : 'calc(var(--safe-top) + 18px)' }} data-comment-anchor="2e58f3c1e8-div-7-5">
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end', marginBottom: 14 }}>
         {!embedded && (
           <div style={{ marginRight: 'auto' }}>
@@ -548,7 +548,7 @@ function BodyMetricDetail({ met, onBack, onLog }) {
       position: 'absolute', inset: 0, zIndex: 60, background: 'var(--bg-1)',
       display: 'flex', flexDirection: 'column'
     }}>
-      <div style={{ padding: 'max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 16px 12px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--line)' }}>
+      <div style={{ padding: 'max(54px, calc(var(--safe-top) + 14px)) 16px 12px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid var(--line)' }}>
         <HexBackButton onClick={onBack} size={36} />
         <div>
           <div className="label">// METRIC</div>

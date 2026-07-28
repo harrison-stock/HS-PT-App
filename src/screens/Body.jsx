@@ -30,7 +30,7 @@ export function Body({ userId, trainerId, go }) {
   const [side, setSide] = React.useState('front');
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 28px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 18px)' }}>
+    <div className="scroller" style={{ padding: '0 16px 28px', paddingTop: 'calc(var(--safe-top) + 18px)' }}>
       <div style={{ marginBottom: 14 }}>
         <div className="label">// ANATOMY</div>
         <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>MUSCLE HEATMAP</div>

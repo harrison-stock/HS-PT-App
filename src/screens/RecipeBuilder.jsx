@@ -96,7 +96,8 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        padding: '10px 14px', borderBottom: '1px solid var(--line)',
+        padding: '10px 14px', paddingTop: 'calc(var(--safe-top) + 10px)',
+        borderBottom: '1px solid var(--line)',
         background: 'var(--bg-1)', flexShrink: 0,
       }}>
         <HexBackButton onClick={onClose} size={34} />

@@ -365,6 +365,10 @@ export default function App() {
       color: 'var(--text)',
       position: 'relative',
       overflow: 'hidden',
+      // While impersonating, the banner below already clears the notch and the
+      // screen wrapper is offset beneath it - so screens must not add the inset
+      // a second time (that stacked up as a big empty gap under the banner).
+      ...(clientViewId ? { '--safe-top': '0px' } : null),
     }}>
       {clientViewId && (
         <div onClick={exitClientView} style={{
