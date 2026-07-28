@@ -501,7 +501,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const railItems = [];
   // Intro slide first - the session opens on the coach's brief before any
   // exercise, so "start workout" lands on the intro page, not the first block.
-  if (dayIntro && exercises.length) railItems.push({ type: 'intro' });
+  if (exercises.length) railItems.push({ type: 'intro' });
   for (let i = 0; i < exercises.length;) {
     const e = exercises[i];
     if (e.ss != null) {
@@ -642,7 +642,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       }}>
         {railItems.map((it, i) =>
         it.type === 'intro' ?
-        <IntroSlide key={`intro`} title={dayTitle} intro={dayIntro} onContinue={() => setActiveIdx(i + 1)} /> :
+        <IntroSlide key={`intro`} title={dayTitle} intro={dayIntro} exercises={exercises} onContinue={() => setActiveIdx(i + 1)} /> :
         it.type === 'finish' ?
         <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
         it.type === 'superset' ?
@@ -929,21 +929,23 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
               </span>
             )}
           </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, maxWidth: '100%' }}>
+          {/* Title and tempo are block-level: as inline elements they shared a
+              line, so the tempo pill sat on top of a long exercise name. */}
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, maxWidth: '100%' }}>
             <span className="h-bold" style={{ fontSize: 18, fontWeight: 900, letterSpacing: '0.01em', lineHeight: 1.05 }}>
               {ex.name.toUpperCase()}
             </span>
           </div>
-          {/* Tempo - sits between the title and the action buttons */}
           {ex.tempo &&
           <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 10,
-            padding: '6px 12px 6px 10px', borderRadius: 999,
-            background: '#fff', border: '1px solid var(--line-strong)', color: '#0A1F22'
+            display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10,
+            width: 'fit-content', maxWidth: '100%',
+            padding: '5px 11px 5px 9px', borderRadius: 999,
+            background: 'var(--bg-2)', border: '1px solid var(--line-strong)',
           }}>
-            <IconMetronome size={13} style={{ color: 'var(--text-3)' }} />
-            <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-3)' }}>TEMPO</span>
-            <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text-3)' }}>{ex.tempo}</span>
+            <IconMetronome size={12} style={{ color: 'var(--accent)' }} />
+            <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-3)' }}>TEMPO</span>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>{ex.tempo}</span>
           </div>
           }
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1312,7 +1314,15 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
 // Opening page of a session: the coach's brief for the day, shown before
 // the pulse raiser so "start workout" lands here first. Advancing is
 // handled by the bottom action bar's CONTINUE button.
-function IntroSlide({ title, intro, onContinue }) {
+// Opening slide: a preview of what's coming before the first exercise. Shown
+// for every session - the coach's brief when there is one, and either way a
+// breakdown of the blocks ahead so the client knows what they're in for.
+function IntroSlide({ title, intro, exercises = [], onContinue }) {
+  const blocks = PHASES
+    .map(p => ({ ...p, count: exercises.filter(e => e.phase === p.id).length }))
+    .filter(p => p.count > 0);
+  const totalSets = exercises.reduce((n, e) => n + (e.sets?.length || 0), 0);
+
   return (
     <div style={{
       flex: '0 0 100%', width: '100%', height: '100%',
@@ -1320,18 +1330,47 @@ function IntroSlide({ title, intro, onContinue }) {
       display: 'flex', flexDirection: 'column'
     }}>
       <div className="scroller" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', paddingBottom: 10 }}>
-        <div style={{ display: 'grid', placeItems: 'center', color: 'var(--accent)', marginBottom: 24 }}>
-          <BrandIcon name="Weightlifting" size={120} color="var(--accent)" glow />
+        <div style={{ display: 'grid', placeItems: 'center', color: 'var(--accent)', marginBottom: 16 }}>
+          <BrandIcon name="Weightlifting" size={92} color="var(--accent)" glow />
         </div>
-        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color: 'var(--accent)', marginBottom: 10 }}>
+        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color: 'var(--accent)', marginBottom: 8 }}>
           // TODAY'S WORKOUT
         </div>
-        <div className="h-bold" style={{ fontSize: 26, marginBottom: intro ? 18 : 6 }}>
+        <div className="h-bold" style={{ fontSize: 24, marginBottom: 10 }}>
           {title ? title.toUpperCase() : "LET'S GO"}
         </div>
-        {intro
-          ? <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--text-2)', maxWidth: 320, whiteSpace: 'pre-line' }}>{intro}</div>
-          : <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300 }}>Take a moment to get set, then continue to your pulse raiser.</div>}
+
+        <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-3)', marginBottom: intro ? 14 : 18 }}>
+          {exercises.length} EXERCISE{exercises.length === 1 ? '' : 'S'} · {totalSets} SET{totalSets === 1 ? '' : 'S'}
+        </div>
+
+        {intro && (
+          <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--text-2)', maxWidth: 320, whiteSpace: 'pre-line', marginBottom: 18 }}>{intro}</div>
+        )}
+
+        {/* What's coming, block by block */}
+        {blocks.length > 0 && (
+          <div style={{ width: '100%', maxWidth: 320, display: 'grid', gap: 6 }}>
+            {blocks.map(b => (
+              <div key={b.id} style={{
+                display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
+                padding: '9px 12px', borderRadius: 10,
+                background: 'var(--bg-2)', border: '1px solid var(--line)',
+                borderLeft: `2px solid ${b.accent}`,
+              }}>
+                <span style={{ display: 'grid', placeItems: 'center', color: b.accent, flexShrink: 0 }}>
+                  {(PHASE_ICON[b.id] || PHASE_ICON._default)(20)}
+                </span>
+                <span className="mono" style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-2)' }}>
+                  {(b.label || '').toUpperCase()}
+                </span>
+                <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0 }}>
+                  {b.count} EX
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>);
 
