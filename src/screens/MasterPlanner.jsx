@@ -24,7 +24,7 @@ const parseClock = (v) => {
   return parseInt(v) || 0;
 };
 
-const SELECT = 'id, phase_id, week_index, day_of_week, intro, workout_sections(id, title, kind, sort_order, section_exercises(id, name, img_url, timed, banded, unilateral, alternates, superset_group, sort_order, exercise_sets(id, set_index, kind, reps_text, reps, weight_kg, band, rest_secs, time_secs)))';
+const SELECT = 'id, phase_id, week_index, day_of_week, intro, workout_sections(id, title, kind, sort_order, section_exercises(id, name, img_url, timed, banded, unilateral, tempo, coach_notes, alternates, superset_group, sort_order, exercise_sets(id, set_index, kind, reps_text, reps, weight_kg, band, rest_secs, time_secs, intensity)))';
 
 // Master Planner - every day of the programme pulled out at once, fully editable
 // inline. Two layouts: same day across all weeks ("Week by Week"), or all seven
@@ -38,6 +38,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
   const [gweek, setGweek] = React.useState(0);
   const [days, setDays]   = React.useState(null);
   const [addingTo, setAddingTo] = React.useState(null); // { sectionId }
+  const [optionsExId, setOptionsExId] = React.useState(null); // exercise options sheet
 
   const weeks = [];
   phaseList.forEach((ph, pi) => {
@@ -74,6 +75,13 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
   };
   const delSet = async (setId) => { await supabase.from('exercise_sets').delete().eq('id', setId); reload(); };
   const delExercise = async (exId) => { await supabase.from('section_exercises').delete().eq('id', exId); reload(); };
+
+  // Exercise-level edits (toggles, tempo, notes, alternates, swap). Applied
+  // optimistically then persisted, matching how set edits behave here.
+  const patchExercise = (exId, patch) => {
+    setDays(prev => mapExercises(prev, exId, ex => ({ ...ex, ...patch })));
+    supabase.from('section_exercises').update(patch).eq('id', exId).then(() => {});
+  };
   const addExercise = async (sectionId, ex, count) => {
     const { data: row } = await supabase.from('section_exercises')
       .insert({ section_id: sectionId, name: ex.name, img_url: ex.img, timed: false, sort_order: count })
@@ -81,6 +89,10 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
     if (row) await supabase.from('exercise_sets').insert({ exercise_id: row.id, set_index: 0, kind: 'WORK', reps: 8, reps_text: '8', weight_kg: 0, rest_secs: 60, time_secs: 60 });
     reload();
   };
+
+  // Resolve the open exercise from state each render, so the sheet reflects
+  // edits as they're applied rather than showing a stale copy.
+  const optionsEx = optionsExId ? findExercise(days, optionsExId) : null;
 
   let columns = [];
   if (mode === 'week') {
@@ -120,7 +132,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
           )}
         </div>
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 8 }}>
-          EDIT WEIGHT / REPS / REST INLINE · TAP A COLUMN TITLE TO OPEN THE FULL DAY
+          EDIT WEIGHT / REPS / REST INLINE · TAP A MOVEMENT FOR ITS OPTIONS · TAP A COLUMN TITLE TO OPEN THE FULL DAY
         </div>
       </div>
 
@@ -136,7 +148,8 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
             {columns.map(col => (
               <PlannerColumn key={col.key} col={col}
                 onPatchSet={patchSet} onAddSet={addSet} onDelSet={delSet}
-                onDelExercise={delExercise} onAddExercise={(sectionId, count) => setAddingTo({ sectionId, count })}/>
+                onDelExercise={delExercise} onAddExercise={(sectionId, count) => setAddingTo({ sectionId, count })}
+                onOpenOptions={(ex) => setOptionsExId(ex.id)}/>
             ))}
           </div>
         </div>
@@ -148,11 +161,20 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
           onPick={(ex) => { addExercise(addingTo.sectionId, ex, addingTo.count); setAddingTo(null); }}
         />
       )}
+
+      {optionsEx && (
+        <ExerciseOptionsSheet
+          ex={optionsEx}
+          onClose={() => setOptionsExId(null)}
+          onPatch={(patch) => patchExercise(optionsEx.id, patch)}
+          onDelete={() => { delExercise(optionsEx.id); setOptionsExId(null); }}
+        />
+      )}
     </div>
   );
 }
 
-function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise }) {
+function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions }) {
   const day = col.day;
   const sections = day ? [...(day.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order) : [];
   return (
@@ -179,7 +201,7 @@ function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onA
           {sections.map(s => (
             <PlannerSection key={s.id} s={s}
               onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet}
-              onDelExercise={onDelExercise} onAddExercise={onAddExercise}/>
+              onDelExercise={onDelExercise} onAddExercise={onAddExercise} onOpenOptions={onOpenOptions}/>
           ))}
         </div>
       )}
@@ -187,7 +209,7 @@ function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onA
   );
 }
 
-function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise }) {
+function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions }) {
   const col = sectionColor(s.kind);
   const exercises = [...(s.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
   return (
@@ -199,7 +221,8 @@ function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAd
       <div style={{ padding: 8, display: 'grid', gap: 8 }}>
         {exercises.map((ex, i) => (
           <PlannerExercise key={ex.id} ex={ex} idx={i}
-            onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet} onDelExercise={onDelExercise}/>
+            onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet} onDelExercise={onDelExercise}
+            onOpenOptions={onOpenOptions}/>
         ))}
         <button onClick={() => onAddExercise(s.id, exercises.length)} style={{
           all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '7px 0', borderRadius: 7,
@@ -211,17 +234,24 @@ function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAd
   );
 }
 
-function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercise }) {
+function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercise, onOpenOptions }) {
   const sets = [...(ex.exercise_sets || [])].sort((a, b) => a.set_index - b.set_index);
   const alts = Array.isArray(ex.alternates) ? ex.alternates : [];
   return (
     <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: '7px 8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: sets.length ? 6 : 0 }}>
         <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, flexShrink: 0 }}>{idx + 1}.</span>
-        <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0, background: `center/cover url('${ex.img_url || IMG_FALLBACK}'), var(--bg-3)` }}/>
-        <span style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.2, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</span>
+        {/* Tap the movement to open its full options (same set as the builder). */}
+        <button onClick={() => onOpenOptions(ex)} className="phase-btn" title="Exercise options"
+          style={{ all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
+          <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0, background: `center/cover url('${ex.img_url || IMG_FALLBACK}'), var(--bg-3)` }}/>
+          <span style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.2, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</span>
+        </button>
         {ex.superset_group != null && <span className="mono" style={{ fontSize: 7, fontWeight: 800, color: 'var(--accent-2)', flexShrink: 0 }}>SS</span>}
         {ex.unilateral && <span className="mono" style={{ fontSize: 7, fontWeight: 800, color: 'var(--c-amber)', flexShrink: 0 }}>ES</span>}
+        {ex.timed && <span className="mono" style={{ fontSize: 7, fontWeight: 800, color: 'var(--c-blue)', flexShrink: 0 }}>T</span>}
+        <button onClick={() => onOpenOptions(ex)} aria-label={`Options for ${ex.name}`}
+          style={{ all: 'unset', cursor: 'pointer', color: 'var(--accent)', flexShrink: 0, fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 800, padding: '0 2px' }}>⋯</button>
         <button onClick={() => onDelExercise(ex.id)} aria-label="Remove exercise" style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)', flexShrink: 0 }}><IconX2 size={11}/></button>
       </div>
 
@@ -242,7 +272,13 @@ function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercis
           </div>
           {sets.map((st, i) => (
             <div key={st.id} style={{ display: 'grid', gridTemplateColumns: '22px 1fr 1fr 1fr 16px', gap: 3, alignItems: 'center', padding: '2px 0', borderTop: '1px solid var(--line)' }}>
-              <span className="mono" style={{ fontSize: 9, color: st.kind === 'WARMUP' ? 'var(--c-amber)' : 'var(--text-2)', fontWeight: 700 }}>{st.kind === 'WARMUP' ? 'W' : i + 1}</span>
+              {/* Tap the set number to flip warm-up <-> working set. */}
+              <button onClick={() => onPatchSet(st.id, { kind: st.kind === 'WARMUP' ? 'WORK' : 'WARMUP' })}
+                title="Tap to toggle warm-up / working set"
+                style={{ all: 'unset', cursor: 'pointer', fontFamily: 'JetBrains Mono', fontSize: 9, fontWeight: 700,
+                  color: st.kind === 'WARMUP' ? 'var(--c-amber)' : 'var(--text-2)' }}>
+                {st.kind === 'WARMUP' ? 'W' : i + 1}
+              </button>
               {ex.timed ? (
                 <>
                   <Cell value={st.time_secs} format={fmtSecs} onCommit={v => onPatchSet(st.id, { time_secs: parseClock(v) })}/>
@@ -272,6 +308,161 @@ function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercis
     </div>
   );
 }
+
+// ── EXERCISE OPTIONS ─────────────────────────────────────────────
+// Everything the main builder offers for a movement, editable in place so the
+// planner doesn't have to hand off to the full day view: swap it out, the
+// timed/banded/each-side toggles, tempo, coach notes and alternates.
+function ExerciseOptionsSheet({ ex, onClose, onPatch, onDelete }) {
+  const [switching, setSwitching] = React.useState(false);
+  const [addingAlt, setAddingAlt] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(false);
+  const alts = Array.isArray(ex.alternates) ? ex.alternates : [];
+
+  const setAlts = (next) => onPatch({ alternates: next });
+
+  if (switching) {
+    return (
+      <ExercisePicker title="SWITCH EXERCISE" onClose={() => setSwitching(false)}
+        onPick={(p) => {
+          onPatch({ name: p.name, img_url: p.img, banded: !!p.banded, unilateral: !!p.unilateral });
+          setSwitching(false);
+        }}/>
+    );
+  }
+  if (addingAlt) {
+    return (
+      <ExercisePicker title="ADD ALTERNATIVE" onClose={() => setAddingAlt(false)}
+        onPick={(p) => { setAlts([...alts, { name: p.name, img: p.img }]); setAddingAlt(false); }}/>
+    );
+  }
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(7,7,12,0.7)',
+      backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', animation: 'fadeIn .15s ease',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxHeight: '88%', background: 'var(--bg-1)',
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        border: '1px solid var(--line-strong)', borderBottom: 0,
+        display: 'flex', flexDirection: 'column', animation: 'sheetUp .24s cubic-bezier(.22,.61,.36,1)',
+      }}>
+        <div style={{ padding: '12px 16px 8px', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }}/>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, background: `center/cover url('${ex.img_url || IMG_FALLBACK}'), var(--bg-3)` }}/>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="label">// EXERCISE OPTIONS</div>
+              <div className="h-bold" style={{ fontSize: 15, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '4px 16px 24px', display: 'grid', gap: 14, alignContent: 'start' }}>
+          <button onClick={() => setSwitching(true)} className="btn-ghost"
+            style={{ width: '100%', boxSizing: 'border-box', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line-strong))' }}>
+            SWAP EXERCISE
+          </button>
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            <OptToggle label="TIMED" sub="Sets are held for a duration, not reps"
+              on={!!ex.timed} onChange={v => onPatch({ timed: v })}/>
+            <OptToggle label="BANDED" sub="Track a resistance band instead of a weight"
+              on={!!ex.banded} onChange={v => onPatch({ banded: v })}/>
+            <OptToggle label="EACH SIDE" sub={ex.unilateral ? 'Reps shown per side' : 'Both sides together'}
+              on={!!ex.unilateral} onChange={v => onPatch({ unilateral: v })}/>
+          </div>
+
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>TEMPO</div>
+            <input defaultValue={ex.tempo || ''} onBlur={e => onPatch({ tempo: e.target.value })}
+              placeholder="e.g. 3-1-1-0" style={fieldSt}/>
+          </div>
+
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>COACH NOTES</div>
+            <textarea defaultValue={ex.coach_notes || ''} onBlur={e => onPatch({ coach_notes: e.target.value })} rows={3}
+              placeholder="Technique cues, regressions/progressions, reminders…"
+              style={{ ...fieldSt, resize: 'vertical', lineHeight: 1.5 }}/>
+          </div>
+
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>ALTERNATIVES</div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {alts.map((a, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, background: `center/cover url('${a.img || IMG_FALLBACK}'), var(--bg-3)` }}/>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                  <button onClick={() => setAlts(alts.filter((_, x) => x !== i))} aria-label={`Remove ${a.name}`}
+                    style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)', flexShrink: 0 }}><IconX2 size={12}/></button>
+                </div>
+              ))}
+              <button onClick={() => setAddingAlt(true)} style={{
+                all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '9px 0', borderRadius: 8,
+                border: '1px dashed color-mix(in srgb, var(--accent) 45%, transparent)', color: 'var(--accent)',
+                fontFamily: 'JetBrains Mono', fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
+              }}>+ ADD ALTERNATIVE</button>
+            </div>
+          </div>
+
+          <button onClick={() => { if (!confirmDel) { setConfirmDel(true); return; } onDelete(); }} style={{
+            all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '12px', borderRadius: 10,
+            border: `1px solid color-mix(in srgb, var(--c-coral) ${confirmDel ? 60 : 35}%, var(--line))`,
+            color: confirmDel ? 'var(--c-coral)' : 'var(--text-3)',
+            fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+          }}>{confirmDel ? 'CONFIRM REMOVE - TAP AGAIN' : 'REMOVE EXERCISE'}</button>
+
+          <button onClick={onClose} className="btn-primary" style={{ width: '100%', boxSizing: 'border-box' }}>DONE</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OptToggle({ label, sub, on, onChange }) {
+  return (
+    <button onClick={() => onChange(!on)} style={{
+      all: 'unset', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+      padding: '10px 12px', borderRadius: 10, boxSizing: 'border-box',
+      background: on ? 'var(--accent-soft)' : 'var(--bg-2)',
+      border: `1px solid ${on ? 'var(--accent)' : 'var(--line)'}`,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="mono" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: on ? 'var(--accent)' : 'var(--text-2)' }}>{label}</div>
+        <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{sub}</div>
+      </div>
+      <span style={{
+        flexShrink: 0, width: 36, height: 20, borderRadius: 999, position: 'relative',
+        background: on ? 'var(--accent)' : 'var(--bg-3)', border: '1px solid var(--line-strong)',
+        transition: 'background .18s ease',
+      }}>
+        <span style={{
+          position: 'absolute', top: 2, left: on ? 17 : 2, width: 14, height: 14, borderRadius: '50%',
+          background: on ? 'var(--on-accent)' : 'var(--text-3)', transition: 'left .18s ease',
+        }}/>
+      </span>
+    </button>
+  );
+}
+
+// Find an exercise by id anywhere in the day map.
+function findExercise(map, exId) {
+  for (const k in (map || {})) {
+    for (const s of (map[k].workout_sections || [])) {
+      const hit = (s.section_exercises || []).find(ex => ex.id === exId);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+const fieldSt = {
+  width: '100%', boxSizing: 'border-box',
+  background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 8,
+  padding: '10px 11px', color: 'var(--text)', outline: 'none',
+  fontFamily: 'JetBrains Mono', fontSize: 12, lineHeight: 1.4,
+};
 
 // Compact band cell - tap the swatch to cycle through band levels.
 function BandCycle({ band, onChange }) {
@@ -314,6 +505,21 @@ function Cell({ value, format, onCommit }) {
 
 function Centered({ children }) {
   return <div style={{ padding: 40, textAlign: 'center' }}><div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.1em', lineHeight: 1.7 }}>{children}</div></div>;
+}
+
+// Replace an exercise (by id) anywhere in the day map.
+function mapExercises(map, exId, fn) {
+  const next = { ...map };
+  for (const k in next) {
+    const d = next[k];
+    let changed = false;
+    const ws = (d.workout_sections || []).map(s => ({
+      ...s,
+      section_exercises: (s.section_exercises || []).map(ex => ex.id === exId ? (changed = true, fn(ex)) : ex),
+    }));
+    if (changed) next[k] = { ...d, workout_sections: ws };
+  }
+  return next;
 }
 
 // Replace a set (by id) anywhere in the day map.
