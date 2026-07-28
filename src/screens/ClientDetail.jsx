@@ -58,7 +58,8 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go,
       {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        padding: '10px 14px 10px', borderBottom: '1px solid var(--line)',
+        padding: '10px 14px 10px', paddingTop: 'calc(var(--safe-top) + 10px)',
+        borderBottom: '1px solid var(--line)',
         background: 'var(--bg-1)', flexShrink: 0,
       }}>
         <HexBackButton onClick={onClose} size={34} />

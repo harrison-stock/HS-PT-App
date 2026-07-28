@@ -1902,7 +1902,7 @@ function SheetShell({ onClose, children }) {
         display: 'flex', flexDirection: 'column',
       }}>
         <div style={{
-          padding: 'max(54px, calc(env(safe-area-inset-top, 0px) + 14px)) 18px 4px',
+          padding: 'max(54px, calc(var(--safe-top) + 14px)) 18px 4px',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <HexBackButton onClick={onClose} size={36} />

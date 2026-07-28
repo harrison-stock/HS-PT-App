@@ -115,7 +115,7 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 240, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: '1px solid var(--line)', background: 'var(--bg-1)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', paddingTop: 'calc(var(--safe-top) + 10px)', borderBottom: '1px solid var(--line)', background: 'var(--bg-1)', flexShrink: 0 }}>
         <HexBackButton onClick={onClose} size={34} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="label">// IMPORT HISTORY</div>
