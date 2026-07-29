@@ -1001,8 +1001,10 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
             background: 'var(--bg-2)', border: '1px solid var(--line-strong)',
           }}>
             <IconMetronome size={12} style={{ color: 'var(--accent)' }} />
+            {/* Label and value share one type treatment - the digits used to be
+                bigger and brighter, which read as a heading rather than a tag. */}
             <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-3)' }}>TEMPO</span>
-            <span className="mono" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)' }}>{ex.tempo}</span>
+            <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-3)' }}>{ex.tempo}</span>
           </div>
           }
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
