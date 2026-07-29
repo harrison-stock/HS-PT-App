@@ -1,7 +1,7 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
 import { HEX_RATIO, HexShape, Hex } from '../components/hex'
-import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc, IconChevronRight, IconDumbbell } from '../components/icons'
+import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc, IconChevronRight } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
 import { setTaskComplete } from '../lib/tasks'
 import { FormFill } from './FormFill'
@@ -385,7 +385,7 @@ function WeekStrip({ userId, go }) {
                       <IconCheck size={8} sw={3.5} />
                     </Hex>
                   ) : status ? (
-                    <IconDumbbell size={13} style={{ color: markColor, opacity: missed ? 1 : 0.85 }} />
+                    <BrandIcon name="Dumbbell" size={15} color={markColor} style={{ opacity: missed ? 1 : 0.9 }} />
                   ) : null}
                 </div>
               </div>
