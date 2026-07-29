@@ -93,6 +93,7 @@ async function writeDayInto(src, target) {
       exRows.push({
         section_id: newSecId, name: e.name, img_url: e.img_url,
         timed: !!e.timed, banded: !!e.banded, unilateral: !!e.unilateral,
+        load_split: e.load_split ?? 1,
         tempo: e.tempo || '', coach_notes: e.coach_notes || '',
         superset_group: e.superset_group ?? null, alternates: e.alternates || [],
         sort_order: i,
@@ -103,7 +104,7 @@ async function writeDayInto(src, target) {
   if (!exRows.length) return;
 
   const { data: newExs, error: eErr } = await insertRows('section_exercises', exRows,
-    ['banded', 'unilateral', 'superset_group', 'alternates']);
+    ['banded', 'unilateral', 'superset_group', 'alternates', 'load_split']);
   if (eErr) throw new Error(eErr.message);
   const exByKey = indexBy(newExs, r => `${r.section_id}:${r.sort_order}`);
 
@@ -230,6 +231,7 @@ export async function duplicateProgramme(trainerId, prog) {
         exRows.push({
           section_id: newSecId, name: e.name, img_url: e.img_url,
           timed: !!e.timed, banded: !!e.banded, unilateral: !!e.unilateral,
+          load_split: e.load_split ?? 1,
           tempo: e.tempo || '', coach_notes: e.coach_notes || '',
           superset_group: e.superset_group ?? null,
           alternates: e.alternates || [],
@@ -239,7 +241,7 @@ export async function duplicateProgramme(trainerId, prog) {
       });
     }
     const { data: newExs, error: eErr } = await insertRows('section_exercises', exRows,
-      ['banded', 'unilateral', 'superset_group', 'alternates']);
+      ['banded', 'unilateral', 'superset_group', 'alternates', 'load_split']);
     if (eErr) return { error: eErr };
     const exByKey = indexBy(newExs, r => `${r.section_id}:${r.sort_order}`);
 

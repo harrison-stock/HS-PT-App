@@ -4,6 +4,7 @@ import { LoadingTile } from '../components/Loading'
 import { toast } from '../lib/toast'
 import { HexBackButton } from '../components/hex'
 import { IconCheck } from '../components/icons'
+import { guessSplit } from '../lib/loadSplit'
 import {
   MODALITIES, MUSCLE_GROUPS, MOVEMENT_PATTERNS, CATEGORIES, TRACKING_OPTIONS,
   importExercises, updateExercises, matchOption, matchMuscles, parseBool, splitList, videoThumb,
@@ -25,6 +26,7 @@ const FIELDS = [
   { key: 'link',      label: 'Reference link',    required: false, hints: ['reference', 'article', 'source', 'link url'] },
   { key: 'banded',    label: 'Banded (y/n)',      required: false, hints: ['banded', 'band'] },
   { key: 'unilateral',label: 'Each side (y/n)',   required: false, hints: ['unilateral', 'each side', 'single side', 'per side'] },
+  { key: 'twoweights',label: 'Two weights (y/n)',  required: false, hints: ['two weights', 'pair', 'per hand', 'each hand', 'split'] },
 ];
 
 const DEFAULTS = {
@@ -120,6 +122,11 @@ export function ImportExercises({ trainerId, existing = [], onClose, onImported 
         link_url: (r[map.link] || '').trim(),
         banded: parseBool(r[map.banded]),
         unilateral: parseBool(r[map.unilateral]),
+        // No column? Infer from the name - "DB Bench Press" is a pair by
+        // default, and a wrong guess is one tap to fix in the builder.
+        load_split: map.twoweights
+          ? (parseBool(r[map.twoweights]) ? 2 : 1)
+          : guessSplit(name),
         existing: byName.get(k) || null,
       });
     }
@@ -149,6 +156,7 @@ export function ImportExercises({ trainerId, existing = [], onClose, onImported 
             tracking_fields: d.tracking_fields, muscles_worked: d.muscles_worked,
             instructions: d.instructions, link_url: d.link_url,
             video_url: d.video_url, banded: d.banded, unilateral: d.unilateral,
+            load_split: d.load_split,
           },
         })));
         if (res.error) throw new Error(res.error.message);
