@@ -8,7 +8,9 @@ import { loadForms } from '../lib/forms'
 import { notify } from '../lib/notifications'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
-import { SkeletonCard, EmptyState } from '../components/Loading'
+import { SkeletonCard, EmptyState, LoadingTile } from '../components/Loading'
+import { duplicateProgramme as duplicateProgrammeDeep } from '../lib/programmeCopy'
+import { toast } from '../lib/toast'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
 // Stable, well-spread colour per client - hashing the whole id (not just the
@@ -66,6 +68,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
   const [builderOpenRoadmap, setBuilderOpenRoadmap] = React.useState(false);
   const [programmes, setProgrammes]         = React.useState([]);
   const [loadingProgs, setLoadingProgs]     = React.useState(true);
+  const [duplicating, setDuplicating]       = React.useState(false);
   const [progClients, setProgClients]       = React.useState({}); // programmeId → [clientId]
   const [clients, setClients]               = React.useState([]);
   const [archivedClients, setArchivedClients] = React.useState([]);
@@ -258,62 +261,12 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
   const closeBuilder = () => { setBuilderProgramme(null); fetchProgrammes(); };
 
   const duplicateProgramme = async (prog) => {
-    const { data: newProg } = await supabase
-      .from('programmes')
-      .insert({ trainer_id: trainerId, name: prog.name + ' (Copy)', tag: prog.tag, is_adhoc: !!prog.is_adhoc })
-      .select('id').single();
-    if (!newProg) return;
-
-    for (let pi = 0; pi < prog.phaseList.length; pi++) {
-      const ph = prog.phaseList[pi];
-      const { data: newPhase } = await supabase
-        .from('programme_phases')
-        .insert({ programme_id: newProg.id, phase_index: pi, name: ph.name, focus: ph.focus, weeks: ph.weeks })
-        .select('id').single();
-      if (!newPhase) continue;
-
-      const { data: days } = await supabase
-        .from('programme_days')
-        .select('*, workout_sections(*, section_exercises(*, exercise_sets(*)))')
-        .eq('phase_id', ph.id);
-
-      for (const day of (days || [])) {
-        const { data: newDay } = await supabase
-          .from('programme_days')
-          .insert({ phase_id: newPhase.id, week_index: day.week_index, day_of_week: day.day_of_week, intro: day.intro || '', notes: day.notes || '' })
-          .select('id').single();
-        if (!newDay) continue;
-
-        const sections = [...(day.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
-        for (const sec of sections) {
-          const { data: newSec } = await supabase
-            .from('workout_sections')
-            .insert({ day_id: newDay.id, kind: sec.kind, title: sec.title, sort_order: sec.sort_order })
-            .select('id').single();
-          if (!newSec) continue;
-
-          const exercises = [...(sec.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
-          for (const ex of exercises) {
-            const { data: newEx } = await supabase
-              .from('section_exercises')
-              .insert({ section_id: newSec.id, name: ex.name, img_url: ex.img_url, timed: ex.timed, tempo: ex.tempo || '', coach_notes: ex.coach_notes || '', sort_order: ex.sort_order })
-              .select('id').single();
-            if (!newEx) continue;
-
-            const sets = [...(ex.exercise_sets || [])].sort((a, b) => a.set_index - b.set_index);
-            if (sets.length) {
-              await supabase.from('exercise_sets').insert(
-                sets.map(st => ({
-                  exercise_id: newEx.id, set_index: st.set_index, kind: st.kind,
-                  reps: st.reps, weight_kg: st.weight_kg, rest_secs: st.rest_secs,
-                  time_secs: st.time_secs, intensity: st.intensity,
-                }))
-              );
-            }
-          }
-        }
-      }
-    }
+    if (duplicating) return;
+    setDuplicating(true);
+    const { error } = await duplicateProgrammeDeep(trainerId, prog);
+    setDuplicating(false);
+    if (error) { toast(`Duplicate failed${error.message ? ` - ${error.message}` : ''}`, { kind: 'error' }); return; }
+    toast(`Copied "${prog.name}"`);
     await fetchProgrammes();
   };
 
@@ -406,6 +359,8 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
             onDelete={async () => { await deleteProgramme(programme.id); setProgrammeId(null); }}
           />
         )}
+
+        {duplicating && <LoadingTile label="Copying programme…" variant="hex" />}
       </div>
     );
   }
@@ -468,6 +423,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
           onCreated={fetchClients}
         />
       )}
+      {duplicating && <LoadingTile label="Copying programme…" variant="hex" />}
     </div>
   );
 }

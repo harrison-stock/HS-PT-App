@@ -1184,7 +1184,9 @@ function CoverPhoto({ img, trainerId, onChange }) {
   const pick = async (e) => {
     const f = e.target.files?.[0]; e.target.value = '';
     if (!f) return;
-    if (f.size > 6 * 1024 * 1024) { setErr('Image too large (max 6MB).'); return; }
+    // Generous now that uploads are downscaled on the way out - this only
+    // catches genuinely absurd files, not ordinary phone photos.
+    if (f.size > 40 * 1024 * 1024) { setErr('Image too large (max 40MB).'); return; }
     setErr(null); setBusy(true);
     const { url, error } = await uploadWorkoutPhoto(trainerId, f);
     setBusy(false);

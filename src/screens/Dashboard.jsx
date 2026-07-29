@@ -4,11 +4,14 @@ import { HEX_RATIO, HexShape, Hex } from '../components/hex'
 import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc, IconChevronRight } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
 import { setTaskComplete } from '../lib/tasks'
-import { FormFill } from './FormFill'
-import { ProgrammeReport } from './ProgrammeReport'
+// Both open on demand from the dashboard and neither is cheap - ProgrammeReport
+// pulls in the whole body-map/chart layer. Loading them lazily keeps them out of
+// the first paint for the majority of visits that never open either.
+const FormFill = React.lazy(() => import('./FormFill').then(m => ({ default: m.FormFill })));
+const ProgrammeReport = React.lazy(() => import('./ProgrammeReport').then(m => ({ default: m.ProgrammeReport })));
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { RoadmapTrack, computeRoadmap } from '../components/Roadmap'
-import { Skel } from '../components/Loading'
+import { Skel, SkeletonCard } from '../components/Loading'
 
 function useLiveClock() {
   const [now, setNow] = React.useState(() => new Date());
@@ -279,7 +282,9 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
           // inset) rather than --safe-top, which is zeroed while impersonating.
           top: impersonating ? 'calc(env(safe-area-inset-top, 0px) + 45px)' : 0 }}>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'calc(var(--safe-top) + 14px) 16px 40px' }}>
-            <ProgrammeReport clientId={userId} clientName={user?.name || ''} embedded onClose={() => setShowReport(false)} />
+            <React.Suspense fallback={<SkeletonCard rows={4} />}>
+              <ProgrammeReport clientId={userId} clientName={user?.name || ''} embedded onClose={() => setShowReport(false)} />
+            </React.Suspense>
           </div>
         </div>
       )}
@@ -294,11 +299,13 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       <PtCreditsCard userId={userId} />
 
       {formTask && (
-        <FormFill
-          formId={formTask.formId} taskId={formTask.id} clientId={userId}
-          onClose={() => setFormTask(null)}
-          onSubmitted={() => onFormSubmitted(formTask)}
-        />
+        <React.Suspense fallback={null}>
+          <FormFill
+            formId={formTask.formId} taskId={formTask.id} clientId={userId}
+            onClose={() => setFormTask(null)}
+            onSubmitted={() => onFormSubmitted(formTask)}
+          />
+        </React.Suspense>
       )}
     </div>);
 

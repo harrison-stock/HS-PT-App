@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { compressImage } from './imageCompress'
 
 const BUCKET = 'progress-photos';
 
@@ -27,7 +28,10 @@ export async function loadPhotoHistory(clientId) {
   return groups;
 }
 
-export async function uploadProgressPhoto(clientId, pose, file) {
+export async function uploadProgressPhoto(clientId, pose, original) {
+  // Slightly gentler than the default: these get viewed side by side and
+  // pinch-zoomed when comparing months, so detail matters more than elsewhere.
+  const file = await compressImage(original, { maxEdge: 1800, quality: 0.86 });
   const ext = (file.name?.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
   const path = `${clientId}/${Date.now()}-${pose}.${ext}`;
   const { error } = await supabase.storage.from(BUCKET)
