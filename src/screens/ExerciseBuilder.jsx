@@ -1,6 +1,7 @@
 import React from 'react'
 import { Hex, HexBackButton } from '../components/hex'
 import { IconPlus, IconX2, IconCheck, IconPlay } from '../components/icons'
+import { guessSplit } from '../lib/loadSplit'
 import {
   MODALITIES, MUSCLE_GROUPS, ALL_MUSCLES, MOVEMENT_PATTERNS, CATEGORIES, TRACKING_OPTIONS,
   saveExercise, deleteExercise, uploadExerciseImage, videoThumb,
@@ -11,6 +12,7 @@ const emptyDraft = () => ({
   movement_pattern: 'Upper Body Vertical Push', category: 'Strength',
   tracking_fields: ['Weight', 'Reps'], muscles_worked: [], instructions: '', link_url: '',
   video_url: '', thumbnail_url: '', photos: [], banded: false, unilateral: false,
+  load_split: 1,
 });
 
 export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
@@ -22,7 +24,16 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
   const thumbInput = React.useRef(null);
   const photoInput = React.useRef(null);
 
-  const set = (patch) => setD(prev => ({ ...prev, ...patch }));
+  // Typing "DB Bench Press" should tick the two-weights toggle on its own.
+  // Once the coach touches the toggle their choice sticks, however the name is
+  // edited afterwards - and an existing exercise is never re-guessed.
+  const splitTouched = React.useRef(!!exercise);
+  const set = (patch) => setD(prev => {
+    const next = { ...prev, ...patch };
+    if ('load_split' in patch) splitTouched.current = true;
+    else if ('name' in patch && !splitTouched.current) next.load_split = guessSplit(next.name);
+    return next;
+  });
   const canSave = d.name.trim() !== '' && !saving;
   const autoThumb = d.thumbnail_url || videoThumb(d.video_url);
 
@@ -173,6 +184,37 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
                 </div>
               </button>
 
+              {/* Split load - held one per hand. Prescribed weights stay totals;
+                  the logger just also shows what to lift off the rack. */}
+              {!d.banded && (() => {
+                const on = (d.load_split || 1) > 1;
+                return (
+                  <button onClick={() => set({ load_split: on ? 1 : 2 })} style={{
+                    all: 'unset', cursor: 'pointer', marginTop: 10,
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px',
+                    borderRadius: 10, background: 'var(--bg-2)',
+                    border: `1px solid ${on ? 'var(--accent)' : 'var(--line)'}`,
+                  }}>
+                    <span style={{
+                      width: 40, height: 24, borderRadius: 999, flexShrink: 0, position: 'relative',
+                      background: on ? 'var(--accent)' : 'var(--bg-3)',
+                      border: `1px solid ${on ? 'var(--accent)' : 'var(--line-strong)'}`, transition: 'background .15s',
+                    }}>
+                      <span style={{
+                        position: 'absolute', top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: '50%',
+                        background: on ? 'var(--on-accent)' : 'var(--text-3)', transition: 'left .15s',
+                      }}/>
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: on ? 'var(--accent)' : 'var(--text)' }}>Two weights, one per hand</div>
+                      <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.04em', marginTop: 2, lineHeight: 1.4 }}>
+                        Dumbbells and kettlebells - a prescribed 48kg shows as "2 × 24kg each"
+                      </div>
+                    </div>
+                  </button>
+                );
+              })()}
+
               <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
                 <div className="label" style={{ marginBottom: 8 }}>TRACKING FIELDS</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', position: 'relative' }}>
@@ -309,7 +351,7 @@ function hydrate(e) {
     muscles_worked: e.muscles_worked ? [...e.muscles_worked] : [],
     instructions: e.instructions || '', link_url: e.link_url || '',
     video_url: e.video_url || '', thumbnail_url: e.thumbnail_url || '', photos: e.photos ? [...e.photos] : [],
-    banded: !!e.banded, unilateral: !!e.unilateral,
+    banded: !!e.banded, unilateral: !!e.unilateral, load_split: parseInt(e.load_split) || 1,
   };
 }
 

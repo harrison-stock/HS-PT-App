@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { HexBackButton, HexShape } from '../components/hex'
 import { IconChevronRight, IconX2 } from '../components/icons'
 import { loadExercises, videoThumb } from '../lib/exercises'
+import { splitLabel, guessSplit } from '../lib/loadSplit'
 import { MasterPlanner } from './MasterPlanner'
 import { BandPicker, BandChip, bandOf } from '../components/bands'
 import { exerciseMatches } from '../lib/exerciseSearch'
@@ -132,7 +133,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         const ex = s.items[eOrd];
         const { data: exRow } = await supabase
           .from('section_exercises')
-          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, banded: ex.banded || false, unilateral: ex.unilateral || false, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd })
+          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, banded: ex.banded || false, unilateral: ex.unilateral || false, load_split: ex.split || 1, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd })
           .select('id').single();
         if (!exRow) continue;
 
@@ -250,7 +251,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const addEx = (sIdx, ex = {}) => {
     const id = 'x' + Date.now();
     setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({
-      ...s, items: [...s.items, { id, name: ex.name || 'New Exercise', img: ex.img || IMG_FALLBACK, timed: false, banded: !!ex.banded, unilateral: !!ex.unilateral, tempo: '', coachNotes: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6, band: ex.banded ? 'medium' : null })] }],
+      ...s, items: [...s.items, { id, name: ex.name || 'New Exercise', img: ex.img || IMG_FALLBACK, timed: false, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name), tempo: '', coachNotes: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6, band: ex.banded ? 'medium' : null })] }],
     })) }));
     setDirty(true);
     setExpandedExId(id);
@@ -559,7 +560,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               <ExercisePicker
                 onClose={() => setSwitchingEx(null)}
                 onPick={(ex) => {
-                  updateEx(switchingEx.sIdx, switchingEx.eIdx, { name: ex.name, img: ex.img, banded: !!ex.banded, unilateral: !!ex.unilateral });
+                  updateEx(switchingEx.sIdx, switchingEx.eIdx, { name: ex.name, img: ex.img, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name) });
                   setSwitchingEx(null);
                 }}
               />
@@ -1422,6 +1423,22 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
             <Toggle on={e.unilateral} onChange={v => onUpdateEx({ unilateral: v })}/>
           </div>
 
+          {/* Split load - a weight held one per hand. Prescribed weights stay
+              totals; the client just also sees what to pick up. */}
+          {!e.banded && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)', gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>TWO WEIGHTS</div>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
+                  {(e.split || 1) > 1
+                    ? `One in each hand - ${splitHint(e)}`
+                    : 'A single bar, machine or weight'}
+                </div>
+              </div>
+              <Toggle on={(e.split || 1) > 1} onChange={v => onUpdateEx({ split: v ? 2 : 1 })}/>
+            </div>
+          )}
+
           {/* Tempo */}
           <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
@@ -1852,6 +1869,7 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
       cat: (e.muscle_group || 'OTHER').toUpperCase(),
       banded: !!e.banded,
       unilateral: !!e.unilateral,
+      split: parseInt(e.load_split) || 1,
     }))));
   }, []);
 
@@ -1897,7 +1915,7 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
               <div className="label" style={{ marginBottom: 8 }}>// {cat}</div>
               <div style={{ display: 'grid', gap: 6 }}>
                 {filtered.filter(e => e.cat === cat).map(ex => (
-                  <button key={ex.name} onClick={() => onPick({ name: ex.name, img: ex.img, banded: ex.banded, unilateral: ex.unilateral })} style={{
+                  <button key={ex.name} onClick={() => onPick({ name: ex.name, img: ex.img, banded: ex.banded, unilateral: ex.unilateral, split: ex.split })} style={{
                     all: 'unset', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: '10px 12px', background: 'var(--bg-2)',
@@ -1949,7 +1967,7 @@ function dbToSections(sections) {
   return sections.map(s => ({
     kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '',
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
-      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, banded: !!ex.banded, unilateral: !!ex.unilateral, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
+      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.load_split) || 1, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
         id: 's'+st.id.slice(-8), kind: st.kind,
         repsText: st.reps_text || String(st.reps ?? 8),
@@ -1971,7 +1989,18 @@ function summarize(e) {
   if (e.timed) { const t = uniqueRange(work.map(s => s.time), fmtSecs); return `${t}${side}${w!=='0'?' · '+w+'kg':''}`; }
   const repsVal = work[0]?.repsText || '-';
   if (e.banded) { const b = bandOf(work[0]?.band); return `${b ? b.short : 'BAND'} × ${repsVal}${side}`; }
-  return `${w==='0'?'BW':w+'kg'} × ${repsVal}${side}`;
+  // On a split load, append what the client will actually pick up. Only shown
+  // when every working set is the same weight - a range has no single answer.
+  const each = w.includes('–') ? '' : splitLabel(parseFloat(w), e.split);
+  return `${w==='0'?'BW':w+'kg'} × ${repsVal}${side}${each ? ` · ${each} ea` : ''}`;
+}
+
+// Concrete example for the split-load toggle, using this exercise's own weight
+// so the coach sees exactly what the client will.
+function splitHint(e) {
+  const w = (e.setsList || []).map(s => parseFloat(s.weight)).find(v => v > 0);
+  const lbl = splitLabel(w, e.split || 2);
+  return lbl ? `client sees ${lbl}` : 'client sees the per-hand weight';
 }
 
 function uniqueRange(arr, fmt=String) {

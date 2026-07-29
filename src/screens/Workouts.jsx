@@ -2,6 +2,7 @@ import React from 'react'
 import { supabase } from '../lib/supabase'
 import { HEX_RATIO, Hex, HexBackButton } from '../components/hex'
 import { IconBand, IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconClock, IconDumbbell, IconFlame, IconLeaf, IconTarget } from '../components/icons'
+import { splitLoad } from '../lib/loadSplit'
 import { bandOf } from '../components/bands'
 import { SectionGlyph } from '../lib/svgIcon'
 import { SkeletonCard, EmptyState } from '../components/Loading'
@@ -28,13 +29,16 @@ function deriveTarget(sets, unilateral) {
   return `${sorted.length} × ${reps || '-'}${unilateral ? ' ea' : ''}`;
 }
 
-function deriveLoad(sets, banded) {
+function deriveLoad(sets, banded, split) {
   if (!sets || sets.length === 0) return '-';
   const sorted = [...sets].sort((a, b) => a.set_index - b.set_index);
   if (banded) { const b = bandOf(sorted[0]?.band); return b ? `${b.short} BAND` : 'BAND'; }
   const kg = sorted[0]?.weight_kg;
   if (!kg || parseFloat(kg) === 0) return '-';
-  return `${parseFloat(kg)}kg`;
+  // Preview the pair rather than the total - on a glance-only screen, "2 × 24kg"
+  // is the more useful of the two.
+  const sp = splitLoad(kg, split);
+  return sp ? `${sp.n} × ${sp.each}kg` : `${parseFloat(kg)}kg`;
 }
 
 function shapeWorkout(row) {
@@ -70,7 +74,7 @@ function shapeWorkout(row) {
             tempo: ex.tempo || '',
             ss: ex.superset_group ?? null,
             target: deriveTarget(ex.exercise_sets, ex.unilateral),
-            load: deriveLoad(ex.exercise_sets, ex.banded),
+            load: deriveLoad(ex.exercise_sets, ex.banded, ex.load_split),
           })),
       };
     });
@@ -137,7 +141,7 @@ export function Workouts({ go, openPreview, userId }) {
           workout_sections (
             ${sectionFields},
             section_exercises (
-              id, name, img_url, tempo, timed, banded, unilateral, superset_group, sort_order,
+              id, name, img_url, tempo, timed, banded, unilateral, load_split, superset_group, sort_order,
               exercise_sets ( set_index, reps, weight_kg, band, rest_secs, time_secs )
             )
           )

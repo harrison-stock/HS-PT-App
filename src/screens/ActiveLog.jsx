@@ -14,6 +14,7 @@ import { saveActiveWorkout, loadActiveWorkout, clearActiveWorkout } from '../lib
 import { BrandIcon } from '../components/BrandIcon'
 import { BANDS, bandOf } from '../components/bands'
 import { loadExercises, videoThumb } from '../lib/exercises'
+import { splitLabel, guessSplit } from '../lib/loadSplit'
 import { ExercisePicker } from './ProgrammeBuilder'
 
 // Active Workout - Everfit-style swipeable cards.
@@ -133,7 +134,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
     if (!dayId) return;
     setDbLoading(true);
     setLoadError(false);
-    const SECTION_FIELDS = (withIntro) => `id, kind, title, sort_order${withIntro ? ', intro' : ''}, section_exercises ( id, name, img_url, timed, banded, unilateral, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) )`;
+    const SECTION_FIELDS = (withIntro) => `id, kind, title, sort_order${withIntro ? ', intro' : ''}, section_exercises ( id, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) )`;
     (async () => {
       let { data, error } = await supabase
         .from('programme_days')
@@ -180,6 +181,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
                 id: ex.id, name: ex.name, img: ex.img_url || '',
                 base: { name: ex.name, img: ex.img_url || '' },
                 banded: !!ex.banded, unilateral: !!ex.unilateral,
+                split: parseInt(ex.load_split) || 1,
                 phase, tempo: ex.tempo || '', ss: ex.superset_group ?? null,
                 rest: parseInt((ex.exercise_sets || [])[0]?.rest_secs) || 60,
                 coach: ex.coach_notes || '',
@@ -453,6 +455,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         name: ex.name, img: ex.img || '',
         base: { name: ex.name, img: ex.img || '' },
         phase: phaseId, ss: null, banded: !!ex.banded, unilateral: !!ex.unilateral,
+        split: parseInt(ex.load_split) || guessSplit(ex.name),
         tempo: '', rest: 60, coach: '', alternatives: [],
         sets: [{ reps: '10', kg: ex.banded ? null : 0, band: ex.banded ? 'medium' : undefined, perSide: !!ex.unilateral, done: false, active: false, rpe: null }],
       };
@@ -490,6 +493,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         name: ex.name, img: ex.img || '',
         base: { name: ex.name, img: ex.img || '' },
         phase: anchor.phase, ss: ssVal, banded: !!ex.banded, unilateral: !!ex.unilateral,
+        split: parseInt(ex.load_split) || guessSplit(ex.name),
         tempo: '', rest: 60, coach: '', alternatives: [],
         sets: [{ reps: '10', kg: ex.banded ? null : 0, band: ex.banded ? 'medium' : undefined, perSide: !!ex.unilateral, done: false, active: false, rpe: null }],
       };
@@ -1106,7 +1110,11 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
           {/* header row */}
           <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)' }} className="mono">
             <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
-            <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{ex.banded ? 'BAND' : ex.sets[0]?.kg != null ? 'KG' : 'TYPE'}</span>
+            {/* "TOTAL" matters on a split load - the number you type is still
+                the whole thing, not what's in one hand. */}
+            <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+              {ex.banded ? 'BAND' : ex.sets[0]?.kg != null ? (ex.split > 1 ? 'KG TOTAL' : 'KG') : 'TYPE'}
+            </span>
             <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{ex.sets[0]?.time ? 'TIME' : 'REPS'}{ex.unilateral ? '/SIDE' : ''}</span>
             <span style={{ letterSpacing: '0', whiteSpace: 'nowrap' }}>DIFFICULTY</span>
             <span />
@@ -1117,7 +1125,7 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
               if (!s) return null;
               if (!s.kind) wn += 1;
               return (
-                <LogSetRow key={i} idx={i} setNum={wn} set={s} color={phaseColor} banded={ex.banded}
+                <LogSetRow key={i} idx={i} setNum={wn} set={s} color={phaseColor} banded={ex.banded} split={ex.split}
                 onComplete={() => onComplete(i)}
                 onRpe={(rpe) => onUpdate(i, { rpe })}
                 onReps={(reps) => onUpdate(i, { reps })}
@@ -1337,7 +1345,7 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
       {/* Set table */}
       <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)', borderTop: '1px solid var(--line)' }} className="mono">
         <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
-        <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{e.banded ? 'BAND' : e.sets[0]?.kg != null ? 'KG' : 'TYPE'}</span>
+        <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{e.banded ? 'BAND' : e.sets[0]?.kg != null ? (e.split > 1 ? 'KG TOTAL' : 'KG') : 'TYPE'}</span>
         <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{e.sets[0]?.time ? 'TIME' : 'REPS'}{e.unilateral ? '/SIDE' : ''}</span>
         <span style={{ letterSpacing: '0', whiteSpace: 'nowrap' }}>DIFFICULTY</span>
         <span />
@@ -1346,7 +1354,7 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
         if (!s) return null;
         if (!s.kind) wn += 1;
         return (
-          <LogSetRow key={i} idx={i} setNum={wn} set={s} color={color} banded={e.banded}
+          <LogSetRow key={i} idx={i} setNum={wn} set={s} color={color} banded={e.banded} split={e.split}
             onComplete={() => onComplete(i)}
             onRpe={(rpe) => onUpdate(i, { rpe })}
             onReps={(reps) => onUpdate(i, { reps })}
@@ -1792,7 +1800,7 @@ function SetTypeBadge({ set, setNum, onKind }) {
 }
 
 // ── SET ROW ──────────────────────────────────────────────────────
-function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, onComplete, onReps, onKg, onBand, onRpe, onKind }) {
+function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, split = 1, onComplete, onReps, onKg, onBand, onRpe, onKind }) {
   if (!set) return null;
   const type = SET_TYPE[set.kind];
   return (
@@ -1808,7 +1816,7 @@ function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, onComplete
       {banded ?
       <BandCell band={set.band} done={set.done} onChange={onBand} /> :
       set.kg != null ?
-      <NumCell value={set.kg} suffix="kg" done={set.done} onChange={onKg} /> :
+      <NumCell value={set.kg} suffix="kg" done={set.done} split={split} onChange={onKg} /> :
       <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             {set.time ? <><IconTimer size={11} />TIMED</> : 'BW'}
           </span>}
@@ -1898,20 +1906,30 @@ function RepsCell({ set, onChange }) {
 
 }
 
-function NumCell({ value, suffix, done, onChange }) {
+function NumCell({ value, suffix, done, split = 1, onChange }) {
   const [calcOpen, setCalcOpen] = React.useState(false);
+  const perHand = splitLabel(value, split);
   return (
     <>
       <button onClick={() => setCalcOpen(true)} style={{
         all: 'unset', cursor: 'pointer', width: '100%',
-        display: 'flex', alignItems: 'baseline', gap: 4,
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1,
       }}>
-        <span style={{
-          fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
-          color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
-          textDecoration: done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
-        }}>{value || '0'}</span>
-        {suffix && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
+        <span style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+          <span style={{
+            fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
+            color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
+            textDecoration: done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
+          }}>{value || '0'}</span>
+          {suffix && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
+        </span>
+        {/* What you actually pick up, directly under what you type. */}
+        {perHand && (
+          <span className="mono" style={{
+            fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', whiteSpace: 'nowrap',
+            color: done ? 'var(--text-3)' : 'var(--accent)',
+          }}>{perHand} EACH</span>
+        )}
       </button>
       {calcOpen && (
         <CalcKeypad value={value} unit={suffix || 'kg'}
@@ -2041,10 +2059,11 @@ function formatMMSS(secs) {
 // as PDF). Grouped by phase; each set shown as it stands right now.
 function printWorkout(exercises, meta = {}) {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const setLabel = (s) => {
+  const setLabel = (s, split) => {
     if (s.time) return formatMMSS(parseTimeToSeconds(s.reps));
     const b = bandOf(s.band);
-    const load = b ? b.label : (s.kg != null ? `${s.kg} kg` : 'BW');
+    const each = b ? '' : splitLabel(s.kg, split);
+    const load = b ? b.label : (s.kg != null ? `${s.kg} kg${each ? ` (${each} each)` : ''}` : 'BW');
     const tag = SET_TYPE[s.kind] ? ` (${SET_TYPE[s.kind].label})` : '';
     return `${load} × ${s.reps}${s.perSide ? '/side' : ''}${tag}`;
   };
@@ -2052,7 +2071,7 @@ function printWorkout(exercises, meta = {}) {
     const items = exercises.filter(e => e.phase === ph.id).map(e => `
       <div class="ex">
         <div class="exname">${esc(e.name)}${e.ss != null ? ' <span class="ss">SUPERSET</span>' : ''}${e.tempo ? ` <span class="tempo">tempo ${esc(e.tempo)}</span>` : ''}</div>
-        <ol>${e.sets.map(s => `<li>${esc(setLabel(s))}</li>`).join('')}</ol>
+        <ol>${e.sets.map(s => `<li>${esc(setLabel(s, e.split))}</li>`).join('')}</ol>
         ${e.coach ? `<div class="note">${esc(e.coach)}</div>` : ''}
       </div>`).join('');
     return `<section><h2>${esc(ph.label)}</h2>${items}</section>`;

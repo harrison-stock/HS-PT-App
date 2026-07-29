@@ -58,6 +58,7 @@ export async function saveExercise(trainerId, draft) {
     photos: draft.photos || [],
     banded: !!draft.banded,
     unilateral: !!draft.unilateral,
+    load_split: parseInt(draft.load_split) || 1,
     updated_at: new Date().toISOString(),
   };
   if (draft.id) {
@@ -164,6 +165,7 @@ export async function importExercises(trainerId, drafts) {
     photos: [],
     banded: !!d.banded,
     unilateral: !!d.unilateral,
+    load_split: parseInt(d.load_split) || 1,
     updated_at: now,
   }));
   let inserted = 0;

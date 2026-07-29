@@ -7,6 +7,7 @@ import { BANDS, bandOf } from '../components/bands'
 import { SkeletonCard } from '../components/Loading'
 import { useDesktop } from '../lib/useDesktop'
 import { copyDayToSlots } from '../lib/programmeCopy'
+import { splitLoad, guessSplit } from '../lib/loadSplit'
 import { toast } from '../lib/toast'
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -27,7 +28,7 @@ const parseClock = (v) => {
   return parseInt(v) || 0;
 };
 
-const SELECT = 'id, phase_id, week_index, day_of_week, intro, workout_sections(id, title, kind, sort_order, section_exercises(id, name, img_url, timed, banded, unilateral, tempo, coach_notes, alternates, superset_group, sort_order, exercise_sets(id, set_index, kind, reps_text, reps, weight_kg, band, rest_secs, time_secs, intensity)))';
+const SELECT = 'id, phase_id, week_index, day_of_week, intro, workout_sections(id, title, kind, sort_order, section_exercises(id, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, alternates, superset_group, sort_order, exercise_sets(id, set_index, kind, reps_text, reps, weight_kg, band, rest_secs, time_secs, intensity)))';
 
 // Master Planner - every day of the programme pulled out at once, fully editable
 // inline. Two layouts: same day across all weeks ("Week by Week"), or all seven
@@ -105,7 +106,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
 
   const addExercise = async (sectionId, ex, count) => {
     const { data: row } = await supabase.from('section_exercises')
-      .insert({ section_id: sectionId, name: ex.name, img_url: ex.img, timed: false, sort_order: count })
+      .insert({ section_id: sectionId, name: ex.name, img_url: ex.img, timed: false, load_split: parseInt(ex.split) || guessSplit(ex.name), sort_order: count })
       .select('id').single();
     if (row) await supabase.from('exercise_sets').insert({ exercise_id: row.id, set_index: 0, kind: 'WORK', reps: 8, reps_text: '8', weight_kg: 0, rest_secs: 60, time_secs: 60 });
     reload();
@@ -494,7 +495,7 @@ function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercis
         <div style={{ marginLeft: 26 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '22px 1fr 1fr 1fr 16px', gap: 3, fontSize: 7.5, marginBottom: 2 }} className="mono">
             <span style={{ color: 'var(--text-3)' }}>SET</span>
-            <span style={{ color: 'var(--text-3)' }}>{ex.timed ? 'TIME' : ex.banded ? 'BAND' : 'KG'}</span>
+            <span style={{ color: 'var(--text-3)' }}>{ex.timed ? 'TIME' : ex.banded ? 'BAND' : (ex.load_split || 1) > 1 ? 'KG TOT' : 'KG'}</span>
             <span style={{ color: 'var(--text-3)' }}>{ex.timed ? '' : 'REPS'}</span>
             <span style={{ color: 'var(--text-3)' }}>REST</span>
             <span/>
@@ -520,7 +521,15 @@ function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercis
                 </>
               ) : (
                 <>
-                  <Cell value={st.weight_kg} format={v => (v > 0 ? v : 'BW')} onCommit={v => onPatchSet(st.id, { weight_kg: parseFloat(v) || 0 })}/>
+                  {/* Compact here - the column is narrow, and the header
+                      already says these are totals. */}
+                  <Cell value={st.weight_kg}
+                    format={v => {
+                      if (!(v > 0)) return 'BW';
+                      const sp = splitLoad(v, ex.load_split);
+                      return sp ? `${v} · ${sp.n}x${sp.each}` : String(v);
+                    }}
+                    onCommit={v => onPatchSet(st.id, { weight_kg: parseFloat(v) || 0 })}/>
                   <Cell value={st.reps_text || st.reps || ''} onCommit={v => onPatchSet(st.id, { reps_text: v, reps: parseInt(v) || 0 })}/>
                 </>
               )}
@@ -601,6 +610,12 @@ function ExerciseOptionsSheet({ ex, onClose, onPatch, onDelete }) {
               on={!!ex.banded} onChange={v => onPatch({ banded: v })}/>
             <OptToggle label="EACH SIDE" sub={ex.unilateral ? 'Reps shown per side' : 'Both sides together'}
               on={!!ex.unilateral} onChange={v => onPatch({ unilateral: v })}/>
+            {/* Weights stay totals; this only adds the per-hand figure for the client. */}
+            {!ex.banded && (
+              <OptToggle label="TWO WEIGHTS"
+                sub={(ex.load_split || 1) > 1 ? 'One in each hand - client sees the per-hand weight' : 'A single bar, machine or weight'}
+                on={(ex.load_split || 1) > 1} onChange={v => onPatch({ load_split: v ? 2 : 1 })}/>
+            )}
           </div>
 
           <div>
