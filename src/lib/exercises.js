@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { compressImage } from './imageCompress'
 
 export const MODALITIES = ['Strength', 'Cardio', 'Mobility', 'Plyometric', 'Olympic', 'Bodyweight'];
 // Primary muscle group - the six groupings used across the app.
@@ -72,7 +73,10 @@ export async function deleteExercise(id) {
 }
 
 // Uploads an image to the public exercise-media bucket and returns its URL.
-export async function uploadExerciseImage(trainerId, file) {
+// Also carries guide/recipe uploads, which include PDFs and other documents -
+// compressImage passes anything that isn't a bitmap straight through.
+export async function uploadExerciseImage(trainerId, original) {
+  const file = await compressImage(original);
   const ext = (file.name?.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
   const path = `${trainerId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'image/jpeg' });
@@ -94,10 +98,94 @@ export async function loadExerciseMuscleMap() {
   return exerciseMuscleMap(await loadExercises());
 }
 
-// Best-effort YouTube/Vimeo thumbnail from a video URL.
+// Best-effort YouTube thumbnail from a video URL. Shorts are included because
+// short-form demos are the usual format for an exercise clip - without them a
+// perfectly good video would show no still at all.
 export function videoThumb(url) {
   if (!url) return '';
-  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/);
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]{11})/);
   if (yt) return `https://img.youtube.com/vi/${yt[1]}/hqdefault.jpg`;
   return '';
+}
+
+// ── BULK IMPORT ───────────────────────────────────────────────────
+// Match a free-text CSV value against a fixed option list, case- and
+// punctuation-insensitively. Returns the canonical option or the fallback, so a
+// typo in a spreadsheet degrades to a sensible default instead of writing
+// garbage the filters can't see.
+const loose = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+export function matchOption(value, options, fallback = '') {
+  const v = loose(value);
+  if (!v) return fallback;
+  const exact = options.find(o => loose(o) === v);
+  if (exact) return exact;
+  const partial = options.find(o => loose(o).includes(v) || v.includes(loose(o)));
+  return partial || fallback;
+}
+
+// Spreadsheets express "yes" a dozen ways. Accept the common ones.
+export function parseBool(value) {
+  return /^(y|yes|true|1|x|✓)$/i.test(String(value || '').trim());
+}
+
+// Split a multi-value cell on comma, semicolon, slash or pipe.
+export function splitList(value) {
+  return String(value || '').split(/[,;/|]/).map(s => s.trim()).filter(Boolean);
+}
+
+// Map free-text muscle names onto the detailed muscle keys used for volume
+// mapping - accepts either the key ("upperBack") or the label ("Upper Back").
+export function matchMuscles(value) {
+  const out = [];
+  for (const part of splitList(value)) {
+    const p = loose(part);
+    const hit = ALL_MUSCLES.find(m => loose(m.key) === p || loose(m.label) === p);
+    if (hit && !out.includes(hit.key)) out.push(hit.key);
+  }
+  return out;
+}
+
+// Inserts many exercises in chunks. Returns { inserted, error }.
+export async function importExercises(trainerId, drafts) {
+  const now = new Date().toISOString();
+  const rows = drafts.map(d => ({
+    trainer_id: trainerId,
+    name: d.name,
+    modality: d.modality,
+    muscle_group: d.muscle_group,
+    movement_pattern: d.movement_pattern,
+    category: d.category,
+    tracking_fields: d.tracking_fields,
+    muscles_worked: d.muscles_worked || [],
+    instructions: d.instructions || '',
+    link_url: d.link_url || '',
+    video_url: d.video_url || '',
+    thumbnail_url: d.thumbnail_url || '',
+    photos: [],
+    banded: !!d.banded,
+    unilateral: !!d.unilateral,
+    updated_at: now,
+  }));
+  let inserted = 0;
+  // Chunked so one oversized request can't blow the payload limit, and so a
+  // partial failure still leaves the successful batches in place.
+  for (let i = 0; i < rows.length; i += 100) {
+    const { error } = await supabase.from('exercises').insert(rows.slice(i, i + 100));
+    if (error) return { inserted, error };
+    inserted += Math.min(100, rows.length - i);
+  }
+  return { inserted };
+}
+
+// Updates existing rows by id, one at a time (only ever used for the handful of
+// names that collided with the library on import).
+export async function updateExercises(updates) {
+  let updated = 0;
+  for (const { id, patch } of updates) {
+    const { error } = await supabase.from('exercises')
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) return { updated, error };
+    updated++;
+  }
+  return { updated };
 }

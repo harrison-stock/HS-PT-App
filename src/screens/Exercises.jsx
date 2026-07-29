@@ -1,9 +1,10 @@
 import React from 'react'
 import { Hex } from '../components/hex'
-import { IconPlus, IconPlay, IconChevronRight } from '../components/icons'
+import { IconPlus, IconPlay, IconChevronRight, IconDoc } from '../components/icons'
 import { loadExercises, videoThumb, MODALITIES } from '../lib/exercises'
 import { exerciseMatches } from '../lib/exerciseSearch'
 import { ExerciseBuilder } from './ExerciseBuilder'
+import { ImportExercises } from './ImportExercises'
 import { SkeletonCard, EmptyState } from '../components/Loading'
 
 const MOD_COLOR = {
@@ -17,9 +18,21 @@ export function Exercises({ trainerId }) {
   const [query, setQuery]   = React.useState('');
   const [modFilter, setMod] = React.useState('ALL');
   const [builder, setBuilder] = React.useState(undefined); // undefined=closed, null=new, obj=edit
+  const [importing, setImporting] = React.useState(false);
 
   const refresh = React.useCallback(() => { loadExercises().then(setList); }, []);
   React.useEffect(() => { refresh(); }, [refresh]);
+
+  if (importing) {
+    return (
+      <ImportExercises
+        trainerId={trainerId}
+        existing={list || []}
+        onClose={() => setImporting(false)}
+        onImported={refresh}
+      />
+    );
+  }
 
   if (builder !== undefined) {
     return (
@@ -44,9 +57,14 @@ export function Exercises({ trainerId }) {
           <div className="label">// LIBRARY</div>
           <div className="h-bold" style={{ fontSize: 24, marginTop: 4 }}>EXERCISES</div>
         </div>
-        <button onClick={() => setBuilder(null)} className="btn-primary" style={{ fontSize: 11, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <IconPlus size={14}/> NEW
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setImporting(true)} className="btn-ghost" style={{ fontSize: 10.5, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line-strong))' }}>
+            <IconDoc size={13}/> IMPORT
+          </button>
+          <button onClick={() => setBuilder(null)} className="btn-primary" style={{ fontSize: 11, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconPlus size={14}/> NEW
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -71,9 +89,15 @@ export function Exercises({ trainerId }) {
       {list === null ? (
         <SkeletonCard rows={4} />
       ) : all.length === 0 ? (
-        <EmptyState icon="Dumbbell" title="No exercises yet"
-          sub="Build your reusable library - every exercise you add is available in the programme builder."
-          actionLabel="+ CREATE FIRST EXERCISE" onAction={() => setBuilder(null)} />
+        <div style={{ display: 'grid', gap: 10 }}>
+          <EmptyState icon="Dumbbell" title="No exercises yet"
+            sub="Build your reusable library - every exercise you add is available in the programme builder."
+            actionLabel="+ CREATE FIRST EXERCISE" onAction={() => setBuilder(null)} />
+          {/* Starting from empty is exactly when a spreadsheet beats a form. */}
+          <button onClick={() => setImporting(true)} className="btn-ghost" style={{ width: '100%', fontSize: 11 }}>
+            IMPORT FROM A SPREADSHEET
+          </button>
+        </div>
       ) : (
         <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
           {filtered.map(e => <ExerciseRow key={e.id} e={e} onOpen={() => setBuilder(e)} />)}

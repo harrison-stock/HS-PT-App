@@ -6,6 +6,8 @@ import { ExercisePicker } from './ProgrammeBuilder'
 import { BANDS, bandOf } from '../components/bands'
 import { SkeletonCard } from '../components/Loading'
 import { useDesktop } from '../lib/useDesktop'
+import { copyDayToSlots } from '../lib/programmeCopy'
+import { toast } from '../lib/toast'
 
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const SECTION_LABEL = { MAIN: 'Workout', PULSE_RAISER: 'Pulse Raiser', BANDED: 'Activation', COOLDOWN: 'Cooldown' };
@@ -40,6 +42,8 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
   const [days, setDays]   = React.useState(null);
   const [addingTo, setAddingTo] = React.useState(null); // { sectionId }
   const [optionsExId, setOptionsExId] = React.useState(null); // exercise options sheet
+  const [copyFrom, setCopyFrom] = React.useState(null); // { day, title, sub }
+  const [copying, setCopying]   = React.useState(false);
 
   const weeks = [];
   phaseList.forEach((ph, pi) => {
@@ -111,6 +115,17 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
   // edits as they're applied rather than showing a stale copy.
   const optionsEx = optionsExId ? findExercise(days, optionsExId) : null;
 
+  const runCopy = async (targets) => {
+    if (!copyFrom?.day?.id || !targets.length) return;
+    setCopying(true);
+    const { count, error } = await copyDayToSlots(copyFrom.day.id, targets);
+    setCopying(false);
+    if (error) { toast(`Copy failed${error.message ? ` - ${error.message}` : ''}`, { kind: 'error' }); return; }
+    setCopyFrom(null);
+    toast(`Copied into ${count} day${count === 1 ? '' : 's'}`);
+    reload();
+  };
+
   let columns = [];
   if (mode === 'week') {
     columns = weeks.map(w => ({ key: `${w.phaseId}|${w.weekInPhase}`, title: `${w.label} · ${w.phaseName}`, sub: DOW[dow],
@@ -166,7 +181,8 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
               <PlannerColumn key={col.key} col={col}
                 onPatchSet={patchSet} onAddSet={addSet} onDelSet={delSet}
                 onDelExercise={delExercise} onAddExercise={(sectionId, count) => setAddingTo({ sectionId, count })}
-                onOpenOptions={(ex) => setOptionsExId(ex.id)} onMoveExercise={moveExercise}/>
+                onOpenOptions={(ex) => setOptionsExId(ex.id)} onMoveExercise={moveExercise}
+                onCopyDay={(c) => setCopyFrom({ day: c.day, title: c.title, sub: c.sub })}/>
             ))}
           </div>
         </div>
@@ -187,24 +203,160 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
           onDelete={() => { delExercise(optionsEx.id); setOptionsExId(null); }}
         />
       )}
+
+      {copyFrom && (
+        <CopyDaySheet
+          source={copyFrom}
+          weeks={weeks}
+          busy={copying}
+          hasDay={(phaseId, week, d) => !!dayAt(phaseId, week, d)}
+          onClose={() => setCopyFrom(null)}
+          onCopy={runCopy}
+        />
+      )}
     </div>
   );
 }
 
-function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, onMoveExercise }) {
+// ── COPY A WORKOUT INTO OTHER SLOTS ───────────────────────────────
+// A grid of every week × weekday in the programme. Tap the slots to copy into,
+// or use the row/column shortcuts for the two common cases: the same weekday
+// every week, or a whole week at once.
+function CopyDaySheet({ source, weeks, busy, hasDay, onClose, onCopy }) {
+  const srcKey = `${source.day.phase_id}|${source.day.week_index}|${source.day.day_of_week}`;
+  const [picked, setPicked] = React.useState(() => new Set());
+
+  const keyOf = (w, d) => `${w.phaseId}|${w.weekInPhase}|${d}`;
+  const toggle = (k) => setPicked(prev => {
+    const next = new Set(prev);
+    next.has(k) ? next.delete(k) : next.add(k);
+    return next;
+  });
+  const addAll = (keys) => setPicked(prev => {
+    const next = new Set(prev);
+    // Tapping a shortcut that's already fully selected clears it instead.
+    const all = keys.every(k => next.has(k));
+    keys.forEach(k => all ? next.delete(k) : next.add(k));
+    return next;
+  });
+
+  const selectable = (w, d) => keyOf(w, d) !== srcKey;
+  const weekKeys = (w) => DOW.map((_, d) => keyOf(w, d)).filter(k => k !== srcKey);
+  const dowKeys  = (d) => weeks.map(w => keyOf(w, d)).filter(k => k !== srcKey);
+
+  const targets = [...picked].map(k => {
+    const [phaseId, week, dow] = k.split('|');
+    return { phaseId, week: +week, dow: +dow };
+  });
+  const overwriting = [...picked].filter(k => {
+    const [phaseId, week, dow] = k.split('|');
+    return hasDay(phaseId, +week, +dow);
+  }).length;
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 260, background: 'rgba(6,10,12,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxHeight: '90%', background: 'var(--bg-1)',
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        border: '1px solid var(--line-strong)', borderBottom: 0,
+        display: 'flex', flexDirection: 'column', animation: 'sheetUp .24s cubic-bezier(.22,.61,.36,1)',
+      }}>
+        <div style={{ padding: '12px 16px 10px', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }}/>
+          <div className="label">// COPY WORKOUT</div>
+          <div className="h-bold" style={{ fontSize: 15, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source.title}</div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 4, lineHeight: 1.6 }}>
+            Pick the days to copy into. Anything already in a target day is replaced.
+          </div>
+        </div>
+
+        <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '4px 16px 16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `minmax(96px, 1.4fr) repeat(7, 1fr)`, gap: 4, minWidth: 'min-content' }}>
+            <div/>
+            {DOW.map((d, i) => (
+              <button key={d} onClick={() => addAll(dowKeys(i))} className="mono" title={`Every ${d}`} style={{
+                all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '5px 0', borderRadius: 6,
+                fontSize: 8, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--text-3)',
+              }}>{d.toUpperCase()}</button>
+            ))}
+            {weeks.map(w => (
+              <React.Fragment key={`${w.phaseId}|${w.weekInPhase}`}>
+                <button onClick={() => addAll(weekKeys(w))} className="mono" title={`All of ${w.label}`} style={{
+                  all: 'unset', cursor: 'pointer', padding: '0 6px 0 0', fontSize: 8.5, fontWeight: 700,
+                  letterSpacing: '0.04em', color: 'var(--text-3)', display: 'flex', alignItems: 'center',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{w.label.toUpperCase()}</button>
+                {DOW.map((_, d) => {
+                  const k = keyOf(w, d);
+                  const isSrc = !selectable(w, d);
+                  const on = picked.has(k);
+                  const filled = hasDay(w.phaseId, w.weekInPhase, d);
+                  return (
+                    <button key={d} disabled={isSrc} onClick={() => toggle(k)} aria-label={`${w.label} ${DOW[d]}`} style={{
+                      all: 'unset', cursor: isSrc ? 'default' : 'pointer', height: 26, borderRadius: 6,
+                      display: 'grid', placeItems: 'center',
+                      background: isSrc ? 'var(--bg-3)' : on ? 'var(--accent)' : 'var(--bg-2)',
+                      border: `1px solid ${isSrc ? 'var(--line-strong)' : on ? 'var(--accent)' : 'var(--line)'}`,
+                      opacity: isSrc ? 0.55 : 1,
+                    }}>
+                      <span className="mono" style={{
+                        fontSize: 7.5, fontWeight: 800, letterSpacing: '0.06em',
+                        color: isSrc ? 'var(--text-3)' : on ? 'var(--on-accent)' : filled ? 'var(--c-amber)' : 'var(--text-3)',
+                      }}>{isSrc ? 'SRC' : on ? '✓' : filled ? '•' : ''}</span>
+                    </button>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
+
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', lineHeight: 1.8, marginTop: 12 }}>
+            SRC = the workout you're copying · <span style={{ color: 'var(--c-amber)' }}>•</span> = that day already has a workout<br/>
+            Tap a weekday header to select it across every week, or a week label for the whole week.
+          </div>
+        </div>
+
+        <div style={{ padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 14px)', borderTop: '1px solid var(--line)', flexShrink: 0, display: 'grid', gap: 8 }}>
+          {overwriting > 0 && (
+            <div className="mono" style={{ fontSize: 9, color: 'var(--c-amber)', letterSpacing: '0.04em', textAlign: 'center' }}>
+              {overwriting} of these already {overwriting === 1 ? 'has a workout' : 'have workouts'} - {overwriting === 1 ? 'it' : 'they'} will be replaced
+            </div>
+          )}
+          <button onClick={() => onCopy(targets)} disabled={!targets.length || busy} className="btn-primary" style={{
+            width: '100%', opacity: targets.length && !busy ? 1 : 0.4,
+            pointerEvents: targets.length && !busy ? 'auto' : 'none',
+          }}>
+            {busy ? 'COPYING…' : `COPY INTO ${targets.length} DAY${targets.length === 1 ? '' : 'S'} →`}
+          </button>
+          <button onClick={onClose} className="btn-ghost" style={{ width: '100%' }}>CANCEL</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, onMoveExercise, onCopyDay }) {
   const day = col.day;
   const sections = day ? [...(day.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order) : [];
   return (
     <div style={{ width: 320, flexShrink: 0 }}>
-      <button onClick={col.onOpen} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', marginBottom: 8 }}>
-        <div style={{ padding: '8px 10px', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.title}</div>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 2 }}>{col.sub.toUpperCase()}</div>
-          </div>
-          <IconChevronRight size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }}/>
-        </div>
-      </button>
+      <div style={{ padding: '8px 10px', background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <button onClick={col.onOpen} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.title}</div>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.08em', marginTop: 2 }}>{col.sub.toUpperCase()}</div>
+        </button>
+        {/* Only offer a copy where there's something to copy. */}
+        {day && sections.length > 0 && (
+          <button onClick={() => onCopyDay(col)} title="Copy this workout to other days" className="mono" style={{
+            all: 'unset', cursor: 'pointer', flexShrink: 0, padding: '5px 8px', borderRadius: 7,
+            fontSize: 8.5, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--accent)',
+            background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+          }}>COPY</button>
+        )}
+        <button onClick={col.onOpen} aria-label="Open full day" style={{ all: 'unset', cursor: 'pointer', flexShrink: 0, display: 'grid', placeItems: 'center', color: 'var(--text-3)' }}>
+          <IconChevronRight size={14}/>
+        </button>
+      </div>
 
       {!day || sections.length === 0 ? (
         <button onClick={col.onOpen} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
