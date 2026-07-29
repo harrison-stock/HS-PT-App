@@ -6,23 +6,32 @@ import { HexLoader } from './components/Loading'
 import { IconHome, IconCalendar, IconChart, IconBook, IconUser, IconBolt, IconActivity, IconDumbbell, IconDoc, IconPlay } from './components/icons'
 import { Login, SetPassword } from './screens/Login'
 import { Dashboard } from './screens/Dashboard'
-import { Workouts } from './screens/Workouts'
-import { ActiveLog } from './screens/ActiveLog'
-import { Progress } from './screens/Progress'
-import { Resources } from './screens/Resources'
-import { Profile } from './screens/Profile'
-import { Notifications } from './screens/Notifications'
-import { Coach } from './screens/Coach'
-import { Body } from './screens/Body'
-import { Exercises } from './screens/Exercises'
-import { Forms } from './screens/Forms'
-import { SessionResults } from './screens/ActiveLog'
 import { unreadCount, subscribeNotifications, maybeBrowserNotify, requestNotifyPermission } from './lib/notifications'
 import { loadActiveWorkout, clearActiveWorkout } from './lib/activeWorkout'
 import { InstallPrompt } from './screens/InstallPrompt'
 import { isStandalone } from './lib/installPrompt'
 import { ToastHost } from './lib/toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
+
+// Screens are loaded on demand. Only the login screen and the client dashboard
+// are in the initial bundle - everything else (the logger, the whole coach app,
+// the resource library) is fetched the first time it's opened, so a client on a
+// phone doesn't download the programme builder to look at today's session.
+// React.lazy wants a default export; these modules all use named ones.
+const lazyScreen = (loader, name) =>
+  React.lazy(() => loader().then(m => ({ default: m[name] })));
+
+const Workouts       = lazyScreen(() => import('./screens/Workouts'), 'Workouts');
+const ActiveLog      = lazyScreen(() => import('./screens/ActiveLog'), 'ActiveLog');
+const SessionResults = lazyScreen(() => import('./screens/ActiveLog'), 'SessionResults');
+const Progress       = lazyScreen(() => import('./screens/Progress'), 'Progress');
+const Resources      = lazyScreen(() => import('./screens/Resources'), 'Resources');
+const Profile        = lazyScreen(() => import('./screens/Profile'), 'Profile');
+const Notifications  = lazyScreen(() => import('./screens/Notifications'), 'Notifications');
+const Coach          = lazyScreen(() => import('./screens/Coach'), 'Coach');
+const Body           = lazyScreen(() => import('./screens/Body'), 'Body');
+const Exercises      = lazyScreen(() => import('./screens/Exercises'), 'Exercises');
+const Forms          = lazyScreen(() => import('./screens/Forms'), 'Forms');
 
 // Screens safe to restore verbatim after a reload/app-switch (no required
 // params). Logger/results/client-view need context, so they fall back home.
@@ -391,7 +400,13 @@ export default function App() {
       )}
       <div key={screen} className="screen-enter" style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', marginTop: clientViewId ? 'calc(env(safe-area-inset-top, 0px) + 45px)' : 0 }}>
         <ErrorBoundary key={screen} onHome={() => navigate(homeScreen)}>
-          {ScreenEl}
+          <React.Suspense fallback={
+            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+              <HexLoader size={96}/>
+            </div>
+          }>
+            {ScreenEl}
+          </React.Suspense>
         </ErrorBoundary>
       </div>
       {showNav && <BottomNav screen={screen} go={navigate} isTrainer={navIsTrainer}/>}
