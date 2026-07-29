@@ -1,3 +1,4 @@
+import { loggedSetName } from './loggedSets'
 import { supabase } from './supabase'
 
 // Maps a free-text exercise name to muscle-map group keys.
@@ -42,7 +43,7 @@ export async function loadMuscleVolume(clientId, rangeDays, nameMuscleMap) {
   const since = new Date(Date.now() - rangeDays * 86_400_000).toISOString();
   const { data: sessions } = await supabase
     .from('workout_sessions')
-    .select('id, completed_at, logged_sets ( actual_weight_kg, actual_reps, section_exercises ( name ) )')
+    .select('id, completed_at, logged_sets ( actual_weight_kg, actual_reps, exercise_name, section_exercises ( name ) )')
     .eq('client_id', clientId)
     .not('completed_at', 'is', null)
     .gte('completed_at', since);
@@ -50,9 +51,10 @@ export async function loadMuscleVolume(clientId, rangeDays, nameMuscleMap) {
   const agg = {};
   for (const sess of (sessions || [])) {
     for (const ls of (sess.logged_sets || [])) {
-      const nm = (ls.section_exercises?.name || '').trim().toLowerCase();
+      const name = loggedSetName(ls);
+      const nm = name.toLowerCase();
       // Prefer the coach's library "muscles worked"; fall back to name heuristics.
-      const groups = (nameMuscleMap && nameMuscleMap[nm]) || muscleGroupsFor(ls.section_exercises?.name);
+      const groups = (nameMuscleMap && nameMuscleMap[nm]) || muscleGroupsFor(name);
       const w = parseFloat(ls.actual_weight_kg) || 0;
       const r = ls.actual_reps || 0;
       for (const g of groups) {

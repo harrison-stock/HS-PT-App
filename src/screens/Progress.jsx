@@ -9,6 +9,7 @@ import { ZoomPan } from '../components/ZoomPan'
 import { MUSCLE_LABELS } from '../data/index'
 import { MUSCLE_BODY } from '../data/musclePaths'
 import { HexBackButton, Hex, HexShape } from '../components/hex'
+import { loggedSetName, exerciseKey } from '../lib/loggedSets'
 import { IconHeart, IconDumbbell, IconCamera2, IconChevronRight, IconPlus, IconTrophy, IconCheck, IconBand, IconFlame, IconLeaf } from '../components/icons'
 import { SkeletonCard, EmptyState } from '../components/Loading'
 
@@ -45,7 +46,7 @@ const fmtDuration = (s) => s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).pad
 async function loadWeightData(userId) {
   const { data: sessions } = await supabase
     .from('workout_sessions')
-    .select(`id, completed_at, logged_sets ( session_id, exercise_id, set_index, actual_weight_kg, actual_reps, actual_time_secs, section_exercises ( id, name, workout_sections ( kind ) ) )`)
+    .select(`id, completed_at, logged_sets ( session_id, exercise_id, set_index, actual_weight_kg, actual_reps, actual_time_secs, exercise_name, section_exercises ( id, name, workout_sections ( kind ) ) )`)
     .eq('client_id', userId)
     .not('completed_at', 'is', null)
     .order('completed_at', { ascending: false });
@@ -56,12 +57,15 @@ async function loadWeightData(userId) {
   for (const sess of sessions) {
     const d = new Date(sess.completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     for (const ls of (sess.logged_sets || [])) {
-      const se = ls.section_exercises;
-      if (!se) continue;
+      // Imported history has no prescription to join to, so the name is the
+      // only identity available - and keying on it also merges the same lift
+      // across programmes into one continuous chart.
+      const name = loggedSetName(ls);
+      if (!name) continue;
+      const key = exerciseKey(name);
       // Group by muscle region derived from the exercise name (not the section).
-      const bucket = bucketFor(se.name);
-      if (!exMap.has(se.id)) exMap.set(se.id, { id: se.id, name: se.name, category: bucket, sessMap: new Map() });
-      const ex = exMap.get(se.id);
+      if (!exMap.has(key)) exMap.set(key, { id: key, name, category: bucketFor(name), sessMap: new Map() });
+      const ex = exMap.get(key);
       if (!ex.sessMap.has(sess.id)) ex.sessMap.set(sess.id, { d, completedAt: sess.completed_at, sets: [] });
       ex.sessMap.get(sess.id).sets.push({ w: parseFloat(ls.actual_weight_kg) || 0, r: ls.actual_reps || 0, t: parseInt(ls.actual_time_secs) || 0 });
     }

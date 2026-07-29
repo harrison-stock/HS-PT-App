@@ -1,3 +1,4 @@
+import { loggedSetName } from './loggedSets'
 import { supabase } from './supabase'
 import { muscleGroupsFor } from './muscleVolume'
 
@@ -40,7 +41,7 @@ export async function buildProgrammeReport(clientId, programmeId, nameMuscleMap)
     .from('workout_sessions')
     .select(`id, completed_at,
              programme_days!inner ( programme_phases!inner ( programme_id, name ) ),
-             logged_sets ( actual_weight_kg, actual_reps, set_index, section_exercises ( name ) )`)
+             logged_sets ( actual_weight_kg, actual_reps, set_index, exercise_name, section_exercises ( name ) )`)
     .eq('client_id', clientId)
     .not('completed_at', 'is', null)
     .eq('programme_days.programme_phases.programme_id', programmeId)
@@ -74,7 +75,7 @@ export async function buildProgrammeReport(clientId, programmeId, nameMuscleMap)
     const ex = {}; // name → { bestE, weight, reps, volume }
     for (const s of sess) {
       for (const ls of (s.logged_sets || [])) {
-        const name = (ls.section_exercises?.name || '').trim();
+        const name = loggedSetName(ls);
         if (!name) continue;
         const w = parseFloat(ls.actual_weight_kg) || 0;
         const r = ls.actual_reps || 0;
@@ -117,7 +118,7 @@ export async function buildProgrammeReport(clientId, programmeId, nameMuscleMap)
     const g = {};
     for (const s of sess) {
       for (const ls of (s.logged_sets || [])) {
-        const nm = (ls.section_exercises?.name || '').trim();
+        const nm = loggedSetName(ls);
         const lower = nm.toLowerCase();
         const groups = (nameMuscleMap && nameMuscleMap[lower]) || muscleGroupsFor(nm);
         const w = parseFloat(ls.actual_weight_kg) || 0;

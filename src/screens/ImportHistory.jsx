@@ -9,7 +9,7 @@ import { IconX2, IconCheck } from '../components/icons'
 // Fields we can import into. `key` maps to how it's used below.
 const FIELDS = [
   { key: 'date',     label: 'Date',        required: true,  hints: ['date', 'day', 'completed', 'workout date', 'logged'] },
-  { key: 'exercise', label: 'Exercise',    required: true,  hints: ['exercise', 'movement', 'name'] },
+  { key: 'exercise', label: 'Exercise',    required: false, hints: ['exercise', 'movement', 'name'] },
   { key: 'reps',     label: 'Reps',        required: false, hints: ['rep', 'reps'] },
   { key: 'weight',   label: 'Weight',      required: false, hints: ['weight', 'kg', 'lbs', 'lb', 'load'] },
   { key: 'rpe',      label: 'RPE (1–10)',  required: false, hints: ['rpe', 'intensity', 'effort'] },
@@ -27,6 +27,9 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
   const [parsed, setParsed]   = React.useState(null); // { headers, rows }
   const [map, setMap]         = React.useState({});
   const [unit, setUnit]       = React.useState('kg');
+  // When a sheet covers a single lift ("Nick's bench, every week last year")
+  // there's no Exercise column to map - name it once and apply it to every row.
+  const [oneName, setOneName] = React.useState('');
   const [busy, setBusy]       = React.useState(false);
   const [error, setError]     = React.useState('');
   const fileRef = React.useRef(null);
@@ -53,7 +56,7 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
     const out = [];
     for (const r of parsed.rows) {
       const date = parseDateLoose(r[map.date]);
-      const exercise = (r[map.exercise] || '').trim();
+      const exercise = (map.exercise ? (r[map.exercise] || '') : oneName).trim();
       if (!date || !exercise) continue;
       const repsRaw = map.reps ? parseInt(r[map.reps]) : null;
       let weight = map.weight ? parseFloat(String(r[map.weight]).replace(/[^\d.]/g, '')) : null;
@@ -68,9 +71,9 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
       });
     }
     return out;
-  }, [parsed, map, unit]);
+  }, [parsed, map, unit, oneName]);
 
-  const canImport = !!map.date && !!map.exercise && entries.length > 0;
+  const canImport = !!map.date && (!!map.exercise || !!oneName.trim()) && entries.length > 0;
 
   const runImport = async () => {
     if (!canImport || busy) return;
@@ -128,7 +131,7 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
           <div className="card" style={{ padding: 22, textAlign: 'center', display: 'grid', gap: 14 }}>
             <div className="mono" style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.7 }}>
               Upload a CSV of past workouts (e.g. an Everfit history export).<br/>
-              <span style={{ color: 'var(--text-3)', fontSize: 10 }}>One row per logged set works best - a Date and Exercise column are required.</span>
+              <span style={{ color: 'var(--text-3)', fontSize: 10 }}>One row per logged set works best. A Date column is required; if the sheet covers a single lift you can name it once instead of adding an Exercise column.</span>
             </div>
             <button onClick={() => fileRef.current?.click()} className="btn-primary" style={{ width: '100%' }}>CHOOSE CSV FILE</button>
             <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: 'none' }} />
@@ -152,6 +155,14 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
                   </select>
                 </div>
               ))}
+              {!map.exercise && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10, alignItems: 'center' }}>
+                  <div style={{ fontSize: 12 }}>Exercise name<span style={{ color: 'var(--c-coral)' }}> *</span></div>
+                  <input value={oneName} onChange={e => setOneName(e.target.value)}
+                    placeholder="e.g. Back Squat"
+                    style={{ ...selSt, appearance: 'none' }}/>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10, alignItems: 'center' }}>
                 <div style={{ fontSize: 12 }}>Weight unit</div>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -171,7 +182,7 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
               <div className="label">// PREVIEW · {entries.length} VALID ROWS</div>
               {entries.length === 0 ? (
                 <div className="card" style={{ padding: 14, textAlign: 'center' }}>
-                  <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>No rows have both a readable date and an exercise - check the Date/Exercise mapping.</div>
+                  <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>No rows have both a readable date and an exercise - check the Date mapping, and either map an Exercise column or type a name above.</div>
                 </div>
               ) : (
                 <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -199,7 +210,7 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
               <IconCheck size={13} sw={3}/> IMPORT {entries.length} SET{entries.length === 1 ? '' : 'S'} →
             </button>
             <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>
-              Creates one completed session per date. Imported sessions are tagged so they can be identified later.
+              Creates one completed session per date. Name each lift exactly as it appears in your exercise library - history is matched by name, so the spelling is what links imported sets to the ones logged in the app.
             </div>
           </div>
         )}

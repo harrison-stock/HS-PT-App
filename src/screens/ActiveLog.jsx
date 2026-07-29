@@ -2317,28 +2317,28 @@ function PriorProgressSheet({ ex, userId, onClose }) {
   React.useEffect(() => {
     let alive = true;
     if (!userId) { setSessions([]); return; }
+    // Query from the session side so the ordering and the limit apply to
+    // workout_sessions.completed_at, a top-level column. Reading logged_sets
+    // first meant slicing an arbitrary chunk of every set the client had ever
+    // logged and sifting it here - fine on a short history, but once a year of
+    // imported training is in the table the cap lands nowhere near this
+    // exercise's recent sessions. !inner drops sessions with no matching set,
+    // so limit(5) really is the last five times they did this movement.
+    // PostgREST parses the filter value out of a comma-separated list, so a
+    // name like "Squat, Front" has to be quoted or it splits into two filters.
+    const name = `"${ex.name.trim().replace(/"/g, '\\"')}"`;
     supabase
-      .from('logged_sets')
-      .select('set_index, actual_reps, actual_weight_kg, actual_band, actual_time_secs, exercise_name, section_exercises(name), workout_sessions!inner(id, client_id, completed_at)')
-      .eq('workout_sessions.client_id', userId)
-      .not('workout_sessions.completed_at', 'is', null)
-      .limit(600)
+      .from('workout_sessions')
+      .select('id, completed_at, logged_sets!inner(set_index, actual_reps, actual_weight_kg, actual_band, actual_time_secs)')
+      .eq('client_id', userId)
+      .not('completed_at', 'is', null)
+      .ilike('logged_sets.exercise_name', name)
+      .order('completed_at', { ascending: false })
+      .limit(5)
       .then(({ data }) => {
         if (!alive) return;
-        const name = ex.name.trim().toLowerCase();
-        const bySession = new Map();
-        (data || []).forEach((ls) => {
-          const lsName = (ls.exercise_name || ls.section_exercises?.name || '').trim().toLowerCase();
-          if (lsName !== name) return;
-          const sess = ls.workout_sessions;
-          if (!bySession.has(sess.id)) bySession.set(sess.id, { completedAt: sess.completed_at, rows: [] });
-          bySession.get(sess.id).rows.push(ls);
-        });
-        const out = [...bySession.values()]
-          .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
-          .slice(0, 5)
-          .map((s) => {
-            const rows = s.rows.sort((a, b) => a.set_index - b.set_index);
+        const out = (data || []).map((sess) => {
+            const rows = [...(sess.logged_sets || [])].sort((a, b) => a.set_index - b.set_index);
             const sets = rows.map((r) => {
               if (r.actual_time_secs) return { warmup: false, label: formatMMSS(r.actual_time_secs) };
               const kg = r.actual_weight_kg ? parseFloat(r.actual_weight_kg) : null;
@@ -2349,7 +2349,7 @@ function PriorProgressSheet({ ex, userId, onClose }) {
             });
             const kgs = rows.map((r) => parseFloat(r.actual_weight_kg)).filter((v) => !isNaN(v));
             return {
-              date: new Date(s.completedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+              date: new Date(sess.completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
               sets,
               top: kgs.length ? Math.max(...kgs) : null,
             };
