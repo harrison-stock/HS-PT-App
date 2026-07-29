@@ -383,16 +383,20 @@ function WeekStrip({ userId, go }) {
               }}>
                 <div className="mono" style={{ fontSize: 7.5, letterSpacing: '0.12em', color: isToday ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700 }}>{d.label}</div>
                 <div className="h-bold" style={{ fontSize: 15, marginTop: 3, lineHeight: 1, color: isToday ? 'var(--accent)' : 'var(--text-2)' }}>{d.dayNum}</div>
-                <div style={{ height: 16, marginTop: 4, display: 'grid', placeItems: 'center' }}>
+                {/* Taller than the marks so the brand dumbbell, which carries a
+                    hex outline and a lot of internal padding, reads at a glance. */}
+                <div style={{ height: 24, marginTop: 3, display: 'grid', placeItems: 'center' }}>
+                  {/* Tick and dumbbell share a hex silhouette, so they're sized
+                      to sit level with each other - a mismatch shows. */}
                   {logged ? (
-                    <Hex size={15} square style={{
+                    <Hex size={20} square style={{
                       background: 'var(--accent)', color: 'var(--on-accent)',
                       boxShadow: '0 0 calc(6px * var(--glow)) var(--accent-glow)',
                     }}>
-                      <IconCheck size={8} sw={3.5} />
+                      <IconCheck size={10} sw={3.5} />
                     </Hex>
                   ) : status ? (
-                    <BrandIcon name="Dumbbell" size={15} color={markColor} style={{ opacity: missed ? 1 : 0.9 }} />
+                    <BrandIcon name="Dumbbell" size={24} color={markColor} style={{ opacity: missed ? 1 : 0.9 }} />
                   ) : null}
                 </div>
               </div>
