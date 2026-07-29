@@ -417,6 +417,41 @@ body:has([data-role="trainer"]) {
   100% { transform: scale(1); }
 }
 
+/* ── Split-load toggle ───────────────────────────────────────────
+   A prescribed total (48kg) breaking apart into the two weights you
+   actually pick up (24 + 24), and merging back. The two halves start
+   stacked in the centre and push outwards, so the motion reads as one
+   number physically splitting rather than two numbers fading in. */
+@keyframes splitLeft {
+  0%   { transform: translateX(9px) scale(0.72); opacity: 0; }
+  60%  { transform: translateX(-1px) scale(1.06); opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+@keyframes splitRight {
+  0%   { transform: translateX(-9px) scale(0.72); opacity: 0; }
+  60%  { transform: translateX(1px) scale(1.06); opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+/* The "x" between the halves is the seam - it fades up last. */
+@keyframes splitSeam {
+  0%, 35% { opacity: 0; transform: scaleY(0.4); }
+  100%    { opacity: 1; transform: none; }
+}
+/* Coming back the other way: one number reassembling from two. */
+@keyframes mergeIn {
+  0%   { transform: scale(1.14); opacity: 0; letter-spacing: 0.22em; }
+  100% { transform: none; opacity: 1; letter-spacing: 0.04em; }
+}
+
+.split-l { animation: splitLeft .34s cubic-bezier(.34,1.4,.5,1) both; }
+.split-r { animation: splitRight .34s cubic-bezier(.34,1.4,.5,1) both; }
+.split-x { animation: splitSeam .34s ease both; }
+.split-m { animation: mergeIn .3s cubic-bezier(.22,.61,.36,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .split-l, .split-r, .split-x, .split-m { animation-duration: .01ms; }
+}
+
 /* ── Sign-in splash (console-style boot) ─────────────────────────
    Logo blooms in from a blur, the title tracks in from wide letter
    spacing, then the whole overlay fades and unmounts. */

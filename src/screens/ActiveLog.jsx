@@ -14,7 +14,7 @@ import { saveActiveWorkout, loadActiveWorkout, clearActiveWorkout } from '../lib
 import { BrandIcon } from '../components/BrandIcon'
 import { BANDS, bandOf } from '../components/bands'
 import { loadExercises, videoThumb } from '../lib/exercises'
-import { splitLabel, guessSplit } from '../lib/loadSplit'
+import { splitLoad, guessSplit } from '../lib/loadSplit'
 import { ExercisePicker } from './ProgrammeBuilder'
 
 // Active Workout - Everfit-style swipeable cards.
@@ -959,6 +959,10 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
   const phaseColor = phase?.accent || 'var(--accent)';
   const [addChoose, setAddChoose] = React.useState(false);
   const [confirmDel, setConfirmDel] = React.useState(false);
+  // Two-handed movements open on the per-hand view - that's the number you need
+  // at the rack. Tapping the column header flips back to the total you log.
+  const [splitView, setSplitView] = React.useState(ex.split > 1);
+  React.useEffect(() => { setSplitView(ex.split > 1); }, [ex.id, ex.split]);
   return (
     <div style={{
       flex: '0 0 100%', width: '100%', height: '100%',
@@ -1110,11 +1114,7 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
           {/* header row */}
           <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)' }} className="mono">
             <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
-            {/* "TOTAL" matters on a split load - the number you type is still
-                the whole thing, not what's in one hand. */}
-            <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-              {ex.banded ? 'BAND' : ex.sets[0]?.kg != null ? (ex.split > 1 ? 'KG TOTAL' : 'KG') : 'TYPE'}
-            </span>
+            <LoadHeader ex={ex} splitView={splitView} onToggle={() => setSplitView(v => !v)} />
             <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{ex.sets[0]?.time ? 'TIME' : 'REPS'}{ex.unilateral ? '/SIDE' : ''}</span>
             <span style={{ letterSpacing: '0', whiteSpace: 'nowrap' }}>DIFFICULTY</span>
             <span />
@@ -1125,7 +1125,8 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
               if (!s) return null;
               if (!s.kind) wn += 1;
               return (
-                <LogSetRow key={i} idx={i} setNum={wn} set={s} color={phaseColor} banded={ex.banded} split={ex.split}
+                <LogSetRow key={i} idx={i} setNum={wn} set={s} color={phaseColor} banded={ex.banded}
+                split={ex.split} splitView={splitView} delay={i * 45}
                 onComplete={() => onComplete(i)}
                 onRpe={(rpe) => onUpdate(i, { rpe })}
                 onReps={(reps) => onUpdate(i, { reps })}
@@ -1325,6 +1326,8 @@ function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle
 // One exercise inside a superset - its own title row + set table, tinted with
 // the superset accent and tagged A1/A2… so the grouping stays clear.
 function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onHistory, onComment }) {
+  const [splitView, setSplitView] = React.useState(e.split > 1);
+  React.useEffect(() => { setSplitView(e.split > 1); }, [e.id, e.split]);
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden', borderColor: 'color-mix(in srgb, var(--accent-2) 40%, var(--line))', borderLeft: '2px solid var(--accent-2)' }}>
       {/* Title row */}
@@ -1345,7 +1348,7 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
       {/* Set table */}
       <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)', borderTop: '1px solid var(--line)' }} className="mono">
         <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
-        <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{e.banded ? 'BAND' : e.sets[0]?.kg != null ? (e.split > 1 ? 'KG TOTAL' : 'KG') : 'TYPE'}</span>
+        <LoadHeader ex={e} splitView={splitView} onToggle={() => setSplitView(v => !v)} />
         <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{e.sets[0]?.time ? 'TIME' : 'REPS'}{e.unilateral ? '/SIDE' : ''}</span>
         <span style={{ letterSpacing: '0', whiteSpace: 'nowrap' }}>DIFFICULTY</span>
         <span />
@@ -1354,7 +1357,8 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
         if (!s) return null;
         if (!s.kind) wn += 1;
         return (
-          <LogSetRow key={i} idx={i} setNum={wn} set={s} color={color} banded={e.banded} split={e.split}
+          <LogSetRow key={i} idx={i} setNum={wn} set={s} color={color} banded={e.banded}
+            split={e.split} splitView={splitView} delay={i * 45}
             onComplete={() => onComplete(i)}
             onRpe={(rpe) => onUpdate(i, { rpe })}
             onReps={(reps) => onUpdate(i, { reps })}
@@ -1800,7 +1804,7 @@ function SetTypeBadge({ set, setNum, onKind }) {
 }
 
 // ── SET ROW ──────────────────────────────────────────────────────
-function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, split = 1, onComplete, onReps, onKg, onBand, onRpe, onKind }) {
+function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, split = 1, splitView = false, delay = 0, onComplete, onReps, onKg, onBand, onRpe, onKind }) {
   if (!set) return null;
   const type = SET_TYPE[set.kind];
   return (
@@ -1816,7 +1820,7 @@ function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, split = 1,
       {banded ?
       <BandCell band={set.band} done={set.done} onChange={onBand} /> :
       set.kg != null ?
-      <NumCell value={set.kg} suffix="kg" done={set.done} split={split} onChange={onKg} /> :
+      <NumCell value={set.kg} suffix="kg" done={set.done} split={split} splitView={splitView} delay={delay} onChange={onKg} /> :
       <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             {set.time ? <><IconTimer size={11} />TIMED</> : 'BW'}
           </span>}
@@ -1906,33 +1910,68 @@ function RepsCell({ set, onChange }) {
 
 }
 
-function NumCell({ value, suffix, done, split = 1, onChange }) {
+// The weight column's header doubles as the split toggle on two-handed
+// movements: tap it and every weight in the column comes apart into the pair
+// you actually pick up, tap again and they merge back into the total.
+function LoadHeader({ ex, splitView, onToggle }) {
+  const base = { letterSpacing: '0.08em', whiteSpace: 'nowrap' };
+  if (ex.banded) return <span style={base}>BAND</span>;
+  if (ex.sets[0]?.kg == null) return <span style={base}>TYPE</span>;
+  if (!(ex.split > 1)) return <span style={base}>KG</span>;
+  return (
+    <button onClick={onToggle} aria-pressed={splitView}
+      aria-label={splitView ? 'Show the total weight' : 'Show the weight per hand'}
+      style={{
+        all: 'unset', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
+        color: splitView ? 'var(--accent)' : 'var(--text-2)', ...base,
+        fontFamily: 'JetBrains Mono', fontSize: 9.5, fontWeight: 700,
+      }}>
+      {splitView ? 'KG EACH' : 'KG TOTAL'}
+      {/* Two bars merging into one, and back - the toggle's own little diagram. */}
+      <svg width="13" height="9" viewBox="0 0 13 9" aria-hidden="true" style={{ flexShrink: 0, overflow: 'visible' }}>
+        <rect x={splitView ? 0 : 3.5} y="1" width="3" height="7" rx="1" fill="currentColor"
+          style={{ transition: 'x .28s cubic-bezier(.34,1.4,.5,1)' }}/>
+        <rect x={splitView ? 10 : 6.5} y="1" width="3" height="7" rx="1" fill="currentColor"
+          style={{ transition: 'x .28s cubic-bezier(.34,1.4,.5,1)' }}/>
+      </svg>
+    </button>
+  );
+}
+
+function NumCell({ value, suffix, done, split = 1, splitView = false, delay = 0, onChange }) {
   const [calcOpen, setCalcOpen] = React.useState(false);
-  const perHand = splitLabel(value, split);
+  const halves = splitView ? splitLoad(value, split) : null;
+  const numStyle = {
+    fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
+    color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
+    textDecoration: done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
+  };
+  // Each row starts fractionally after the one above, so tapping the toggle
+  // reads as the whole column coming apart rather than everything blinking.
+  const stagger = { animationDelay: `${delay}ms` };
   return (
     <>
       <button onClick={() => setCalcOpen(true)} style={{
         all: 'unset', cursor: 'pointer', width: '100%',
-        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1,
+        display: 'flex', alignItems: 'baseline', gap: 4,
       }}>
-        <span style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-          <span style={{
-            fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
-            color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
-            textDecoration: done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
-          }}>{value || '0'}</span>
-          {suffix && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
-        </span>
-        {/* What you actually pick up, directly under what you type. */}
-        {perHand && (
-          <span className="mono" style={{
-            fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', whiteSpace: 'nowrap',
-            color: done ? 'var(--text-3)' : 'var(--accent)',
-          }}>{perHand} EACH</span>
+        {halves ? (
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, whiteSpace: 'nowrap' }}>
+            <span className="split-l" style={{ ...numStyle, ...stagger, fontSize: 13, color: done ? 'var(--text-2)' : 'var(--accent)' }}>{halves.each}</span>
+            <span className="split-x mono" style={{ ...stagger, fontSize: 8.5, fontWeight: 700, color: 'var(--text-3)' }}>×</span>
+            <span className="split-r" style={{ ...numStyle, ...stagger, fontSize: 13, color: done ? 'var(--text-2)' : 'var(--accent)' }}>{halves.each}</span>
+          </span>
+        ) : (
+          <>
+            <span key={`t${splitView}`} className={split > 1 ? 'split-m' : undefined} style={{ ...numStyle, ...(split > 1 ? stagger : null) }}>
+              {value || '0'}
+            </span>
+            {suffix && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
+          </>
         )}
       </button>
       {calcOpen && (
-        <CalcKeypad value={value} unit={suffix || 'kg'}
+        <CalcKeypad value={value} unit={suffix || 'kg'} split={split}
           onClose={() => setCalcOpen(false)}
           onApply={(v) => { onChange(v); setCalcOpen(false); }} />
       )}
@@ -1950,7 +1989,7 @@ function evalExpr(s) {
 
 // Weight calculator keypad - tap a weight to open it. Supports plate maths
 // (+/-) and a kg/lb toggle (lb is converted to kg on apply, since we store kg).
-function CalcKeypad({ value, unit = 'kg', mode = 'weight', onClose, onApply }) {
+function CalcKeypad({ value, unit = 'kg', mode = 'weight', split = 1, onClose, onApply }) {
   const isWeight = mode === 'weight';
   const [expr, setExpr] = React.useState(value ? String(value) : '');
   const [asLb, setAsLb] = React.useState(false);
@@ -2015,6 +2054,27 @@ function CalcKeypad({ value, unit = 'kg', mode = 'weight', onClose, onApply }) {
           </span>
           <span className="mono" style={{ fontSize: 13, color: 'var(--text-3)', flexShrink: 0 }}>{isWeight ? (asLb ? 'lb' : 'kg') : unit}</span>
         </div>
+        {/* On a two-handed movement the keypad takes the total, so say so and
+            show what that works out to per hand as it's typed. */}
+        {isWeight && split > 1 && (() => {
+          // Track what's being typed; fall back to the set's current weight
+          // while the field is empty so the readout is never blank.
+          const typed = hasOp ? preview : parseFloat(expr);
+          const kg = isNaN(typed) ? value : (asLb ? typed * 0.45359237 : typed);
+          const sp = splitLoad(kg, split);
+          return (
+            <div className="mono" style={{
+              display: 'flex', justifyContent: 'space-between', gap: 10, margin: '-6px 8px 12px',
+              padding: '7px 10px', borderRadius: 8, fontSize: 9.5, letterSpacing: '0.06em',
+              background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+            }}>
+              <span style={{ color: 'var(--text-3)', fontWeight: 700 }}>TOTAL WEIGHT</span>
+              <span style={{ color: 'var(--accent)', fontWeight: 800 }}>
+                {sp ? `${sp.n} × ${sp.each}kg EACH HAND` : `${split} WEIGHTS`}
+              </span>
+            </div>
+          );
+        })()}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           <Key label="1" onClick={() => push('1')} />
           <Key label="2" onClick={() => push('2')} />
@@ -2062,7 +2122,8 @@ function printWorkout(exercises, meta = {}) {
   const setLabel = (s, split) => {
     if (s.time) return formatMMSS(parseTimeToSeconds(s.reps));
     const b = bandOf(s.band);
-    const each = b ? '' : splitLabel(s.kg, split);
+    const sp = b ? null : splitLoad(s.kg, split);
+    const each = sp ? `${sp.n} × ${sp.each}kg` : '';
     const load = b ? b.label : (s.kg != null ? `${s.kg} kg${each ? ` (${each} each)` : ''}` : 'BW');
     const tag = SET_TYPE[s.kind] ? ` (${SET_TYPE[s.kind].label})` : '';
     return `${load} × ${s.reps}${s.perSide ? '/side' : ''}${tag}`;
