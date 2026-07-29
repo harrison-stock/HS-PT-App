@@ -13,6 +13,7 @@ import { notify, trainerOf } from '../lib/notifications'
 import { saveActiveWorkout, loadActiveWorkout, clearActiveWorkout } from '../lib/activeWorkout'
 import { BrandIcon } from '../components/BrandIcon'
 import { BANDS, bandOf } from '../components/bands'
+import { loadExercises, videoThumb } from '../lib/exercises'
 import { ExercisePicker } from './ProgrammeBuilder'
 
 // Active Workout - Everfit-style swipeable cards.
@@ -44,6 +45,29 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const [dayIntro, setDayIntro] = React.useState('');
   const [dayTitle, setDayTitle] = React.useState('');
   const sessionStartRef = React.useRef(new Date().toISOString());
+
+  // Demo videos live on the exercise library, not on the copy stored against a
+  // workout, so resolve them by name. Keyed lowercase; also gives us a better
+  // still than the section's own image when the library has one.
+  const [libByName, setLibByName] = React.useState({});
+  React.useEffect(() => {
+    let alive = true;
+    loadExercises().then(list => {
+      if (!alive) return;
+      const m = {};
+      (list || []).forEach(e => {
+        const k = (e.name || '').trim().toLowerCase();
+        if (k && !m[k]) m[k] = { video: e.video_url || '', thumb: e.thumbnail_url || '' };
+      });
+      setLibByName(m);
+    });
+    return () => { alive = false; };
+  }, []);
+  const mediaFor = React.useCallback((ex) => {
+    const hit = libByName[(ex?.name || '').trim().toLowerCase()] || {};
+    const video = hit.video || '';
+    return { video, img: ex?.img || hit.thumb || videoThumb(video) || '' };
+  }, [libByName]);
 
   // Session clock - anchored to the wall clock so it stays accurate even if
   // the phone locks or the browser throttles timers in the background.
@@ -501,7 +525,6 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   const railItems = [];
   // Intro slide first - the session opens on the coach's brief before any
   // exercise, so "start workout" lands on the intro page, not the first block.
-  if (exercises.length) railItems.push({ type: 'intro' });
   for (let i = 0; i < exercises.length;) {
     const e = exercises[i];
     if (e.ss != null) {
@@ -641,8 +664,6 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         WebkitOverflowScrolling: 'touch'
       }}>
         {railItems.map((it, i) =>
-        it.type === 'intro' ?
-        <IntroSlide key={`intro`} title={dayTitle} intro={dayIntro} exercises={exercises} onContinue={() => setActiveIdx(i + 1)} /> :
         it.type === 'finish' ?
         <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
         it.type === 'superset' ?
@@ -655,8 +676,10 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           onCompleteAll={() => completeAllSets(it.group.map(e => e.id))}
           onTitle={(exId) => setAltsForId(exId)}
           onComment={dayId ? (exId) => setCommentForId(exId) : null}
-          onHistory={(exId) => setHistoryForId(exId)} /> :
-        <ExerciseCard key={it.ex.id} ex={it.ex} idx={it.exIdx} total={exercises.length}
+          onHistory={(exId) => setHistoryForId(exId)}
+          intro={i === 0 ? dayIntro : ''} /> :
+        <ExerciseCard key={it.ex.id} ex={it.ex} idx={it.exIdx} total={exercises.length} media={mediaFor(it.ex)}
+        intro={i === 0 ? dayIntro : ''}
         onComplete={(si) => completeSet(it.ex.id, si)}
         onUpdate={(si, p) => updateSet(it.ex.id, si, p)}
         onTitle={() => setAltsForId(it.ex.id)}
@@ -720,12 +743,6 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         {activeItem.type !== 'finish' && (() => {
           const goNext = () => { if (activeIdx < lastIdx) { setActiveIdx(activeIdx + 1); } else { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} setComplete(true); } };
           const goPrev = () => activeIdx > 0 && setActiveIdx(activeIdx - 1);
-          // Intro page - one clear call to action into the workout.
-          if (activeItem.type === 'intro') return (
-            <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={goNext}>
-              START WORKOUT <IconChevronRight size={14} />
-            </button>
-          );
           // The card right before the finish slide is the last piece of work -
           // its forward action reads CONTINUE. With several cards to move
           // between, navigation is a pair of arrows instead of one wide button.
@@ -875,7 +892,65 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
 }
 
 // ── EXERCISE CARD (one per swipe page) ───────────────────────────
-function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onSuperset, onDelete, onCompleteAll, onHistory, onComment, intro }) {
+// Exercise media tile. Plays the coach's demo video inline (the iframe is only
+// mounted once tapped, so we don't load a player per card), and falls back to a
+// plain still when the exercise has no video - previously this drew a YouTube
+// play button on every card whether or not one existed, and nothing happened
+// when you tapped it.
+function ExerciseMedia({ ex, media }) {
+  const [playing, setPlaying] = React.useState(false);
+  const embed = ytEmbed(media?.video);
+  const still = media?.img || ex.img || '';
+
+  React.useEffect(() => { setPlaying(false); }, [ex.id, media?.video]);
+
+  const frame = {
+    position: 'relative', width: '100%', aspectRatio: '16 / 9',
+    borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+    marginBottom: 10, border: '1px solid var(--line-strong)',
+  };
+
+  if (playing && embed) {
+    return (
+      <div style={{ ...frame, background: '#000' }}>
+        <iframe src={embed} title={`${ex.name} demo`} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}/>
+      </div>
+    );
+  }
+
+  const bg = still
+    ? `linear-gradient(180deg, rgba(7,7,12,0.35) 0%, rgba(7,7,12,0.65) 100%), url('${still}') center/cover`
+    : 'var(--bg-3)';
+
+  if (!embed) {
+    return <div style={{ ...frame, background: bg }} />;
+  }
+  return (
+    <button onClick={() => setPlaying(true)} aria-label={`Play ${ex.name} demo`}
+      style={{ all: 'unset', cursor: 'pointer', display: 'block', boxSizing: 'border-box', ...frame, background: bg }}>
+      <span style={{
+        position: 'absolute', inset: 0, margin: 'auto',
+        width: 52, height: 36, borderRadius: 9, background: '#FF0000',
+        display: 'grid', placeItems: 'center', boxShadow: '0 2px 12px rgba(0,0,0,0.45)',
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg>
+      </span>
+    </button>
+  );
+}
+
+// YouTube / Vimeo watch URL -> embeddable player URL.
+function ytEmbed(url) {
+  if (!url) return '';
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]{11})/);
+  if (yt) return `https://www.youtube-nocookie.com/embed/${yt[1]}?rel=0&playsinline=1&autoplay=1`;
+  const vim = url.match(/vimeo\.com\/(\d+)/);
+  if (vim) return `https://player.vimeo.com/video/${vim[1]}?autoplay=1`;
+  return '';
+}
+
+function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onSuperset, onDelete, onCompleteAll, onHistory, onComment, intro }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   const [addChoose, setAddChoose] = React.useState(false);
@@ -895,25 +970,7 @@ function ExerciseCard({ ex, idx, total, onComplete, onUpdate, onTitle, onAddSet,
             <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{intro}</div>
           </div>
         )}
-        {/* Exercise video - YouTube embed slot (height-capped so the whole
-            card fits one viewport without scrolling) */}
-        <div style={{
-          position: 'relative', borderRadius: 'var(--radius-lg)', overflow: 'hidden',
-          marginBottom: 10, border: '1px solid var(--line-strong)',
-          height: 'min(22vh, 170px)',
-          background: `linear-gradient(180deg, rgba(7,7,12,0.35) 0%, rgba(7,7,12,0.65) 100%), url('${ex.img}') center/cover`
-        }}>
-          {/* YouTube play glyph - embed mounts here */}
-          <div style={{
-            position: 'absolute', inset: 0, margin: 'auto',
-            width: 52, height: 36, borderRadius: 9,
-            background: '#FF0000',
-            display: 'grid', placeItems: 'center',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.45)'
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg>
-          </div>
-        </div>
+        <ExerciseMedia ex={ex} media={media} />
 
         {/* Title + actions */}
         <div style={{ marginTop: 2, marginBottom: 10 }}>
@@ -1304,76 +1361,6 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
       )}
     </div>
   );
-}
-
-// ── SECTION-END DIVIDER (between phases) ─────────────────────────
-// Celebratory interstitial shown when one phase ends and the next begins.
-// The coach's per-section slide text (set in the programme builder) wins;
-// the stock blurbs are only a fallback.
-// ── INTRO SLIDE ──────────────────────────────────────────────────
-// Opening page of a session: the coach's brief for the day, shown before
-// the pulse raiser so "start workout" lands here first. Advancing is
-// handled by the bottom action bar's CONTINUE button.
-// Opening slide: a preview of what's coming before the first exercise. Shown
-// for every session - the coach's brief when there is one, and either way a
-// breakdown of the blocks ahead so the client knows what they're in for.
-function IntroSlide({ title, intro, exercises = [], onContinue }) {
-  const blocks = PHASES
-    .map(p => ({ ...p, count: exercises.filter(e => e.phase === p.id).length }))
-    .filter(p => p.count > 0);
-  const totalSets = exercises.reduce((n, e) => n + (e.sets?.length || 0), 0);
-
-  return (
-    <div style={{
-      flex: '0 0 100%', width: '100%', height: '100%',
-      scrollSnapAlign: 'center', padding: '0 14px', overflow: 'hidden',
-      display: 'flex', flexDirection: 'column'
-    }}>
-      <div className="scroller" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', paddingBottom: 10 }}>
-        <div style={{ display: 'grid', placeItems: 'center', color: 'var(--accent)', marginBottom: 16 }}>
-          <BrandIcon name="Weightlifting" size={92} color="var(--accent)" glow />
-        </div>
-        <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color: 'var(--accent)', marginBottom: 8 }}>
-          // TODAY'S WORKOUT
-        </div>
-        <div className="h-bold" style={{ fontSize: 24, marginBottom: 10 }}>
-          {title ? title.toUpperCase() : "LET'S GO"}
-        </div>
-
-        <div className="mono" style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-3)', marginBottom: intro ? 14 : 18 }}>
-          {exercises.length} EXERCISE{exercises.length === 1 ? '' : 'S'} · {totalSets} SET{totalSets === 1 ? '' : 'S'}
-        </div>
-
-        {intro && (
-          <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--text-2)', maxWidth: 320, whiteSpace: 'pre-line', marginBottom: 18 }}>{intro}</div>
-        )}
-
-        {/* What's coming, block by block */}
-        {blocks.length > 0 && (
-          <div style={{ width: '100%', maxWidth: 320, display: 'grid', gap: 6 }}>
-            {blocks.map(b => (
-              <div key={b.id} style={{
-                display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
-                padding: '9px 12px', borderRadius: 10,
-                background: 'var(--bg-2)', border: '1px solid var(--line)',
-                borderLeft: `2px solid ${b.accent}`,
-              }}>
-                <span style={{ display: 'grid', placeItems: 'center', color: b.accent, flexShrink: 0 }}>
-                  {(PHASE_ICON[b.id] || PHASE_ICON._default)(20)}
-                </span>
-                <span className="mono" style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-2)' }}>
-                  {(b.label || '').toUpperCase()}
-                </span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0 }}>
-                  {b.count} EX
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>);
-
 }
 
 // ── SESSION COMPLETE (post-workout results) ──────────────────────
