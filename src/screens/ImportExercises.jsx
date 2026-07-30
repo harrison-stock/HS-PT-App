@@ -148,17 +148,28 @@ export function ImportExercises({ trainerId, existing = [], onClose, onImported 
 
       let updated = 0;
       if (dupMode === 'update' && dupes.length) {
-        const res = await updateExercises(dupes.map(d => ({
-          id: d.existing.id,
-          patch: {
-            modality: d.modality, muscle_group: d.muscle_group,
-            movement_pattern: d.movement_pattern, category: d.category,
-            tracking_fields: d.tracking_fields, muscles_worked: d.muscles_worked,
-            instructions: d.instructions, link_url: d.link_url,
-            video_url: d.video_url, banded: d.banded, unilateral: d.unilateral,
-            load_split: d.load_split,
-          },
-        })));
+        // Only touch columns the sheet actually has. Patching every field meant
+        // a two-column "name + video" sheet - the obvious way to add demo clips
+        // to an existing library - silently overwrote muscle group, category
+        // and coaching notes with the defaults for every row it matched.
+        const res = await updateExercises(dupes.map(d => {
+          const patch = {};
+          if (map.video)      patch.video_url        = d.video_url;
+          if (map.modality)   patch.modality         = d.modality;
+          if (map.muscle)     patch.muscle_group     = d.muscle_group;
+          if (map.pattern)    patch.movement_pattern = d.movement_pattern;
+          if (map.category)   patch.category         = d.category;
+          if (map.tracking)   patch.tracking_fields  = d.tracking_fields;
+          if (map.muscles)    patch.muscles_worked   = d.muscles_worked;
+          if (map.cues)       patch.instructions     = d.instructions;
+          if (map.link)       patch.link_url         = d.link_url;
+          if (map.banded)     patch.banded           = d.banded;
+          if (map.unilateral) patch.unilateral       = d.unilateral;
+          // Never from the name guess on an update - that would undo a
+          // deliberate toggle the coach set in the builder.
+          if (map.twoweights) patch.load_split       = d.load_split;
+          return { id: d.existing.id, patch };
+        }));
         if (res.error) throw new Error(res.error.message);
         updated = res.updated;
       }
@@ -245,7 +256,7 @@ export function ImportExercises({ trainerId, existing = [], onClose, onImported 
                   ))}
                 </div>
                 <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', lineHeight: 1.6 }}>
-                  Matched on name. Overwriting replaces the library's fields with the sheet's - uploaded photos are left alone.
+                  Matched on name. Overwriting only touches the columns your sheet has, so a name + video sheet adds clips without disturbing anything else.
                 </div>
               </div>
             )}
