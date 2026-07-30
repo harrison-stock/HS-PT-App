@@ -262,7 +262,10 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
               ) : (
                 <button className="btn-primary btn-pulse"
                   style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--heading-deep)' }}
-                  onClick={() => todayWorkout.dayId ? go('log', { dayId: todayWorkout.dayId }) : go('workouts')}>
+                  // Into the preview, not straight into the logger - the client
+                  // gets to see what's coming before the timer starts, and the
+                  // preview carries its own start button.
+                  onClick={() => todayWorkout.id ? go('preview', { id: todayWorkout.id }) : go('workouts')}>
                   <IconPlay size={14}/> START SESSION
                 </button>
               )}

@@ -435,7 +435,10 @@ function VaultView({ docs }) {
 function CourseFilter({ recipes, value, onChange }) {
   const counts = courseCounts(recipes);
   return (
-    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, marginBottom: 12 }}>
+    // Five across, sharing the width equally. A scrolling row hid Desserts off
+    // the right edge, and a filter you have to discover by swiping may as well
+    // not be there.
+    <div style={{ display: 'flex', gap: 5, marginBottom: 12 }}>
       {COURSES.map(c => {
         const n = counts[c.id] || 0;
         const on = value === c.id;
@@ -443,9 +446,10 @@ function CourseFilter({ recipes, value, onChange }) {
         return (
           <button key={c.id} disabled={empty} onClick={() => onChange(c.id)} aria-pressed={on}
             style={{
-              all: 'unset', cursor: empty ? 'default' : 'pointer', flexShrink: 0,
+              all: 'unset', cursor: empty ? 'default' : 'pointer',
+              flex: '1 1 0', minWidth: 0, boxSizing: 'border-box',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
-              minWidth: 66, padding: '9px 8px 8px', borderRadius: 12,
+              padding: '9px 4px 8px', borderRadius: 12,
               background: on ? 'var(--accent-soft)' : 'var(--bg-2)',
               border: `1px solid ${on ? 'var(--accent)' : 'var(--line)'}`,
               boxShadow: on ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none',
@@ -454,7 +458,7 @@ function CourseFilter({ recipes, value, onChange }) {
             }}>
             <BrandIcon name={c.icon} size={22} color={on ? 'var(--accent)' : 'var(--text-3)'} glow={on} />
             <span className="mono" style={{
-              fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', whiteSpace: 'nowrap',
+              fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap',
               color: on ? 'var(--accent)' : 'var(--text-3)',
             }}>{c.label.toUpperCase()}</span>
           </button>
