@@ -180,6 +180,12 @@ function ProfileTab({ user, userId, onSave, theme, onThemeChange }) {
       {showInstall && <InstallPrompt onClose={() => setShowInstall(false)} />}
 
       <ConnectedDevices userId={userId} />
+
+      {/* Which build is running. Cheap to carry, and it turns "has my fix
+          deployed yet?" from a guess into something readable off the screen. */}
+      <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em', textAlign: 'center', padding: '18px 0 4px' }}>
+        BUILD {typeof __BUILD__ === 'string' ? __BUILD__ : 'unknown'}
+      </div>
     </>
   );
 }
