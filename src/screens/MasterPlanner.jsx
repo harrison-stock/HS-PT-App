@@ -176,7 +176,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
       ) : columns.length === 0 ? (
         <Centered>NOTHING TO SHOW</Centered>
       ) : (
-        <div className="scroller" style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px 14px 40px' }}>
+        <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', overflow: 'auto', padding: '14px 14px 40px' }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', minWidth: 'min-content' }}>
             {columns.map(col => (
               <PlannerColumn key={col.key} col={col}
@@ -271,7 +271,7 @@ function CopyDaySheet({ source, weeks, busy, hasDay, onClose, onCopy }) {
           </div>
         </div>
 
-        <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '4px 16px 16px' }}>
+        <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: '4px 16px 16px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: `minmax(96px, 1.4fr) repeat(7, 1fr)`, gap: 4, minWidth: 'min-content' }}>
             <div/>
             {DOW.map((d, i) => (
@@ -597,7 +597,7 @@ function ExerciseOptionsSheet({ ex, onClose, onPatch, onDelete }) {
           </div>
         </div>
 
-        <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '4px 16px 24px', display: 'grid', gap: 14, alignContent: 'start' }}>
+        <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: '4px 16px 24px', display: 'grid', gap: 14, alignContent: 'start' }}>
           <button onClick={() => setSwitching(true)} className="btn-ghost"
             style={{ width: '100%', boxSizing: 'border-box', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 45%, var(--line-strong))' }}>
             SWAP EXERCISE

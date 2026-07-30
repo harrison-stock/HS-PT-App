@@ -42,7 +42,7 @@ export function FormBuilder({ trainerId, form, onClose, onSaved }) {
         <button onClick={() => save(true)} disabled={!canSave} className="btn-primary" style={{ fontSize: 11, padding: '8px 12px', opacity: canSave ? 1 : 0.4 }}>SAVE & CLOSE</button>
       </div>
 
-      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: 16, display: 'grid', gap: 14, alignContent: 'start', maxWidth: 620, margin: '0 auto', width: '100%' }}>
+      <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: 16, display: 'grid', gap: 14, alignContent: 'start', maxWidth: 620, margin: '0 auto', width: '100%' }}>
         <input value={d.title} onChange={e => set({ title: e.target.value })} placeholder="Form title (e.g. Weekly Check-In)"
           style={{ ...fieldSt, fontSize: 18, fontWeight: 700 }}/>
         <textarea value={d.description} onChange={e => set({ description: e.target.value })} rows={2} placeholder="Intro / instructions (optional)" style={{ ...fieldSt, resize: 'vertical' }}/>

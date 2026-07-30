@@ -316,7 +316,7 @@ function ExerciseGlossaryDetail({ e, onClose, isFav, onToggleFav }) {
           </div>
         </div>
 
-        <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '16px 18px 40px' }}>
+        <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: '16px 18px 40px' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
             {e.muscle_group && <span className="chip chip-accent" style={{ fontSize: 9 }}>{e.muscle_group}</span>}
             {e.modality && <span className="chip" style={{ fontSize: 9 }}>{e.modality}</span>}
@@ -682,7 +682,7 @@ function RecipeDetail({ r, onClose, isFav, onToggleFav, onEdit }) {
         </div>
 
         {/* Body scroll */}
-        <div className="scroller" style={{ flex: 1, padding: '16px 16px 120px', minHeight: 0 }}>
+        <div className="scroller" style={{ height: 'auto', flex: 1, padding: '16px 16px 120px', minHeight: 0 }}>
           {/* Hex macro + breakdown - per portion */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '0 4px 8px' }}>
             <div className="label">// MACROS</div>

@@ -67,7 +67,7 @@ export function GuideBuilder({ trainerId, guide, onClose, onSaved }) {
         <button onClick={() => save(true)} disabled={!canSave} className="btn-primary" style={{ fontSize: 11, padding: '8px 12px', opacity: canSave ? 1 : 0.4 }}>SAVE & CLOSE</button>
       </div>
 
-      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: 16 }}>
+      <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: 16 }}>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 360px', minWidth: 0, display: 'grid', gap: 16 }}>
             <input value={d.title} onChange={e => set({ title: e.target.value })} placeholder="Guide title"

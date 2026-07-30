@@ -886,7 +886,7 @@ function RoadmapPanel({ prog, onSave, onBack, trainerId }) {
         </div>
       </div>
 
-      <div className="scroller" style={{ flex: 1, padding: '18px 16px 40px', minHeight: 0, width: '100%', maxWidth: 720, margin: '0 auto', boxSizing: 'border-box' }}>
+      <div className="scroller" style={{ height: 'auto', flex: 1, padding: '18px 16px 40px', minHeight: 0, width: '100%', maxWidth: 720, margin: '0 auto', boxSizing: 'border-box' }}>
         {saveError && (
           <div className="mono" style={{
             marginBottom: 14, padding: '10px 12px', borderRadius: 8, fontSize: 10, lineHeight: 1.5,
@@ -1909,7 +1909,7 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
             }}
           />
         </div>
-        <div className="scroller" style={{ flex: 1, overflowY: 'auto', padding: '0 16px 28px', minHeight: 0 }}>
+        <div className="scroller" style={{ height: 'auto', flex: 1, overflowY: 'auto', padding: '0 16px 28px', minHeight: 0 }}>
           {cats.map(cat => (
             <div key={cat} style={{ marginBottom: 14 }}>
               <div className="label" style={{ marginBottom: 8 }}>// {cat}</div>

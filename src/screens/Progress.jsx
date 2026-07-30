@@ -560,7 +560,7 @@ function BodyMetricDetail({ met, onBack, onLog }) {
         </div>
       </div>
 
-      <div className="scroller" style={{ flex: 1, padding: '14px 16px 30px', minHeight: 0 }}>
+      <div className="scroller" style={{ height: 'auto', flex: 1, padding: '14px 16px 30px', minHeight: 0 }}>
         {/* Hero value + large chart */}
         <div className="card" style={{ padding: 18, marginBottom: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>

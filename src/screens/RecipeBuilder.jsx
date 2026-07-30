@@ -115,7 +115,7 @@ export function RecipeBuilder({ trainerId, recipe, onClose, onSaved }) {
       </div>
 
       {/* Body */}
-      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '14px 14px 40px', display: 'grid', gap: 16, alignContent: 'start' }}>
+      <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: '14px 14px 40px', display: 'grid', gap: 16, alignContent: 'start' }}>
 
         {/* Basics */}
         <Section label="// BASICS">

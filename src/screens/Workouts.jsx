@@ -414,7 +414,7 @@ function YearView({ workouts, onClose }) {
         </div>
 
         {/* Months */}
-        <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '14px 16px 28px' }}>
+        <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: '14px 16px 28px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 16 }}>
             {MONTHS.map((mn, mi) => <MonthGrid key={mi} year={year} month={mi} map={map} today={today} />)}
           </div>
@@ -556,7 +556,7 @@ function PreviewBody({ w, sections, expanded, onToggle, onOpenSection, onClose, 
         </div>
       </div>
 
-      <div className="scroller" style={{ flex: 1, padding: '16px 18px 0', minHeight: 0 }}>
+      <div className="scroller" style={{ height: 'auto', flex: 1, padding: '16px 18px 0', minHeight: 0 }}>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 6 }}>
           <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
             <IconClock size={12} style={{ color: 'var(--accent)' }}/>
@@ -748,7 +748,7 @@ function SectionDetail({ s, onBack }) {
         <div/>
       </div>
 
-      <div className="scroller" style={{ flex: 1, padding: '20px 18px 28px' }}>
+      <div className="scroller" style={{ height: 'auto', flex: 1, padding: '20px 18px 28px' }}>
         <div className="h-bold" style={{ fontSize: 22, lineHeight: 1.1, marginBottom: 8 }}>{s.title.toUpperCase()}</div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
           <span className="mono" style={{ fontSize: 11, color: 'var(--text-2)', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 6 }}>
