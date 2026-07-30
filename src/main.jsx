@@ -2,10 +2,6 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import App from './App'
-import { trackViewportHeight } from './lib/viewportHeight'
-
-// Publish the real viewport height before the first paint.
-trackViewportHeight()
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)
 

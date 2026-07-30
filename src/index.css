@@ -98,38 +98,24 @@
 }
 
 * { box-sizing: border-box; }
-/* The document itself never scrolls - every scrollable region in the app is a
-   .scroller inside the layout. Leaving the document scrollable let iOS drag the
-   whole page (and with it the bottom nav, which is a flex child rather than a
-   fixed bar) and land it at an arbitrary offset on launch. Pinning the body to
-   the viewport removes the drag and the wrong start position together. */
+/* The document scrolls. Pinning it to the viewport did stop the bottom nav
+   being dragged around, but it also meant that whatever the browser reported
+   as the viewport height was the whole app - and on iOS that left the bottom
+   of the screen cut off with no way to reach it. A scrollable document can be
+   flicked, which is the escape hatch. */
 html, body {
   margin: 0; padding: 0;
   color: var(--text);
-  /* --app-h is measured from window.innerHeight (see lib/viewportHeight.js).
-     100dvh is the CSS-only equivalent and covers the frames before JS runs;
-     100% is the last resort for engines without dvh. */
-  height: 100%;
-  height: 100dvh;
-  height: var(--app-h, 100dvh);
-  overflow: hidden;
-  overscroll-behavior: none;
+  min-height: 100dvh;
 }
 body {
   background:
     radial-gradient(1200px 800px at 80% -10%, var(--app-glow-a), transparent 60%),
     radial-gradient(900px 700px at -10% 60%, var(--app-glow-b), transparent 55%),
     var(--app-bg-0);
-  /* Fixed rather than static so there is no document scroll to rubber-band.
-     left/right 0 with a max-width keeps `margin: 0 auto` centring the app. */
-  position: fixed;
-  /* top + height, not top + bottom: with all three set the height is
-     over-constrained and bottom is dropped, which makes the measured height
-     look like it is being ignored. Anchor the top and state the height. */
-  top: 0; left: 0; right: 0; bottom: auto;
-  height: 100%;
-  height: 100dvh;
-  height: var(--app-h, 100dvh);
+  position: relative;
+  overflow-x: hidden;
+  min-height: 100dvh;
   /* No cap on a phone: the app fills the screen edge to edge. The 390px cap
      exists to keep the client app phone-shaped on a laptop, but it was applied
      at every width - so any phone wider than 390 (a 15/16 at 393, a 16 Pro at
@@ -192,7 +178,7 @@ body:has([data-role="trainer"]) {
   .grid-2-wide { grid-template-columns: 1fr 1fr; align-items: start; }
 }
 #root {
-  height: 100%;
+  min-height: 100dvh;
   background: var(--bg-1);
   color: var(--text);
   position: relative;

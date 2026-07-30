@@ -375,7 +375,7 @@ export default function App() {
 
   return (
     <div data-role={navIsTrainer ? 'trainer' : 'client'} style={{
-      width: '100%', height: '100%',
+      width: '100%', height: '100dvh',
       display: 'flex', flexDirection: 'column',
       fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', monospace",
       background: 'var(--bg-1)',
@@ -536,7 +536,7 @@ function BottomNav({ screen, go, isTrainer }) {
 function LoadingScreen() {
   return (
     <div style={{
-      height: '100%', display: 'grid', placeItems: 'center',
+      minHeight: '100dvh', display: 'grid', placeItems: 'center',
       background: 'var(--bg-0)',
     }}>
       <HexLoader size={116} label="Loading" />
@@ -546,7 +546,7 @@ function LoadingScreen() {
 
 function BootError({ onRetry }) {
   return (
-    <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--bg-0)', padding: 24 }}>
+    <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', background: 'var(--bg-0)', padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 320 }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16, opacity: 0.85 }}>
           <HexShape size={40} fill="var(--c-amber)" />
