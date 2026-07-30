@@ -16,7 +16,26 @@ export function FormBuilder({ trainerId, form, onClose, onSaved }) {
 
   const set = (patch) => setD(prev => ({ ...prev, ...patch }));
   const setField = (i, patch) => set({ fields: d.fields.map((f, idx) => idx === i ? { ...f, ...patch } : f) });
-  const addField = (type) => { set({ fields: [...d.fields, newField(type)] }); setAddOpen(false); };
+  // Bring the new question into view. You should be able to read the thing you
+  // just added without hunting for it, and it makes the outcome independent of
+  // whether the surrounding scroll behaves itself.
+  const lastFieldRef = React.useRef(null);
+  const revealRef = React.useRef(false);
+  const addField = (type) => {
+    set({ fields: [...d.fields, newField(type)] });
+    setAddOpen(false);
+    revealRef.current = true;
+  };
+  React.useEffect(() => {
+    if (!revealRef.current) return;
+    revealRef.current = false;
+    const el = lastFieldRef.current;
+    if (!el) return;
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    catch (e) { el.scrollIntoView(false); }
+    // Put the cursor in the new question so it can be typed straight away.
+    el.querySelector('input')?.focus({ preventScroll: true });
+  }, [d.fields.length]);
   const delField = (i) => set({ fields: d.fields.filter((_, idx) => idx !== i) });
   const canSave = d.title.trim() && d.fields.length && !saving;
 
@@ -59,7 +78,8 @@ export function FormBuilder({ trainerId, form, onClose, onSaved }) {
 
         <div className="label">// QUESTIONS</div>
         {d.fields.map((f, i) => (
-          <div key={f.id} className="card" style={{ padding: 12, display: 'grid', gap: 8 }}>
+          <div key={f.id} ref={i === d.fields.length - 1 ? lastFieldRef : null}
+            className="card" style={{ padding: 12, display: 'grid', gap: 8 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700 }}>{i + 1}.</span>
               <input value={f.label} onChange={e => setField(i, { label: e.target.value })} placeholder="Question" style={{ ...fieldSt, flex: 1 }}/>
