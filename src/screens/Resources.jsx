@@ -205,7 +205,7 @@ export function Resources({ go, userId, isTrainer }) {
       }
 
       {favs.size === 0 && tab === 'favourites' &&
-      <EmptyState icon="Heart" title="No favourites yet"
+      <EmptyState icon="Recipe" title="No favourites yet"
         sub="Tap the ♥ on any recipe, guide or exercise to pin it here for quick access."
         actionLabel="BROWSE RECIPES" onAction={() => setTab('recipes')} />
       }
@@ -456,7 +456,7 @@ function CourseFilter({ recipes, value, onChange }) {
               opacity: empty ? 0.35 : 1,
               transition: 'background .15s ease, border-color .15s ease',
             }}>
-            <BrandIcon name={c.icon} size={22} color={on ? 'var(--accent)' : 'var(--text-3)'} glow={on} />
+            <BrandIcon name={c.icon} size={28} color={on ? 'var(--accent)' : 'var(--text-3)'} glow={on} />
             <span className="mono" style={{
               fontSize: 8, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap',
               color: on ? 'var(--accent)' : 'var(--text-3)',
