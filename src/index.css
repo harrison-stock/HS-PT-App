@@ -98,21 +98,29 @@
 }
 
 * { box-sizing: border-box; }
+/* The document itself never scrolls - every scrollable region in the app is a
+   .scroller inside the layout. Leaving the document scrollable let iOS drag the
+   whole page (and with it the bottom nav, which is a flex child rather than a
+   fixed bar) and land it at an arbitrary offset on launch. Pinning the body to
+   the viewport removes the drag and the wrong start position together. */
 html, body {
   margin: 0; padding: 0;
   color: var(--text);
-  min-height: 100dvh;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 body {
   background:
     radial-gradient(1200px 800px at 80% -10%, var(--app-glow-a), transparent 60%),
     radial-gradient(900px 700px at -10% 60%, var(--app-glow-b), transparent 55%),
     var(--app-bg-0);
+  /* Fixed rather than static so there is no document scroll to rubber-band.
+     left/right 0 with a max-width keeps `margin: 0 auto` centring the app. */
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
   max-width: 390px;
   margin: 0 auto;
-  min-height: 100dvh;
-  position: relative;
-  overflow-x: hidden;
 }
 
 /* Trainer desktop layout - remove mobile cap */
@@ -162,7 +170,7 @@ body:has([data-role="trainer"]) {
   .grid-2-wide { grid-template-columns: 1fr 1fr; align-items: start; }
 }
 #root {
-  min-height: 100dvh;
+  height: 100%;
   background: var(--bg-1);
   color: var(--text);
   position: relative;
