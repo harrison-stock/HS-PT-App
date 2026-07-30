@@ -8,6 +8,7 @@ import { FileDrop } from '../components/FileDrop'
 import { BodyMap, Progress, SideSlider, Segmented } from './Progress'
 import { WorkedView } from './Body'
 import { InjuryThread } from './InjuryThread'
+import { ExerciseComments } from './ExerciseComments'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
 import { injuryTitle } from '../lib/injuries'
 import { notify } from '../lib/notifications'
@@ -36,8 +37,11 @@ const TASK_ICON  = { check: '✓', log: '◎', photo: '▣', form: '✎' };
 const TASK_COLOR = { check: 'var(--accent)', log: 'var(--c-amber)', photo: 'var(--c-blue)', form: 'var(--c-pink)' };
 
 // ── Main component ───────────────────────────────────────────────
-export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go, initialTab, initialInjuryId }) {
+export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go, initialTab, initialInjuryId, initialDayId, initialExercise }) {
   const [tab, setTab] = React.useState(initialTab || 'overview');
+  // A comment notification names the movement it came from; open its thread.
+  const [thread, setThread] = React.useState(initialExercise || null);
+  React.useEffect(() => { if (initialExercise) setThread(initialExercise); }, [initialExercise]);
   const TABS = [
     { id: 'overview',  label: 'OVERVIEW'  },
     { id: 'training',  label: 'TRAINING'  },
@@ -100,7 +104,7 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go,
       {/* ── Content ── */}
       <div className="scroller dt-content" style={{ flex: 1, minHeight: 0, padding: '14px 14px 40px' }}>
         {tab === 'overview' && <OverviewTab  c={c} go={go} onClose={onClose} onTab={setTab} />}
-        {tab === 'training' && <TrainingTab  c={c} trainerId={trainerId} programmes={programmes} onChanged={onChanged} />}
+        {tab === 'training' && <TrainingTab  c={c} trainerId={trainerId} programmes={programmes} onChanged={onChanged} initialDayId={initialDayId} />}
         {tab === 'body'     && <BodyTab      c={c} trainerId={trainerId} initialInjuryId={initialInjuryId} />}
         {tab === 'data'     && <DataTab      c={c} trainerId={trainerId} />}
         {tab === 'tasks'    && <TasksTab     c={c} trainerId={trainerId} />}
@@ -109,6 +113,13 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go,
         {tab === 'report'   && <ProgrammeReport clientId={c.id} clientName={c.name} embedded onClose={() => setTab('overview')} />}
         {tab === 'settings' && <SettingsTab  c={c} trainerId={trainerId} onSaved={onChanged} onArchived={() => { onChanged?.(); onClose(); }} />}
       </div>
+
+      {/* Arrived from a comment notification - open that movement's thread. */}
+      {thread && (
+        <ExerciseComments
+          exerciseId={thread.id} clientId={c.id} exerciseName={thread.name}
+          onClose={() => setThread(null)} />
+      )}
     </div>
   );
 }
@@ -672,7 +683,7 @@ function useIsNarrow(bp = 760) {
   return narrow;
 }
 
-function TrainingTab({ c, trainerId, programmes, onChanged }) {
+function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
   const narrow = useIsNarrow();
   const [weeks, setWeeks]   = React.useState(4);
   // On phones we only ever show a single week (vertical list).
@@ -695,6 +706,17 @@ function TrainingTab({ c, trainerId, programmes, onChanged }) {
   }, [c.id, anchor, shownWeeks]);
 
   React.useEffect(() => { loadWorkouts(); }, [loadWorkouts]);
+
+  // Arrived from a "workout completed" notification: open that day straight
+  // away, so the coach lands on the session rather than on the calendar.
+  const openedDayRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!initialDayId || openedDayRef.current === initialDayId) return;
+    const hit = workouts.find(w => w.programme_days?.id === initialDayId);
+    if (!hit) return;
+    openedDayRef.current = initialDayId;
+    setEditing(hit);
+  }, [initialDayId, workouts]);
 
   // Move a workout to another date (drag-drop between calendar cells).
   const moveWorkout = async (id, newDate) => {

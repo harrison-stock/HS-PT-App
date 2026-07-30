@@ -61,10 +61,14 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
       setClientId(openTarget.clientId);
       setClientInitialTab(openTarget.tab || null);
       setClientInitialInjury(openTarget.injuryId || null);
+      setClientInitialDay(openTarget.dayId || null);
+      setClientInitialExercise(openTarget.exerciseId ? { id: openTarget.exerciseId, name: openTarget.exercise || '' } : null);
       onOpenConsumed?.();
     }
   }, [openTarget]);
   const [clientInitialInjury, setClientInitialInjury] = React.useState(null);
+  const [clientInitialDay, setClientInitialDay] = React.useState(null);
+  const [clientInitialExercise, setClientInitialExercise] = React.useState(null);
   const [programmeId, setProgrammeId]       = React.useState(null);
   const [builderProgramme, setBuilderProgramme] = React.useState(null);
   const [builderOpenRoadmap, setBuilderOpenRoadmap] = React.useState(false);
@@ -149,10 +153,13 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
           .in('client_id', ids)
           .gte('started_at', since)
           .order('started_at', { ascending: false }),
-        // 4-week adherence: completed vs scheduled workouts up to today.
+        // 4-week adherence: completed vs scheduled workouts up to today. The
+        // programme/phase each workout came from rides along so the roster card
+        // can say what a client is actually on - it used to read "no programme
+        // assigned" for everyone, because the label was never filled in.
         supabase
           .from('client_workouts')
-          .select('client_id, status, scheduled_date')
+          .select('client_id, status, scheduled_date, programme_days ( programme_phases ( name, programmes ( name ) ) )')
           .in('client_id', ids)
           .gte('scheduled_date', since28)
           .lte('scheduled_date', today28)
@@ -160,14 +167,27 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
       ]);
 
       const compBy = {};
+      // Latest scheduled workout per client - the phase they're currently on.
+      const progBy = {};
       (schedRows || []).forEach(w => {
         const b = compBy[w.client_id] = compBy[w.client_id] || { done: 0, total: 0 };
         b.total += 1;
         if (w.status === 'completed') b.done += 1;
+        const phase = w.programme_days?.programme_phases;
+        if (phase) {
+          const cur = progBy[w.client_id];
+          if (!cur || w.scheduled_date > cur.date) {
+            progBy[w.client_id] = {
+              date: w.scheduled_date,
+              label: [phase.programmes?.name, phase.name].filter(Boolean).join(' · '),
+            };
+          }
+        }
       });
       real.forEach(c => {
         const b = compBy[c.id];
         c.compliance = b && b.total > 0 ? Math.round((b.done / b.total) * 100) : null;
+        if (progBy[c.id]?.label) c.phaseLabel = progBy[c.id].label;
       });
 
       const week7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -405,7 +425,9 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
           programmes={programmes}
           initialTab={clientInitialTab}
           initialInjuryId={clientInitialInjury}
-          onClose={() => { setClientId(null); setClientInitialTab(null); setClientInitialInjury(null); }}
+          initialDayId={clientInitialDay}
+          initialExercise={clientInitialExercise}
+          onClose={() => { setClientId(null); setClientInitialTab(null); setClientInitialInjury(null); setClientInitialDay(null); setClientInitialExercise(null); }}
           onChanged={() => { fetchClients(); fetchTodaySchedule(); }}
           go={go}
         />

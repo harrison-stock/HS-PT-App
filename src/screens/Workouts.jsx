@@ -22,10 +22,19 @@ function fmtDate(dt) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
-function deriveTarget(sets, unilateral) {
+function deriveTarget(sets, unilateral, timed) {
   if (!sets || sets.length === 0) return '-';
   const sorted = [...sets].sort((a, b) => a.set_index - b.set_index);
-  const reps = sorted[0]?.reps;
+  // A timed movement carries a duration, not reps - and it keeps whatever sat
+  // in the reps column, so reading that showed a five-minute bike as "1 × 8".
+  if (timed) {
+    const secs = parseInt(sorted[0]?.time_secs) || 0;
+    if (!secs) return `${sorted.length} × -`;
+    const mm = Math.floor(secs / 60), ss = secs % 60;
+    const clock = mm ? `${mm}:${String(ss).padStart(2, '0')}` : `${ss}s`;
+    return `${sorted.length} × ${clock}`;
+  }
+  const reps = sorted[0]?.reps_text || sorted[0]?.reps;
   return `${sorted.length} × ${reps || '-'}${unilateral ? ' ea' : ''}`;
 }
 
@@ -73,7 +82,7 @@ function shapeWorkout(row) {
             img: ex.img_url || null,
             tempo: ex.tempo || '',
             ss: ex.superset_group ?? null,
-            target: deriveTarget(ex.exercise_sets, ex.unilateral),
+            target: deriveTarget(ex.exercise_sets, ex.unilateral, ex.timed),
             load: deriveLoad(ex.exercise_sets, ex.banded, ex.load_split),
           })),
       };
@@ -142,7 +151,7 @@ export function Workouts({ go, openPreview, userId }) {
             ${sectionFields},
             section_exercises (
               id, name, img_url, tempo, timed, banded, unilateral, load_split, superset_group, sort_order,
-              exercise_sets ( set_index, reps, weight_kg, band, rest_secs, time_secs )
+              exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs )
             )
           )
         )

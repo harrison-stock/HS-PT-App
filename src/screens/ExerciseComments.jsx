@@ -20,11 +20,11 @@ export function ExerciseComments({ exerciseId, clientId, exerciseName, onClose }
     // week the movement appears. Gather by movement name instead, which is how
     // logged history is matched everywhere else.
     if (exerciseName) {
-      const quoted = `"${String(exerciseName).trim().replace(/"/g, '\\"')}"`;
+      const movement = String(exerciseName).trim();
       const { data, error } = await supabase.from('exercise_comments')
         .select('*, section_exercises!inner ( name )')
         .eq('client_id', clientId)
-        .ilike('section_exercises.name', quoted)
+        .ilike('section_exercises.name', movement)
         .order('created_at', { ascending: true });
       if (!error) { setRows(data || []); return; }
     }
