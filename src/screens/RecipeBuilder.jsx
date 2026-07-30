@@ -6,7 +6,7 @@ import { uploadGuideImage } from '../lib/guides'
 import { FileDrop } from '../components/FileDrop'
 import { toast } from '../lib/toast'
 
-const TAGS = ['BREAKFAST', 'LUNCH', 'DINNER', 'POST-WORKOUT', 'SNACK'];
+const TAGS = ['BREAKFAST', 'LUNCH', 'DINNER', 'POST-WORKOUT', 'SNACK', 'DESSERT'];
 const MACRO_C = { protein: '#F39E1F', carbs: '#46BBC0', fats: '#EE6A6A' };
 const round1 = (n) => Math.round((n || 0) * 10) / 10;
 
