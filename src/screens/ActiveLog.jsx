@@ -15,6 +15,7 @@ import { BrandIcon } from '../components/BrandIcon'
 import { BANDS, bandOf } from '../components/bands'
 import { loadExercises, videoThumb } from '../lib/exercises'
 import { splitLoad, guessSplit } from '../lib/loadSplit'
+import { restoreLoggedSession } from '../lib/editSession'
 import { ExercisePicker } from './ProgrammeBuilder'
 
 // Active Workout - Everfit-style swipeable cards.
@@ -210,30 +211,32 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           } else if (userId) {
             clearActiveWorkout(userId);
           }
-          // Editing a past session: overlay the previously-logged actuals so the
-          // client edits real data (rather than a blank sheet that would wipe it).
+          // Editing a past session. Saving replaces the session wholesale, so
+          // anything the edit screen fails to show is destroyed on save. The
+          // prescription alone is not enough to rebuild what was logged: a
+          // client can add sets to an exercise and add exercises that were never
+          // prescribed, and neither has anywhere to land in a rebuilt-from-the-
+          // programme sheet. So restore all three - the prescribed sets, the
+          // extra sets, and the extra exercises - and the elapsed time with them.
           if (edit && userId && rows.length > 0) {
             const { data: sess } = await supabase.from('workout_sessions')
-              .select('completed_at, logged_sets ( exercise_id, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, intensity )')
+              .select('id, started_at, completed_at, logged_sets ( exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, intensity )')
               .eq('client_id', userId).eq('day_id', dayId)
               .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle();
-            const byEx = {};
-            (sess?.logged_sets || []).forEach(ls => { (byEx[ls.exercise_id || 'n'] = byEx[ls.exercise_id || 'n'] || {})[ls.set_index] = ls; });
-            rows.forEach(ex => {
-              const m = byEx[ex.id];
-              if (!m) return;
-              ex.sets = ex.sets.map((s, i) => {
-                const ls = m[i];
-                if (!ls) return s;
-                return {
-                  ...s, done: true,
-                  reps: s.time ? formatMMSS(parseInt(ls.actual_time_secs) || 0) : (ls.actual_reps ?? s.reps),
-                  kg: s.time ? null : (ls.actual_weight_kg != null ? parseFloat(ls.actual_weight_kg) : s.kg),
-                  band: ls.actual_band ?? s.band,
-                  rpe: ls.intensity ? Math.round(ls.intensity / 2.5) : s.rpe,
-                };
-              });
-            });
+
+            if (sess) {
+              // Carry the original session forward rather than starting a new
+              // one, so the clock reads where they left it and started_at is
+              // preserved when it's written back.
+              editSessionRef.current = sess.id;
+              if (sess.started_at) sessionStartRef.current = sess.started_at;
+              if (sess.started_at && sess.completed_at) {
+                const secs = Math.max(0, Math.round((new Date(sess.completed_at) - new Date(sess.started_at)) / 1000));
+                setSessionTime(secs);
+              }
+            }
+
+            restoreLoggedSession(rows, sess?.logged_sets, formatMMSS);
           }
           // A real assigned day must have exercises - never fall back to the
           // built-in demo against a client's actual session.
@@ -258,6 +261,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   // finishes within this same run.
   const savedSessionRef = React.useRef(null);
   const editModeRef = React.useRef(!!edit);
+  // The session being amended. Kept so the edit writes back to the same row -
+  // preserving started_at, and never leaving a window with no session at all.
+  const editSessionRef = React.useRef(null);
 
   // ── Persist in-progress state so a crash/close can be resumed ──
   const liveRef = React.useRef({ sessionTime: 0, activeIdx: 0, exercises });
@@ -319,24 +325,28 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         return;
       }
 
-      // Replace prior results when re-finishing this run, or when this run was
-      // opened to edit a past session (delete cascades to its logged_sets).
-      if (savedSessionRef.current) {
-        await supabase.from('workout_sessions').delete().eq('id', savedSessionRef.current);
-        savedSessionRef.current = null;
-      } else if (editModeRef.current) {
-        const { data: prev } = await supabase.from('workout_sessions')
-          .select('id').eq('client_id', userId).eq('day_id', dayId)
-          .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle();
-        if (prev) await supabase.from('workout_sessions').delete().eq('id', prev.id);
+      // Amending an existing session rewrites that session's sets in place. The
+      // row survives, so started_at - and with it the elapsed time - is the
+      // original, and the session is never momentarily absent from history.
+      let ws = null;
+      const amendId = editSessionRef.current || savedSessionRef.current;
+      if (amendId) {
+        await supabase.from('logged_sets').delete().eq('session_id', amendId);
+        const { error: upErr } = await supabase.from('workout_sessions')
+          .update({ completed_at: new Date().toISOString() }).eq('id', amendId);
+        if (!upErr) ws = { id: amendId };
         editModeRef.current = false;
       }
-      const { data: ws } = await supabase
-        .from('workout_sessions')
-        .insert({ client_id: userId, day_id: dayId, started_at: sessionStartRef.current, completed_at: new Date().toISOString() })
-        .select('id').single();
+      if (!ws) {
+        const { data: fresh } = await supabase
+          .from('workout_sessions')
+          .insert({ client_id: userId, day_id: dayId, started_at: sessionStartRef.current, completed_at: new Date().toISOString() })
+          .select('id').single();
+        ws = fresh;
+      }
       if (ws) {
         savedSessionRef.current = ws.id;
+        editSessionRef.current = ws.id;
         const logRows = pendingSets.map(r => ({ ...r, session_id: ws.id }));
         const { error: logErr } = await supabase.from('logged_sets').insert(logRows);
         // Fallback if migration 032 (exercise_name / nullable exercise_id) isn't
