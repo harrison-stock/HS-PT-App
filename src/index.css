@@ -130,8 +130,16 @@ body {
   height: 100%;
   height: 100dvh;
   height: var(--app-h, 100dvh);
-  max-width: 390px;
+  /* No cap on a phone: the app fills the screen edge to edge. The 390px cap
+     exists to keep the client app phone-shaped on a laptop, but it was applied
+     at every width - so any phone wider than 390 (a 15/16 at 393, a 16 Pro at
+     402, a Plus or Pro Max at 430, most Androids) got the app in a narrow
+     column with a strip of page background down both sides, and a bottom nav
+     that stopped short of the screen edges. */
   margin: 0 auto;
+}
+@media (min-width: 500px) {
+  body { max-width: 390px; }
 }
 
 /* Trainer desktop layout - remove mobile cap */
