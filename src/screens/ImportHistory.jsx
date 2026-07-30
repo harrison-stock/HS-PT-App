@@ -133,7 +133,7 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
         </div>
       </div>
 
-      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: '16px 16px 40px', maxWidth: 720, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+      <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: '16px 16px 40px', maxWidth: 720, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
         {!parsed ? (
           <div className="card" style={{ padding: 22, textAlign: 'center', display: 'grid', gap: 14 }}>
             <div className="mono" style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.7 }}>

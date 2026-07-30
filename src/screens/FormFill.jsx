@@ -51,7 +51,7 @@ export function FormFill({ formId, taskId, clientId, onClose, onSubmitted }) {
 
         {!done && (
           <>
-            <div className="scroller" style={{ flex: 1, padding: '8px 16px 4px', minHeight: 0, display: 'grid', gap: 16 }}>
+            <div className="scroller" style={{ height: 'auto', flex: 1, padding: '8px 16px 4px', minHeight: 0, display: 'grid', gap: 16 }}>
               {fields.map(f => <FormField key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} />)}
             </div>
             <div style={{ padding: '12px 16px 26px', flexShrink: 0 }}>

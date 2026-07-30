@@ -1503,7 +1503,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
         )}
       </div>
 
-      <div className="scroller" style={{ flex: 1, padding: '12px 16px 28px', minHeight: 0 }}>
+      <div className="scroller" style={{ height: 'auto', flex: 1, padding: '12px 16px 28px', minHeight: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
           <SCKpi label="TIME" value={fmtT(sessionTime)} unit="" />
           <SCKpi label="VOLUME" value={volume.toLocaleString()} unit="KG" />

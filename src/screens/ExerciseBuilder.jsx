@@ -95,7 +95,7 @@ export function ExerciseBuilder({ trainerId, exercise, onClose, onSaved }) {
       </div>
 
       {/* Two-pane body */}
-      <div className="scroller" style={{ flex: 1, minHeight: 0, padding: 16 }}>
+      <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: 16 }}>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
 
           {/* LEFT */}

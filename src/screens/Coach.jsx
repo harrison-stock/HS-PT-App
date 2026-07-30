@@ -1184,7 +1184,7 @@ function AssignAdhocSheet({ workout, clients, trainerId, onClose }) {
           </div>
         </div>
       ) : (
-        <div className="scroller" style={{ flex: 1, padding: '16px 18px', minHeight: 0, display: 'grid', gap: 14, alignContent: 'start' }}>
+        <div className="scroller" style={{ height: 'auto', flex: 1, padding: '16px 18px', minHeight: 0, display: 'grid', gap: 14, alignContent: 'start' }}>
           {dayId === null && (
             <div className="mono" style={{ fontSize: 10, color: 'var(--c-amber)', padding: '10px 12px', background: 'color-mix(in srgb, var(--c-amber) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--c-amber) 35%, transparent)', borderRadius: 8, lineHeight: 1.6 }}>
               This workout has no session built yet - open it in EDIT and add some exercises first.
@@ -1531,7 +1531,7 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
         <div className="h-bold" style={{ fontSize: 20 }}>NEW CLIENT INVITE</div>
       </div>
 
-      <div className="scroller" style={{ flex: 1, padding: '16px 18px', minHeight: 0, display: 'grid', gap: 16, alignContent: 'start' }}>
+      <div className="scroller" style={{ height: 'auto', flex: 1, padding: '16px 18px', minHeight: 0, display: 'grid', gap: 16, alignContent: 'start' }}>
         {!inviteUrl ? (
           <>
             {error && (
@@ -1739,7 +1739,7 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
         </div>
       </div>
 
-      <div className="scroller" style={{ flex: 1, padding: '16px 18px 18px', minHeight: 0 }}>
+      <div className="scroller" style={{ height: 'auto', flex: 1, padding: '16px 18px 18px', minHeight: 0 }}>
         <div className="label" style={{ marginBottom: 10 }}>// PHASES</div>
         <div style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
           {p.phaseList.map((ph, i) => (
