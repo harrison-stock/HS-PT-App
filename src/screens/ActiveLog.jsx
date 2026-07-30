@@ -246,7 +246,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           // Workout name (migration 045) - fetched separately so an un-migrated
           // DB degrades gracefully rather than failing the whole load.
           supabase.from('programme_days').select('title').eq('id', dayId).maybeSingle()
-            .then(({ data: t }) => { if (t) setDayTitle(t.title || ''); });
+            .then(({ data: t }) => { if (t) { setDayTitle(t.title || ''); dayTitleRef.current = t.title || ''; } });
         } else {
           setLoadError(true);
           if (error) console.error('load workout', error);
@@ -264,6 +264,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   // The session being amended. Kept so the edit writes back to the same row -
   // preserving started_at, and never leaving a window with no session at all.
   const editSessionRef = React.useRef(null);
+  const dayTitleRef = React.useRef('');
 
   // ── Persist in-progress state so a crash/close can be resumed ──
   const liveRef = React.useRef({ sessionTime: 0, activeIdx: 0, exercises });
@@ -358,7 +359,12 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
         // Notify the coach that the client finished a workout.
         const tId = await trainerOf(userId);
-        if (tId) notify({ recipientId: tId, actorId: userId, kind: 'done', title: 'Workout completed', body: 'A client finished a session - review their logged sets.', link: { screen: 'coach' } });
+        if (tId) notify({
+          recipientId: tId, actorId: userId, kind: 'done', title: 'Workout completed',
+          body: dayTitleRef.current ? `${dayTitleRef.current} - review their logged sets.` : 'Review their logged sets.',
+          // Straight to their results rather than the hub.
+          link: { screen: 'coach', clientId: userId, tab: 'training', dayId },
+        });
       }
     } catch (e) { console.error('saveSession', e); }
   };
@@ -2352,6 +2358,50 @@ function actionBtnStyle() {
   };
 }
 
+// Comments on a movement, gathered across every week it was prescribed.
+function ExerciseCommentLog({ name, userId }) {
+  const [rows, setRows] = React.useState(null);
+  const [names, setNames] = React.useState({});
+
+  React.useEffect(() => {
+    if (!userId || !name) { setRows([]); return; }
+    let alive = true;
+    // Quoted: PostgREST splits a filter value on commas.
+    const quoted = `"${String(name).trim().replace(/"/g, '\\"')}"`;
+    supabase.from('exercise_comments')
+      .select('id, body, author_id, created_at, section_exercises!inner ( name )')
+      .eq('client_id', userId)
+      .ilike('section_exercises.name', quoted)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { if (alive) setRows(data || []); });
+    return () => { alive = false; };
+  }, [name, userId]);
+
+  React.useEffect(() => {
+    const ids = [...new Set((rows || []).map(r => r.author_id).filter(Boolean))];
+    if (!ids.length) return;
+    supabase.from('profiles').select('id, name').in('id', ids)
+      .then(({ data }) => setNames(Object.fromEntries((data || []).map(p => [p.id, p.name || 'Them']))));
+  }, [rows]);
+
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div className="label" style={{ marginBottom: 8 }}>// COMMENTS · {rows.length}</div>
+      <div style={{ display: 'grid', gap: 6 }}>
+        {rows.map(c => (
+          <div key={c.id} className="card" style={{ padding: '10px 12px' }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.5 }}>{c.body}</div>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 5 }}>
+              {(names[c.author_id] || 'THEM').toUpperCase()} · {new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── PRIOR PROGRESS SHEET ──────────────────────────────────────────
 // Shows this client's real past sessions for the exercise, loaded from
 // logged_sets (matched by exercise name so history carries across weeks).
@@ -2450,6 +2500,10 @@ function PriorProgressSheet({ ex, userId, onClose }) {
           <MiniLine data={trend} color="var(--accent)" />
         </div>
         }
+
+        {/* Every comment ever left on this movement, alongside its history -
+            the conversation and the numbers belong on the same screen. */}
+        <ExerciseCommentLog name={ex.name} userId={userId} />
 
         {/* Sessions */}
         <div style={{ display: 'grid', gap: 8 }}>

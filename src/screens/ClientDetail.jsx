@@ -36,7 +36,7 @@ const TASK_ICON  = { check: '✓', log: '◎', photo: '▣', form: '✎' };
 const TASK_COLOR = { check: 'var(--accent)', log: 'var(--c-amber)', photo: 'var(--c-blue)', form: 'var(--c-pink)' };
 
 // ── Main component ───────────────────────────────────────────────
-export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go, initialTab }) {
+export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go, initialTab, initialInjuryId }) {
   const [tab, setTab] = React.useState(initialTab || 'overview');
   const TABS = [
     { id: 'overview',  label: 'OVERVIEW'  },
@@ -101,7 +101,7 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go,
       <div className="scroller dt-content" style={{ flex: 1, minHeight: 0, padding: '14px 14px 40px' }}>
         {tab === 'overview' && <OverviewTab  c={c} go={go} onClose={onClose} onTab={setTab} />}
         {tab === 'training' && <TrainingTab  c={c} trainerId={trainerId} programmes={programmes} onChanged={onChanged} />}
-        {tab === 'body'     && <BodyTab      c={c} trainerId={trainerId} />}
+        {tab === 'body'     && <BodyTab      c={c} trainerId={trainerId} initialInjuryId={initialInjuryId} />}
         {tab === 'data'     && <DataTab      c={c} trainerId={trainerId} />}
         {tab === 'tasks'    && <TasksTab     c={c} trainerId={trainerId} />}
         {tab === 'goals'    && <GoalsTab     c={c} trainerId={trainerId} />}
@@ -1275,7 +1275,7 @@ const MUSCLE_TINT = {
   quads: '#E0A5B8', hamstrings: '#E0A5B8', glutes: '#E0A5B8', calves: '#E0A5B8', adductors: '#E0A5B8',
 };
 const BODY_RANGE_DAYS = { '1m': 30, '3m': 90, '12m': 365 };
-function BodyTab({ c, trainerId }) {
+function BodyTab({ c, trainerId, initialInjuryId }) {
   const [mode, setMode]           = React.useState('worked');
   const [side, setSide]           = React.useState('front');
   const [range, setRange]         = React.useState('1m');
@@ -1290,6 +1290,17 @@ function BodyTab({ c, trainerId }) {
       .then(({ data }) => setInjuries(data || []));
 
   React.useEffect(() => { reload(); }, [c.id]);
+
+  // Arriving from an "injury reported" notification: open that note, and switch
+  // to the mode that shows it, so the tap lands on the thread rather than near it.
+  React.useEffect(() => {
+    if (!initialInjuryId || !injuries.length) return;
+    const hit = injuries.find(i => i.id === initialInjuryId);
+    if (!hit) return;
+    setMode('injury');
+    setSide(hit.body_side || 'front');
+    setOpenId(initialInjuryId);
+  }, [initialInjuryId, injuries]);
 
   React.useEffect(() => {
     if (mode !== 'worked') return;
