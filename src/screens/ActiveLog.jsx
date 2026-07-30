@@ -542,6 +542,11 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       i += 1;
     }
   }
+  // Anything with an unticked set. Reaching the finish slide only means you
+  // swiped to the end - it says nothing about whether the work got logged - so
+  // a partially-done exercise counts as missed just like a skipped one.
+  const missedCount = exercises.filter((e) => (e.sets || []).some((s) => s && !s.done)).length;
+
   // A dedicated "ready to finish" slide caps the session before the finish CTA.
   if (exercises.length) {
     const lastPhase = exercises[exercises.length - 1].phase;
@@ -669,7 +674,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       }}>
         {railItems.map((it, i) =>
         it.type === 'finish' ?
-        <FinishSlide key={`f${i}`} phaseId={it.phaseId} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
+        <FinishSlide key={`f${i}`} phaseId={it.phaseId} missed={missedCount} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
         it.type === 'superset' ?
         <SupersetCard key={`ss${it.group[0].id}`} group={it.group}
           onComplete={(exId, si) => completeSet(exId, si)}
@@ -1218,8 +1223,9 @@ function ExerciseComment() {
 
 // ── FINAL SLIDE (after cooldown) ─────────────────────────────────
 // "Cooldown complete · ready to finish?" - last rail slide before results.
-function FinishSlide({ phaseId, onFinish }) {
+function FinishSlide({ phaseId, missed = 0, onFinish }) {
   const phase = PHASES.find((p) => p.id === phaseId) || {};
+  const clean = missed === 0;
   const confetti = ['var(--c-amber)', 'var(--c-blue)', 'var(--c-coral)', 'var(--accent)', 'var(--c-pink)'];
   return (
     <div style={{
@@ -1250,12 +1256,40 @@ function FinishSlide({ phaseId, onFinish }) {
         <div className="mono" style={{ fontSize: 11, letterSpacing: '0.22em', fontWeight: 700, color: 'var(--accent-2)', marginBottom: 10 }}>
           // WRAP UP
         </div>
-        <div className="h-bold" style={{ fontSize: 28, marginBottom: 12 }}>READY TO FINISH?</div>
-        <div className="mono" style={{ fontSize: 12.5, lineHeight: 1.6, color: 'var(--text-2)', maxWidth: 300, marginBottom: 26 }}>
-          That's every block done. Wrap up the session to log your sets and see your results.
-        </div>
+        <div className="h-bold" style={{ fontSize: 28, marginBottom: 14 }}>READY TO FINISH?</div>
 
-        <button onClick={onFinish} className="btn-primary" style={{
+        {/* The one thing worth saying here is whether anything got left behind.
+            Reaching this slide doesn't mean every set was ticked - you can swipe
+            past a whole exercise - so say so plainly before they finish. */}
+        {clean ? (
+          <div className="mono" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 26,
+            padding: '9px 16px', borderRadius: 999,
+            fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
+            color: 'var(--accent)', background: 'var(--accent-soft)',
+            border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)',
+          }}>
+            <IconCheck size={13} sw={3} /> ALL EXERCISES COMPLETED
+          </div>
+        ) : (
+          <div className="mono" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 26,
+            padding: '9px 16px', borderRadius: 999,
+            fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
+            color: 'var(--c-coral)', background: 'color-mix(in srgb, var(--c-coral) 14%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--c-coral) 50%, transparent)',
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+              <path d="M12 9v4M12 17h.01"/>
+            </svg>
+            {missed} EXERCISE{missed === 1 ? '' : 'S'} MISSED
+          </div>
+        )}
+
+        {/* The pulse is the reward for a clean sweep - it would read as
+            celebration if it fired over a half-finished session. */}
+        <button onClick={onFinish} className={clean ? 'btn-primary btn-pulse' : 'btn-primary'} style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 30px'
         }}>
           FINISH &amp; SEE RESULTS <IconCheck size={15} sw={3} />
