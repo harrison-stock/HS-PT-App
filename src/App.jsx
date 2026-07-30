@@ -406,7 +406,9 @@ export default function App() {
           </div>
         </div>
       )}
-      <div key={screen} className="screen-enter" style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', marginTop: clientViewId ? 'calc(env(safe-area-inset-top, 0px) + 45px)' : 0 }}>
+      {/* A flex column, so the screen inside takes its height from flex rather
+          than from a percentage of this box - see the note on .scroller. */}
+      <div key={screen} className="screen-enter" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', marginTop: clientViewId ? 'calc(env(safe-area-inset-top, 0px) + 45px)' : 0 }}>
         <ErrorBoundary key={screen} onHome={() => navigate(homeScreen)}>
           <React.Suspense fallback={
             <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>

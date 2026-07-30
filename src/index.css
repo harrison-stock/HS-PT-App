@@ -149,8 +149,11 @@ body:has([data-role="trainer"]) {
 .coach-wrap {
   max-width: 820px;
   margin: 0 auto;
-  padding: 0 24px 28px;
+  padding: 0 24px;
   padding-top: calc(var(--safe-top) + 18px);
+  /* Clear the home indicator (and, on a laptop, the dock) so the last card in
+     the list isn't sitting flush against the bottom edge looking cut off. */
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
 }
 
 /* ── Desktop expansion (coach side only) ─────────────────────────────
@@ -405,6 +408,20 @@ body:has([data-role="trainer"]) {
    task pushes total content past the screen height). */
 .dash-scroll > * { flex-shrink: 0; }
 .scroller {
+  /* height:100% is a percentage of a parent whose own height comes from
+     `flex: 1`. Chromium treats that as definite and resolves it; WebKit has
+     never reliably done so, and when it resolves the other way the scroller
+     takes its content height instead - so the pane is taller than the space it
+     sits in, the overflow never triggers, and everything below the fold is
+     clipped and unreachable. That is the "can't scroll down" report.
+
+     Taking the height from flex instead removes the percentage from the chain
+     entirely. The height:100% stays for the scrollers whose parent isn't a
+     flex container; where it is, flex wins and there is nothing to disagree
+     about. min-height:0 lets it shrink below its content, which is what makes
+     the overflow happen at all. */
+  flex: 1 1 auto;
+  min-height: 0;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;

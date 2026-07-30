@@ -71,7 +71,10 @@ export function FormBuilder({ trainerId, form, onClose, onSaved }) {
         <button onClick={() => save(true)} disabled={!canSave} className="btn-primary" style={{ fontSize: 11, padding: '8px 12px', opacity: canSave ? 1 : 0.4 }}>SAVE & CLOSE</button>
       </div>
 
-      <div style={{ padding: 16, display: 'grid', gap: 14, alignContent: 'start', maxWidth: 620, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+      {/* The trailing padding clears the home indicator on a phone and the dock
+          on a laptop, so the last question isn't flush against the bottom edge
+          looking like it has been cut off. */}
+      <div style={{ padding: 16, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 40px)', display: 'grid', gap: 14, alignContent: 'start', maxWidth: 620, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
         <input value={d.title} onChange={e => set({ title: e.target.value })} placeholder="Form title (e.g. Weekly Check-In)"
           style={{ ...fieldSt, fontSize: 18, fontWeight: 700 }}/>
         <textarea value={d.description} onChange={e => set({ description: e.target.value })} rows={2} placeholder="Intro / instructions (optional)" style={{ ...fieldSt, resize: 'vertical' }}/>
