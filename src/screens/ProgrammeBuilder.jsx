@@ -567,12 +567,14 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
             )}
             {addingSection !== null && (
               <ExercisePicker
+                title="ADD EXERCISE"
                 onClose={() => setAddingSection(null)}
                 onPick={(ex) => { addEx(addingSection, ex); setAddingSection(null); }}
               />
             )}
             {altFor !== null && (
               <ExercisePicker
+                title="ADD ALTERNATIVE"
                 onClose={() => setAltFor(null)}
                 onPick={({ name, img }) => { addAlternate(altFor.sIdx, altFor.eIdx, { name, img }); setAltFor(null); }}
               />

@@ -5,6 +5,13 @@ import { supabase } from './supabase'
 export async function notify({ recipientId, actorId, kind, title, body, link }) {
   if (!recipientId || !actorId || recipientId === actorId) return;
   try {
+    // Only the person actually signed in can raise a notification - the RLS
+    // policy checks actor_id against auth.uid(). When a coach is driving a
+    // client's app ("assume control"), the actor is the client and the insert is
+    // rejected, so every session a coach logged left a 403 in the console. The
+    // coach doesn't need telling about work they just did themselves.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user || session.user.id !== actorId) return;
     await supabase.from('notifications').insert({
       recipient_id: recipientId, actor_id: actorId, kind,
       title: title || '', body: body || '', link: link || null,
