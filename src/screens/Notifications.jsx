@@ -50,13 +50,13 @@ export function Notifications({ go, userId, home = 'dashboard' }) {
       {today.length > 0 && <>
         <div className="label" style={{ margin: '4px 4px 8px' }}>// TODAY</div>
         <div className="stagger-in" style={{ display: 'grid', gap: 8, marginBottom: 18 }}>
-          {today.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || 'dashboard')} />)}
+          {today.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || 'dashboard', n.link || undefined)} />)}
         </div>
       </>}
       {earlier.length > 0 && <>
         <div className="label" style={{ margin: '4px 4px 8px' }}>// EARLIER</div>
         <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
-          {earlier.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || 'dashboard')} />)}
+          {earlier.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || 'dashboard', n.link || undefined)} />)}
         </div>
       </>}
     </div>);
@@ -84,6 +84,11 @@ function NotifRow({ n, onTap }) {
               {ago(n.created_at)}
             </span>
           </div>
+          {n.actorName && (
+            <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: meta.color, marginTop: 3 }}>
+              {n.actorName.toUpperCase()}
+            </div>
+          )}
           {n.body && <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.45, marginTop: 4 }}>{n.body}</div>}
         </div>
       </div>

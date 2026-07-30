@@ -188,8 +188,13 @@ function InjuriesView({ userId, trainerId, side }) {
   const report = async (severity, note, laterality) => {
     for (const s of sel) {
       const lat = single ? laterality : s.a;
-      await reportInjury({ clientId: userId, trainerId, group: s.g, side, severity, note, laterality: lat });
-      if (trainerId) notify({ recipientId: trainerId, actorId: userId, kind: 'injury', title: 'Injury reported', body: injuryTitle({ muscle_group: s.g, laterality: lat }) + ` · ${severity}`, link: { screen: 'coach' } });
+      const injuryId = await reportInjury({ clientId: userId, trainerId, group: s.g, side, severity, note, laterality: lat });
+      if (trainerId) notify({
+        recipientId: trainerId, actorId: userId, kind: 'injury', title: 'Injury reported',
+        body: injuryTitle({ muscle_group: s.g, laterality: lat }) + ` · ${severity}`,
+        // Open the note itself, not just the client's file.
+        link: { screen: 'coach', clientId: userId, tab: 'body', injuryId: injuryId || null },
+      });
     }
     setReporting(false); setPicked(new Set()); reload();
   };

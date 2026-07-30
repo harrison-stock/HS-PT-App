@@ -248,6 +248,10 @@ export default function App() {
     if (target === 'coach') {
       setClientViewId(null);
       setClientViewName(null);
+      // A notification that names a client opens straight into their file, on
+      // the tab the event belongs to - a completed session lands on TRAINING, a
+      // reported injury on BODY with that injury's thread already open.
+      if (opts?.clientId) setCoachOpen({ clientId: opts.clientId, tab: opts.tab || 'overview', injuryId: opts.injuryId || null });
     }
     setScreen(target);
     setPreviewWorkoutId(null);

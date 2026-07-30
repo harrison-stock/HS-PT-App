@@ -60,9 +60,11 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
       setTab('clients');
       setClientId(openTarget.clientId);
       setClientInitialTab(openTarget.tab || null);
+      setClientInitialInjury(openTarget.injuryId || null);
       onOpenConsumed?.();
     }
   }, [openTarget]);
+  const [clientInitialInjury, setClientInitialInjury] = React.useState(null);
   const [programmeId, setProgrammeId]       = React.useState(null);
   const [builderProgramme, setBuilderProgramme] = React.useState(null);
   const [builderOpenRoadmap, setBuilderOpenRoadmap] = React.useState(false);
@@ -402,7 +404,8 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
           trainerId={trainerId}
           programmes={programmes}
           initialTab={clientInitialTab}
-          onClose={() => { setClientId(null); setClientInitialTab(null); }}
+          initialInjuryId={clientInitialInjury}
+          onClose={() => { setClientId(null); setClientInitialTab(null); setClientInitialInjury(null); }}
           onChanged={() => { fetchClients(); fetchTodaySchedule(); }}
           go={go}
         />

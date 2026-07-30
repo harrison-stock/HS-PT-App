@@ -12,18 +12,40 @@ export function ExerciseComments({ exerciseId, clientId, exerciseName, onClose }
   const [rows, setRows] = React.useState(null);
   const [text, setText] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+  const [names, setNames] = React.useState({});
 
-  const reload = React.useCallback(() => {
-    supabase.from('exercise_comments').select('*')
+  const reload = React.useCallback(async () => {
+    // Comments are stored against a prescribed exercise - one row per programme
+    // day - so a thread keyed on that id splits the conversation across every
+    // week the movement appears. Gather by movement name instead, which is how
+    // logged history is matched everywhere else.
+    if (exerciseName) {
+      const quoted = `"${String(exerciseName).trim().replace(/"/g, '\\"')}"`;
+      const { data, error } = await supabase.from('exercise_comments')
+        .select('*, section_exercises!inner ( name )')
+        .eq('client_id', clientId)
+        .ilike('section_exercises.name', quoted)
+        .order('created_at', { ascending: true });
+      if (!error) { setRows(data || []); return; }
+    }
+    const { data } = await supabase.from('exercise_comments').select('*')
       .eq('exercise_id', exerciseId).eq('client_id', clientId)
-      .order('created_at', { ascending: true })
-      .then(({ data }) => setRows(data || []));
-  }, [exerciseId, clientId]);
+      .order('created_at', { ascending: true });
+    setRows(data || []);
+  }, [exerciseId, clientId, exerciseName]);
 
   React.useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setMe(data?.user?.id || null));
     reload();
   }, [reload]);
+
+  // Put a name against each author - "COACH/CLIENT" told you nothing.
+  React.useEffect(() => {
+    const ids = [...new Set((rows || []).map(r => r.author_id).filter(Boolean))];
+    if (!ids.length) return;
+    supabase.from('profiles').select('id, name').in('id', ids)
+      .then(({ data }) => setNames(Object.fromEntries((data || []).map(p => [p.id, p.name || 'Them']))));
+  }, [rows]);
 
   const send = async () => {
     if (!text.trim() || busy || !me) return;
@@ -31,7 +53,15 @@ export function ExerciseComments({ exerciseId, clientId, exerciseName, onClose }
     await supabase.from('exercise_comments').insert({ exercise_id: exerciseId, client_id: clientId, author_id: me, body: text.trim() });
     // Notify the other party.
     const recipient = me === clientId ? await trainerOf(clientId) : clientId;
-    if (recipient) notify({ recipientId: recipient, actorId: me, kind: 'comment', title: 'New comment', body: `${exerciseName || 'Exercise'}: ${text.trim().slice(0, 80)}`, link: { screen: me === clientId ? 'coach' : 'workouts' } });
+    if (recipient) notify({
+      recipientId: recipient, actorId: me, kind: 'comment',
+      title: `Comment on ${exerciseName || 'an exercise'}`,
+      body: text.trim().slice(0, 80),
+      // Open this movement's thread, rather than dropping the coach on the hub.
+      link: me === clientId
+        ? { screen: 'coach', clientId, tab: 'training', exerciseId, exercise: exerciseName || '' }
+        : { screen: 'workouts', exerciseId, exercise: exerciseName || '' },
+    });
     setText(''); setBusy(false); reload();
   };
 
@@ -57,7 +87,7 @@ export function ExerciseComments({ exerciseId, clientId, exerciseName, onClose }
                   color: 'var(--text)', fontSize: 13, lineHeight: 1.45,
                 }}>{c.body}</div>
                 <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', marginTop: 3, textAlign: mine ? 'right' : 'left' }}>
-                  {mine ? 'YOU' : 'COACH/CLIENT'} · {new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  {mine ? 'YOU' : (names[c.author_id] || 'THEM').toUpperCase()} · {new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                 </div>
               </div>
             );

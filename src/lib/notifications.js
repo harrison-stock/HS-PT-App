@@ -18,11 +18,18 @@ export async function trainerOf(userId) {
   return data?.trainer_id || null;
 }
 
+// Who did it matters more than what happened - "Injury reported" is useless
+// without a name against it. Resolved by joining the actor at read time rather
+// than baked into the body at write time, so notifications already in the table
+// gain a name too.
 export async function loadNotifications(userId) {
-  const { data } = await supabase.from('notifications')
-    .select('*').eq('recipient_id', userId)
+  const q = () => supabase.from('notifications')
+    .eq('recipient_id', userId)
     .order('created_at', { ascending: false }).limit(50);
-  return data || [];
+  let { data, error } = await q().select('*, actor:profiles!actor_id ( name )');
+  // Older databases may not expose the embed; the list is still worth showing.
+  if (error) ({ data } = await q().select('*'));
+  return (data || []).map(n => ({ ...n, actorName: n.actor?.name || '' }));
 }
 
 export async function unreadCount(userId) {
