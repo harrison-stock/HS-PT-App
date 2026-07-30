@@ -31,8 +31,18 @@ export function FormBuilder({ trainerId, form, onClose, onSaved }) {
   const remove = async () => { if (!confirmDel) { setConfirmDel(true); return; } if (d.id) await deleteForm(d.id); onSaved(); };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', paddingTop: 'calc(var(--safe-top) + 10px)', borderBottom: '1px solid var(--line)', background: 'var(--bg-1)', flexShrink: 0 }}>
+    // The overlay scrolls itself, with the header stuck to its top. The previous
+    // shape - a flex column whose second child was the scrollable pane - relies
+    // on that child resolving its height from flex rather than from the
+    // height:100% it inherits from .scroller, and something in the field was
+    // resolving it the other way and clipping everything below the fold. This
+    // has no nested height to disagree about.
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200, background: 'var(--bg-0)',
+      overflowY: 'auto', overflowX: 'hidden',
+      WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
+    }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 2, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', paddingTop: 'calc(var(--safe-top) + 10px)', borderBottom: '1px solid var(--line)', background: 'var(--bg-1)' }}>
         <HexBackButton onClick={onClose} size={34} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="label" style={{ marginBottom: 2 }}>// {d.id ? 'EDIT FORM' : 'NEW FORM'}</div>
@@ -42,7 +52,7 @@ export function FormBuilder({ trainerId, form, onClose, onSaved }) {
         <button onClick={() => save(true)} disabled={!canSave} className="btn-primary" style={{ fontSize: 11, padding: '8px 12px', opacity: canSave ? 1 : 0.4 }}>SAVE & CLOSE</button>
       </div>
 
-      <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: 16, display: 'grid', gap: 14, alignContent: 'start', maxWidth: 620, margin: '0 auto', width: '100%' }}>
+      <div style={{ padding: 16, display: 'grid', gap: 14, alignContent: 'start', maxWidth: 620, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
         <input value={d.title} onChange={e => set({ title: e.target.value })} placeholder="Form title (e.g. Weekly Check-In)"
           style={{ ...fieldSt, fontSize: 18, fontWeight: 700 }}/>
         <textarea value={d.description} onChange={e => set({ description: e.target.value })} rows={2} placeholder="Intro / instructions (optional)" style={{ ...fieldSt, resize: 'vertical' }}/>
