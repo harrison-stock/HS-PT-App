@@ -1,6 +1,8 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
 import { loadRecipes, scaleQty, fmtQty } from '../lib/recipes'
+import { COURSES, filterByCourse, courseCounts } from '../lib/recipeCourses'
+import { BrandIcon } from '../components/BrandIcon'
 import { loadGuides } from '../lib/guides'
 import { loadFavourites, setFavourite } from '../lib/favourites'
 import { RecipeBuilder } from './RecipeBuilder'
@@ -26,6 +28,7 @@ export function Resources({ go, userId, isTrainer }) {
   const [exercises, setExercises] = React.useState(null);   // glossary
   const [openExercise, setOpenExercise] = React.useState(null);
   const [vaultDocs, setVaultDocs] = React.useState(null);   // client's own documents
+  const [course, setCourse] = React.useState('all');        // recipe course filter
 
   const refreshRecipes = React.useCallback(() => { loadRecipes().then(setRecipes); }, []);
   const refreshGuides  = React.useCallback(() => { loadGuides().then(setGuides); }, []);
@@ -56,8 +59,8 @@ export function Resources({ go, userId, isTrainer }) {
   const guideList  = guides || [];
 
   const sourceList = tab === 'guides' ? guideList :
-  tab === 'favourites' ? recipeList.filter((r) => favs.has(r.id)) :
-  recipeList;
+  tab === 'favourites' ? filterByCourse(recipeList.filter((r) => favs.has(r.id)), course) :
+  filterByCourse(recipeList, course);
   const filtered = sourceList.filter((x) => x.title.toLowerCase().includes(query.toLowerCase()));
   const recipesLoading = recipes === null;
   const guidesLoading  = guides === null;
@@ -158,11 +161,22 @@ export function Resources({ go, userId, isTrainer }) {
       <div className="label" style={{ margin: '0 2px 10px', color: 'var(--accent)' }}>// FAVOURITES · {favs.size}</div>
       }
 
+      {/* Course filter - only where there are recipes to narrow down. */}
+      {(tab === 'recipes' || tab === 'favourites') && !recipesLoading && recipeList.length > 0 &&
+      <CourseFilter recipes={tab === 'favourites' ? recipeList.filter((r) => favs.has(r.id)) : recipeList}
+        value={course} onChange={setCourse} />
+      }
+
       {/* List */}
       {tab === 'recipes' && recipesLoading && <SkeletonCard rows={4} />}
       {tab === 'recipes' && !recipesLoading &&
       <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {filtered.map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={favs.has(r.id)} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
+          {recipeList.length > 0 && filtered.length === 0 && !query &&
+          <EmptyState icon={COURSES.find(c => c.id === course)?.icon || 'Recipe'}
+            title={`No ${(COURSES.find(c => c.id === course)?.label || '').toLowerCase()} recipes yet`}
+            sub={isTrainer ? 'Recipes you tag with this meal type land here.' : 'Nothing in this category yet - try another.'}
+            actionLabel="SHOW ALL RECIPES" onAction={() => setCourse('all')} />}
           {recipeList.length === 0 &&
           <EmptyState icon="Recipe" title="No recipes yet"
             sub={isTrainer ? 'Build your first recipe and it lands in every client’s library.' : 'Your coach hasn’t added any recipes yet - check back soon.'}
@@ -410,6 +424,42 @@ function VaultView({ docs }) {
           <IconChevronRight size={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
         </button>
       ))}
+    </div>
+  );
+}
+
+// Course filter for the recipe library - the meal types a client actually
+// browses by, each with its brand icon. A course with nothing in it is dimmed
+// and unclickable rather than hidden, so the shelf doesn't reflow as the
+// library fills up.
+function CourseFilter({ recipes, value, onChange }) {
+  const counts = courseCounts(recipes);
+  return (
+    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, marginBottom: 12 }}>
+      {COURSES.map(c => {
+        const n = counts[c.id] || 0;
+        const on = value === c.id;
+        const empty = n === 0 && c.id !== 'all';
+        return (
+          <button key={c.id} disabled={empty} onClick={() => onChange(c.id)} aria-pressed={on}
+            style={{
+              all: 'unset', cursor: empty ? 'default' : 'pointer', flexShrink: 0,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+              minWidth: 66, padding: '9px 8px 8px', borderRadius: 12,
+              background: on ? 'var(--accent-soft)' : 'var(--bg-2)',
+              border: `1px solid ${on ? 'var(--accent)' : 'var(--line)'}`,
+              boxShadow: on ? '0 0 calc(8px * var(--glow)) var(--accent-glow)' : 'none',
+              opacity: empty ? 0.35 : 1,
+              transition: 'background .15s ease, border-color .15s ease',
+            }}>
+            <BrandIcon name={c.icon} size={22} color={on ? 'var(--accent)' : 'var(--text-3)'} glow={on} />
+            <span className="mono" style={{
+              fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em', whiteSpace: 'nowrap',
+              color: on ? 'var(--accent)' : 'var(--text-3)',
+            }}>{c.label.toUpperCase()}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
