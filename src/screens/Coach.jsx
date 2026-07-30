@@ -387,7 +387,8 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     );
   }
 
-  const pendingCount = clients.filter(c => c.managed).length;
+  // "Pending" means waiting on a sign-up. In-person clients aren't waiting.
+  const pendingCount = clients.filter(c => c.managed && !c.inPerson).length;
   const kpis = {
     active:     clients.filter(c => !c.managed).length,
     pending:    pendingCount,
@@ -503,7 +504,10 @@ function shapeManagedClient(mc) {
     client_status: mc.client_status || 'online',
     managed: true,
     status: 'managed',
-    phaseLabel: 'Awaiting app sign-up',
+    // An in-person client is not waiting for anything - the coach logs their
+    // training for them. Only an online/hybrid one still owes a sign-up.
+    inPerson: (mc.client_status || 'online') === 'in_person',
+    phaseLabel: (mc.client_status || 'online') === 'in_person' ? 'In-person client' : 'Awaiting app sign-up',
     lastSeen: '-',
     streak: 0, prsThisWeek: 0, sessionsThisWeek: 0, sessionsTarget: 3,
   };
@@ -626,7 +630,9 @@ function buildDigest(clients) {
   const items = [];
   for (const c of clients || []) {
     if (c.managed) {
-      items.push({ id: c.id, sev: 1, tab: null, name: c.name, msg: 'invite not yet accepted - resend or nudge' });
+      // In-person clients never sign up, so nagging about it would park them in
+      // "needs attention" forever.
+      if (!c.inPerson) items.push({ id: c.id, sev: 1, tab: null, name: c.name, msg: 'invite not yet accepted - resend or nudge' });
       continue;
     }
     // Never trained / no scheduled work at all → likely needs a programme.
@@ -1492,7 +1498,11 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
     if (!mc) {
       const { data: created, error: mcErr } = await supabase
         .from('managed_clients')
-        .insert({ trainer_id: trainerId, name: clientName.trim(), email: clientEmail.trim() || null, client_status: coaching })
+        // Empty string, not null: the column is NOT NULL with a '' default, and
+        // an explicit null overrides the default rather than falling back to it.
+        // In-person clients are told an email isn't needed, so this path is the
+        // normal one for them - it used to fail outright.
+        .insert({ trainer_id: trainerId, name: clientName.trim(), email: clientEmail.trim(), client_status: coaching })
         .select('id')
         .single();
       if (mcErr || !created) { setSaving(false); setError(mcErr?.message || 'Could not add client'); return; }

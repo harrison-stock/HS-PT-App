@@ -125,8 +125,18 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go,
 }
 
 // ── OVERVIEW - Everfit-style client home the coach jots notes on ──
+// Calendar days apart, not elapsed hours. A date-only value parses as midnight,
+// so measuring elapsed time and rounding called a session logged this morning
+// "yesterday" from lunchtime onwards - and shifted every other label with it.
 const relDays = (iso) => {
-  const n = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
+  const s = String(iso || '');
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const then = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(s);
+  if (isNaN(then)) return '';
+  const a = new Date(then.getFullYear(), then.getMonth(), then.getDate());
+  const today = new Date();
+  const b = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const n = Math.round((b - a) / 86400000);
   if (n <= 0) return 'today';
   if (n === 1) return 'yesterday';
   if (n < 7) return `${n} days ago`;
@@ -1319,7 +1329,7 @@ function BodyTab({ c, trainerId, initialInjuryId }) {
     if (!initialInjuryId || !injuries.length) return;
     const hit = injuries.find(i => i.id === initialInjuryId);
     if (!hit) return;
-    setMode('injury');
+    setMode('injuries'); // must match the toggle's value, or neither view shows
     setSide(hit.body_side || 'front');
     setOpenId(initialInjuryId);
   }, [initialInjuryId, injuries]);
