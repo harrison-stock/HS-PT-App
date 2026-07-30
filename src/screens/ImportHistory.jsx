@@ -63,8 +63,13 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
       if (weight != null && !isNaN(weight) && unit === 'lb') weight = Math.round(weight * 0.45359237 * 100) / 100;
       let rpe = map.rpe ? parseInt(r[map.rpe]) : null;
       if (rpe != null && (isNaN(rpe) || rpe < 1 || rpe > 10)) rpe = null;
+      // A mapped Set column was being collected and then ignored, so set order
+      // silently came from row order. Honour it when it's there - a sheet that
+      // numbers its sets means them - and fall back to row order when it isn't.
+      const setNo = map.set ? parseInt(r[map.set]) : null;
       out.push({
         date, exercise,
+        setNo: setNo != null && !isNaN(setNo) && setNo > 0 ? setNo : null,
         reps: repsRaw != null && !isNaN(repsRaw) ? repsRaw : null,
         weight: weight != null && !isNaN(weight) ? weight : null,
         rpe,
@@ -94,7 +99,9 @@ export function ImportHistory({ clientId, clientName, trainerId, onClose, onImpo
         const perExercise = {};
         const logRows = rows.map(e => {
           perExercise[e.exercise] = (perExercise[e.exercise] || 0);
-          const idx = perExercise[e.exercise]++;
+          const seq = perExercise[e.exercise]++;
+          // Sheets number sets from 1; set_index is 0-based.
+          const idx = e.setNo != null ? e.setNo - 1 : seq;
           return {
             session_id: sess.id, exercise_id: null, exercise_name: e.exercise,
             set_index: idx, actual_reps: e.reps, actual_weight_kg: e.weight,
