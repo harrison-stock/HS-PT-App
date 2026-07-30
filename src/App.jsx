@@ -251,7 +251,11 @@ export default function App() {
       // A notification that names a client opens straight into their file, on
       // the tab the event belongs to - a completed session lands on TRAINING, a
       // reported injury on BODY with that injury's thread already open.
-      if (opts?.clientId) setCoachOpen({ clientId: opts.clientId, tab: opts.tab || 'overview', injuryId: opts.injuryId || null });
+      if (opts?.clientId) setCoachOpen({
+        clientId: opts.clientId, tab: opts.tab || 'overview',
+        injuryId: opts.injuryId || null, dayId: opts.dayId || null,
+        exerciseId: opts.exerciseId || null, exercise: opts.exercise || '',
+      });
     }
     setScreen(target);
     setPreviewWorkoutId(null);

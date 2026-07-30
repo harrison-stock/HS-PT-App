@@ -23,12 +23,14 @@ export async function trainerOf(userId) {
 // than baked into the body at write time, so notifications already in the table
 // gain a name too.
 export async function loadNotifications(userId) {
-  const q = () => supabase.from('notifications')
+  // select() first - the filter builder only exists on the result of it.
+  const q = (select) => supabase.from('notifications')
+    .select(select)
     .eq('recipient_id', userId)
     .order('created_at', { ascending: false }).limit(50);
-  let { data, error } = await q().select('*, actor:profiles!actor_id ( name )');
+  let { data, error } = await q('*, actor:profiles!actor_id ( name )');
   // Older databases may not expose the embed; the list is still worth showing.
-  if (error) ({ data } = await q().select('*'));
+  if (error) ({ data } = await q('*'));
   return (data || []).map(n => ({ ...n, actorName: n.actor?.name || '' }));
 }
 

@@ -77,7 +77,10 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
   React.useEffect(() => {
     // Freeze the clock while paused or once the session is complete (results
     // screen) - the elapsed time should stop the moment they finish.
-    if (paused || complete) { clockBaseRef.current = null; return; }
+    // Amending a finished session is not training either: the clock holds the
+    // duration that was actually trained, so time spent fixing a typo the next
+    // morning must not be added to it.
+    if (paused || complete || edit) { clockBaseRef.current = null; return; }
     const tick = () => {
       if (clockBaseRef.current == null) return;
       setSessionTime(Math.max(0, Math.round((Date.now() - clockBaseRef.current) / 1000)));
@@ -89,7 +92,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
     const onVis = () => { if (document.visibilityState === 'visible') tick(); };
     document.addEventListener('visibilitychange', onVis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
-  }, [paused, dbLoading, complete]);
+  }, [paused, dbLoading, complete, edit]);
   // Dismiss the rest card with a short slide-out before unmounting it.
   const endRest = React.useCallback((showTimesUp = false) => {
     setResting((r) => {
@@ -329,19 +332,29 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
       // Amending an existing session rewrites that session's sets in place. The
       // row survives, so started_at - and with it the elapsed time - is the
       // original, and the session is never momentarily absent from history.
+      // Session length is read back as completed_at - started_at. Stamping
+      // "now" on an amend would count every minute between the workout and the
+      // correction, so a session fixed the next morning came back as a
+      // fourteen-hour one. Derive the stamp from the clock the client actually
+      // watched instead, and only fall back to now if that clock is unusable.
+      const startedMs = Date.parse(sessionStartRef.current);
+      const completedAt = (sessionTime > 0 && !isNaN(startedMs))
+        ? new Date(startedMs + sessionTime * 1000).toISOString()
+        : new Date().toISOString();
+
       let ws = null;
       const amendId = editSessionRef.current || savedSessionRef.current;
       if (amendId) {
         await supabase.from('logged_sets').delete().eq('session_id', amendId);
         const { error: upErr } = await supabase.from('workout_sessions')
-          .update({ completed_at: new Date().toISOString() }).eq('id', amendId);
+          .update({ completed_at: completedAt }).eq('id', amendId);
         if (!upErr) ws = { id: amendId };
         editModeRef.current = false;
       }
       if (!ws) {
         const { data: fresh } = await supabase
           .from('workout_sessions')
-          .insert({ client_id: userId, day_id: dayId, started_at: sessionStartRef.current, completed_at: new Date().toISOString() })
+          .insert({ client_id: userId, day_id: dayId, started_at: sessionStartRef.current, completed_at: completedAt })
           .select('id').single();
         ws = fresh;
       }
@@ -357,10 +370,13 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
           if (safe.length) await supabase.from('logged_sets').insert(safe);
         }
         await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
-        // Notify the coach that the client finished a workout.
+        // Notify the coach that the client finished a workout - or, if they
+        // went back in to correct it, that the results changed. Two identical
+        // "Workout completed" pings for one session read like a bug.
         const tId = await trainerOf(userId);
         if (tId) notify({
-          recipientId: tId, actorId: userId, kind: 'done', title: 'Workout completed',
+          recipientId: tId, actorId: userId, kind: 'done',
+          title: amendId ? 'Results updated' : 'Workout completed',
           body: dayTitleRef.current ? `${dayTitleRef.current} - review their logged sets.` : 'Review their logged sets.',
           // Straight to their results rather than the hub.
           link: { screen: 'coach', clientId: userId, tab: 'training', dayId },
@@ -1435,7 +1451,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
 
   const setsDone = exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
   const setsTotal = exercises.reduce((n, e) => n + e.sets.length, 0);
-  const volume = exercises.reduce((n, e) => n + e.sets.filter((s) => s.done && s.kg).reduce((a, s) => a + s.kg * (typeof s.reps === 'number' ? s.reps : 0), 0), 0);
+  const volume = exercises.reduce((n, e) => n + e.sets.filter((s) => s.done && s.kg).reduce((a, s) => a + s.kg * repsDone(s), 0), 0);
   const fmtT = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
   // Top sets - heaviest done working set per weighted exercise.
@@ -1445,7 +1461,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
       const done = e.sets.filter((s) => s.kg && s.done);
       const top = Math.max(...done.map((s) => s.kg));
       const set = done.find((s) => s.kg === top);
-      return { name: e.name, kg: top, reps: typeof set?.reps === 'number' ? set.reps : null };
+      return { name: e.name, kg: top, reps: repsDone(set) || null };
     })
     .sort((a, b) => b.kg - a.kg)
     .slice(0, 2);
@@ -1954,7 +1970,9 @@ function RepsCell({ set, onChange }) {
         color: set.done ? 'var(--text-2)' : 'var(--text)',
         fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
         letterSpacing: '0.04em', outline: 'none',
-        textDecoration: set.done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
+        // Shorthand with the colour baked in - React warns when a shorthand and
+        // its longhand are both updated on a re-render.
+        textDecoration: set.done ? 'line-through var(--text-3)' : 'none',
       }}
     />);
 
@@ -1994,7 +2012,7 @@ function NumCell({ value, suffix, done, split = 1, splitView = false, delay = 0,
   const numStyle = {
     fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
     color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
-    textDecoration: done ? 'line-through' : 'none', textDecorationColor: 'var(--text-3)',
+    textDecoration: done ? 'line-through var(--text-3)' : 'none',
   };
   // Each row starts fractionally after the one above, so tapping the toggle
   // reads as the whole column coming apart rather than everything blinking.
@@ -2151,6 +2169,17 @@ function CalcKeypad({ value, unit = 'kg', mode = 'weight', split = 1, onClose, o
   );
 }
 
+// Reps as a number. A set the client just ticked off without retyping still
+// holds the prescribed value as a STRING ("10", or a range like "8-12"), so
+// anything that treated a non-number as zero silently ignored every set the
+// client accepted as written - which is most of them.
+function repsDone(set) {
+  const r = set?.reps;
+  if (typeof r === 'number') return r;
+  const n = parseInt(String(r ?? '').trim(), 10);
+  return isNaN(n) ? 0 : n;
+}
+
 // Parse a stored time value ("60s" / "5 min" / "01:00" / "90") to seconds.
 function parseTimeToSeconds(value) {
   const str = String(value || '').trim();
@@ -2242,8 +2271,7 @@ function TimeCell({ value, done, onChange }) {
         color: done ? 'var(--text-2)' : 'var(--text)',
         fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
         letterSpacing: '0.06em', outline: 'none',
-        textDecoration: done ? 'line-through' : 'none',
-        textDecorationColor: 'var(--text-3)'
+        textDecoration: done ? 'line-through var(--text-3)' : 'none'
       }} />
     </div>);
 
@@ -2366,12 +2394,13 @@ function ExerciseCommentLog({ name, userId }) {
   React.useEffect(() => {
     if (!userId || !name) { setRows([]); return; }
     let alive = true;
-    // Quoted: PostgREST splits a filter value on commas.
-    const quoted = `"${String(name).trim().replace(/"/g, '\\"')}"`;
+    // Plain, not quoted - double quotes end up inside the pattern here and
+    // match nothing. Commas in a name are fine as-is.
+    const movement = String(name).trim();
     supabase.from('exercise_comments')
       .select('id, body, author_id, created_at, section_exercises!inner ( name )')
       .eq('client_id', userId)
-      .ilike('section_exercises.name', quoted)
+      .ilike('section_exercises.name', movement)
       .order('created_at', { ascending: false })
       .then(({ data }) => { if (alive) setRows(data || []); });
     return () => { alive = false; };
@@ -2418,9 +2447,11 @@ function PriorProgressSheet({ ex, userId, onClose }) {
     // imported training is in the table the cap lands nowhere near this
     // exercise's recent sessions. !inner drops sessions with no matching set,
     // so limit(5) really is the last five times they did this movement.
-    // PostgREST parses the filter value out of a comma-separated list, so a
-    // name like "Squat, Front" has to be quoted or it splits into two filters.
-    const name = `"${ex.name.trim().replace(/"/g, '\\"')}"`;
+    // Pass the name as-is. Wrapping it in double quotes - the convention for
+    // an in.() list - makes the quotes part of the pattern here, so every one
+    // of these lookups came back empty. Commas are safe unquoted: PostgREST
+    // only splits a value on commas inside in.() and or=() lists.
+    const name = ex.name.trim();
     supabase
       .from('workout_sessions')
       .select('id, completed_at, logged_sets!inner(set_index, actual_reps, actual_weight_kg, actual_band, actual_time_secs)')
