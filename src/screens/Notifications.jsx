@@ -50,13 +50,13 @@ export function Notifications({ go, userId, home = 'dashboard' }) {
       {today.length > 0 && <>
         <div className="label" style={{ margin: '4px 4px 8px' }}>// TODAY</div>
         <div className="stagger-in" style={{ display: 'grid', gap: 8, marginBottom: 18 }}>
-          {today.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || 'dashboard', n.link || undefined)} />)}
+          {today.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || home, n.link || undefined)} />)}
         </div>
       </>}
       {earlier.length > 0 && <>
         <div className="label" style={{ margin: '4px 4px 8px' }}>// EARLIER</div>
         <div className="stagger-in" style={{ display: 'grid', gap: 8 }}>
-          {earlier.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || 'dashboard', n.link || undefined)} />)}
+          {earlier.map(n => <NotifRow key={n.id} n={n} onTap={() => go(n.link?.screen || home, n.link || undefined)} />)}
         </div>
       </>}
     </div>);
