@@ -2008,7 +2008,7 @@ function LoadHeader({ ex, splitView, onToggle }) {
 
 function NumCell({ value, suffix, done, split = 1, splitView = false, delay = 0, onChange }) {
   const [calcOpen, setCalcOpen] = React.useState(false);
-  const halves = splitView ? splitLoad(value, split) : null;
+  const halves = (splitView && value) ? splitLoad(value, split) : null;
   const numStyle = {
     fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
     color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
@@ -2032,9 +2032,9 @@ function NumCell({ value, suffix, done, split = 1, splitView = false, delay = 0,
         ) : (
           <>
             <span key={`t${splitView}`} className={split > 1 ? 'split-m' : undefined} style={{ ...numStyle, ...(split > 1 ? stagger : null) }}>
-              {value || '0'}
+              {value || 'BW'}
             </span>
-            {suffix && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
+            {suffix && !!value && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
           </>
         )}
       </button>
@@ -2122,6 +2122,15 @@ function CalcKeypad({ value, unit = 'kg', mode = 'weight', split = 1, onClose, o
           </span>
           <span className="mono" style={{ fontSize: 13, color: 'var(--text-3)', flexShrink: 0 }}>{isWeight ? (asLb ? 'lb' : 'kg') : unit}</span>
         </div>
+        {isWeight && (
+          <button onClick={() => onApply(0)} className="mono" style={{
+            all: 'unset', cursor: 'pointer', display: 'block', width: '100%', boxSizing: 'border-box',
+            textAlign: 'center', margin: '0 0 12px', padding: '9px 0', borderRadius: 10,
+            background: 'color-mix(in srgb, var(--accent-2) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-2) 40%, transparent)',
+            color: 'var(--accent-2)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
+          }}>MARK AS BODYWEIGHT (BW)</button>
+        )}
         {/* On a two-handed movement the keypad takes the total, so say so and
             show what that works out to per hand as it's typed. */}
         {isWeight && split > 1 && (() => {
