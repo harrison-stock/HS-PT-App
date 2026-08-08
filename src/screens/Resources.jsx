@@ -87,7 +87,7 @@ export function Resources({ go, userId, isTrainer }) {
   }
 
   return (
-    <div className="scroller" style={{ padding: '0 16px 28px', paddingTop: 'calc(var(--safe-top) + 18px)', maxWidth: isTrainer ? 820 : undefined, margin: isTrainer ? '0 auto' : undefined, boxSizing: 'border-box' }}>
+    <div className={isTrainer ? 'scroller coach-wrap' : 'scroller'} style={isTrainer ? undefined : { padding: '0 16px 28px', paddingTop: 'calc(var(--safe-top) + 18px)', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
         <div>
           <div className="label">// LIBRARY</div>
