@@ -452,11 +452,14 @@ function SignInSplash({ onDone }) {
       animation: 'splashOut 2.4s ease forwards',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-        <div style={{ animation: 'splashLogo 1.1s cubic-bezier(.22,.61,.36,1) both' }}>
-          <BrandIcon name="HS PT App" size={104} color="var(--accent)" glow />
+        <div style={{
+          animation: 'splashLogo 1.1s cubic-bezier(.22,.61,.36,1) both',
+          filter: 'drop-shadow(0 0 calc(22px * var(--glow)) var(--accent-glow))',
+        }}>
+          <img src="/logo-mark.png" alt="HS PT" width={104} style={{ display: 'block', height: 'auto' }} />
         </div>
-        <div className="h-bold" style={{ fontSize: 15, color: 'var(--heading-deep)', animation: 'splashText .9s cubic-bezier(.22,.61,.36,1) .4s both' }}>
-          HS PERSONAL TRAINING
+        <div style={{ fontFamily: 'Orbitron', fontWeight: 900, fontSize: 22, letterSpacing: '0.06em', color: '#189caa', animation: 'splashText .9s cubic-bezier(.22,.61,.36,1) .4s both' }}>
+          HS PT
         </div>
         <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.3em', color: 'var(--text-3)', animation: 'splashSub .7s ease .9s both' }}>
           WELCOME BACK
@@ -508,7 +511,7 @@ function BottomNav({ screen, go, isTrainer }) {
     <div className="bnav">
       {/* Brand header - only visible in the desktop sidebar layout */}
       <div className="bnav-brand">
-        <BrandIcon name="HS PT App" size={38} color="var(--accent)" glow />
+        <img src="/logo-mark.png" alt="HS PT" width={38} style={{ display: 'block', height: 'auto', flexShrink: 0 }} />
         <div>
           <div className="h-bold" style={{ fontSize: 13, lineHeight: 1.1, color: 'var(--heading-deep)' }}>HS PT</div>
           <div className="mono" style={{ fontSize: 7.5, letterSpacing: '0.16em', color: 'var(--text-3)', marginTop: 2 }}>COACH PORTAL</div>

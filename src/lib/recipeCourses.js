@@ -14,7 +14,7 @@ export const COURSES = [
   { id: 'breakfast', label: 'Breakfast', icon: 'Fried Egg',   tags: ['BREAKFAST'] },
   { id: 'mains',     label: 'Mains',     icon: 'Dinner Plate',tags: ['LUNCH', 'DINNER'] },
   { id: 'snacks',    label: 'Snacks',    icon: 'Protein Bar', tags: ['SNACK', 'POST-WORKOUT'] },
-  { id: 'desserts',  label: 'Desserts',  icon: 'Cookie',      tags: ['DESSERT'] },
+  { id: 'desserts',  label: 'Desserts',  icon: 'Muffin',      tags: ['DESSERT'] },
 ];
 
 const TAG_TO_COURSE = (() => {
