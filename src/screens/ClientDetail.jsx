@@ -701,6 +701,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
   const [anchor, setAnchor] = React.useState(() => mondayOf(new Date()));
   const [workouts, setWorkouts] = React.useState([]);
   const [showAssign, setShowAssign] = React.useState(false);
+  const [showSync, setShowSync]     = React.useState(false);
   const [showImport, setShowImport] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
   const [builderProg, setBuilderProg] = React.useState(null);
@@ -761,6 +762,14 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
     />
   );
 
+  if (showSync) return (
+    <SyncProgramme
+      clientId={c.id} clientName={c.name} trainerId={trainerId} programmes={programmes}
+      onClose={() => setShowSync(false)}
+      onSynced={() => { setShowSync(false); loadWorkouts(); onChanged?.(); }}
+    />
+  );
+
   if (editing) return (
     <EditWorkout
       w={editing} clientId={c.id} programmes={programmes} trainerId={trainerId}
@@ -799,6 +808,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '9px 12px', color: 'var(--heading-deep)' }}>
           <IconPlus size={13}/> ASSIGN
         </button>
+        <button onClick={() => setShowSync(true)} style={navBtnSt}>SYNC</button>
         <button onClick={() => setShowImport(true)} style={navBtnSt}>IMPORT</button>
         <button onClick={() => setAnchor(mondayOf(new Date()))} style={navBtnSt}>TODAY</button>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -2299,6 +2309,229 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
           <button onClick={assign} disabled={!dayId || !date || saving} className="btn-primary"
             style={{ opacity: dayId && date ? 1 : 0.4, pointerEvents: dayId && date ? 'auto' : 'none' }}>
             {saving ? 'ASSIGNING…' : 'ASSIGN WORKOUT →'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── SYNC PROGRAMME ──────────────────────────────────────────────────
+// "Assign" copies whatever days existed in the programme at that moment into
+// the client's calendar - it's a snapshot, not a live link. Build a day out
+// week by week after a client is already running it (the common case: start
+// them on Week 1, flesh out Week 2 later) and nothing carries the new days
+// across on its own. This finds whichever of the client's programmes have
+// days that never made it onto their calendar, works out where those days
+// belong from the ones that already did, and assigns only the gap - never
+// touches a day that's already scheduled, so it's safe to run as often as
+// the programme grows.
+function SyncProgramme({ clientId, clientName, trainerId, programmes, onClose, onSynced }) {
+  const [loading, setLoading]     = React.useState(true);
+  const [progId, setProgId]       = React.useState(null);
+  const [candidates, setCandidates] = React.useState([]); // [{ id, name, assignedDayIds, startedPhaseIds, earliest }]
+  const [phaseSel, setPhaseSel]   = React.useState({});
+  const [allDays, setAllDays]     = React.useState([]); // every programme_days row across the programme's phases
+  const [loadingDays, setLoadingDays] = React.useState(false);
+  const [anchor, setAnchor]       = React.useState(''); // yyyy-mm-dd, week 1 / day 1
+  const [anchorGuessed, setAnchorGuessed] = React.useState(false);
+  const [saving, setSaving]       = React.useState(false);
+  const [saved, setSaved]         = React.useState(false);
+  const [savedCount, setSavedCount] = React.useState(0);
+
+  // Every programme this client has ANY assignment to, keyed by which days
+  // and which phases are already on their calendar, plus the earliest of
+  // those - the day we'll reason back from to place the new ones.
+  React.useEffect(() => {
+    let alive = true;
+    supabase.from('client_workouts')
+      .select('day_id, scheduled_date, programme_days ( id, week_index, day_of_week, phase_id, programme_phases ( programme_id ) )')
+      .eq('client_id', clientId)
+      .order('scheduled_date')
+      .then(({ data }) => {
+        if (!alive) return;
+        const byProg = new Map();
+        (data || []).forEach(w => {
+          const pd = w.programme_days;
+          const pid = pd?.programme_phases?.programme_id;
+          if (!pid || !pd) return;
+          let e = byProg.get(pid);
+          if (!e) { e = { assignedDayIds: new Set(), startedPhaseIds: new Set(), earliest: null }; byProg.set(pid, e); }
+          e.assignedDayIds.add(w.day_id);
+          e.startedPhaseIds.add(pd.phase_id);
+          if (!e.earliest || w.scheduled_date < e.earliest.scheduled_date) {
+            e.earliest = { dayId: w.day_id, scheduled_date: w.scheduled_date };
+          }
+        });
+        const list = [...byProg.keys()]
+          .map(pid => {
+            const prog = programmes.find(p => p.id === pid);
+            return prog ? { id: pid, name: prog.name, ...byProg.get(pid) } : null;
+          })
+          .filter(Boolean);
+        setCandidates(list);
+        setProgId(cur => cur && list.some(c => c.id === cur) ? cur : (list[0]?.id || null));
+        setLoading(false);
+      });
+    return () => { alive = false; };
+  }, [clientId, programmes]);
+
+  const cand = candidates.find(c => c.id === progId);
+  const prog = programmes.find(p => p.id === progId);
+
+  // Default the phase selection to whatever the client has already started -
+  // bringing in a phase they've never been given needs an explicit tick, same
+  // as it would assigning them fresh.
+  React.useEffect(() => {
+    if (!cand || !prog) return;
+    setPhaseSel(Object.fromEntries(prog.phaseList.map(ph => [ph.id, cand.startedPhaseIds.has(ph.id)])));
+  }, [cand?.id, prog?.id]);
+
+  // Every day in the selected phases, in programme order, with its offset
+  // from week 1 / day 1 - the same accumulation assignAll uses, so a
+  // programme assigned through either path lands on the same dates.
+  React.useEffect(() => {
+    if (!prog) { setAllDays([]); return; }
+    setLoadingDays(true);
+    supabase.from('programme_days').select('id, title, phase_id, week_index, day_of_week')
+      .in('phase_id', prog.phaseList.map(ph => ph.id))
+      .then(({ data }) => {
+        const byPhase = {};
+        (data || []).forEach(d => (byPhase[d.phase_id] = byPhase[d.phase_id] || []).push(d));
+        let offset = 0;
+        const rows = [];
+        prog.phaseList.forEach(ph => {
+          if (!phaseSel[ph.id]) return;
+          (byPhase[ph.id] || []).forEach(d => rows.push({
+            dayId: d.id, title: d.title || DAY_LABELS[d.day_of_week],
+            dayOffset: (offset + d.week_index) * 7 + d.day_of_week,
+          }));
+          offset += ph.weeks || 0;
+        });
+        rows.sort((a, b) => a.dayOffset - b.dayOffset);
+        setAllDays(rows);
+        setLoadingDays(false);
+      });
+  }, [prog?.id, phaseSel]);
+
+  // Reason back to week-1/day-1 from the earliest day already on the
+  // calendar, using its offset under the current phase selection. Only fills
+  // the field once per programme switch - the coach can always overwrite it.
+  React.useEffect(() => {
+    if (!cand?.earliest || !allDays.length) return;
+    const anchorRow = allDays.find(r => r.dayId === cand.earliest.dayId);
+    if (!anchorRow) return;
+    const guess = new Date(`${cand.earliest.scheduled_date}T00:00:00`);
+    guess.setDate(guess.getDate() - anchorRow.dayOffset);
+    setAnchor(ymd(guess));
+    setAnchorGuessed(true);
+  }, [cand?.id, allDays]);
+  React.useEffect(() => { setAnchor(''); setAnchorGuessed(false); }, [progId]);
+
+  const missing = React.useMemo(() => {
+    if (!cand) return [];
+    return allDays.filter(r => !cand.assignedDayIds.has(r.dayId));
+  }, [allDays, cand]);
+
+  const preview = React.useMemo(() => {
+    if (!anchor) return [];
+    const monday = mondayOf(new Date(`${anchor}T00:00:00`));
+    return missing.map(r => {
+      const d = new Date(monday); d.setDate(d.getDate() + r.dayOffset);
+      return { ...r, scheduled_date: ymd(d) };
+    });
+  }, [missing, anchor]);
+
+  const sync = async () => {
+    if (!preview.length || saving) return;
+    setSaving(true);
+    const rows = preview.map(r => ({ client_id: clientId, trainer_id: trainerId, day_id: r.dayId, scheduled_date: r.scheduled_date }));
+    await supabase.from('client_workouts').insert(rows);
+    setSaving(false); setSavedCount(rows.length); setSaved(true);
+    setTimeout(() => onSynced(), 1400);
+  };
+
+  if (saved) return (
+    <div style={{ padding: 32, textAlign: 'center', color: 'var(--accent)', fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '0.14em', fontSize: 16 }}>
+      ✓ {savedCount} WORKOUT{savedCount === 1 ? '' : 'S'} SYNCED
+    </div>
+  );
+
+  return (
+    <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="label">// SYNC PROGRAMME - {clientName.toUpperCase()}</div>
+        <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
+      </div>
+
+      {loading && <Mono>CHECKING THEIR SCHEDULE…</Mono>}
+
+      {!loading && candidates.length === 0 && (
+        <Mono>Nothing to sync - assign them a programme first.</Mono>
+      )}
+
+      {!loading && candidates.length > 0 && (
+        <>
+          {candidates.length > 1 && (
+            <FieldLabel label="PROGRAMME">
+              <select value={progId || ''} onChange={e => setProgId(e.target.value)} style={{ ...fieldSt, appearance: 'auto' }}>
+                {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </FieldLabel>
+          )}
+
+          {prog && (
+            <FieldLabel label="PHASES TO CHECK">
+              <div style={{ display: 'grid', gap: 6 }}>
+                {prog.phaseList.map(ph => (
+                  <button key={ph.id} onClick={() => setPhaseSel(s => ({ ...s, [ph.id]: !s[ph.id] }))} style={{
+                    all: 'unset', cursor: 'pointer', padding: '8px 10px', borderRadius: 8,
+                    background: phaseSel[ph.id] ? 'var(--accent-soft)' : 'var(--bg-3)',
+                    border: `1px solid ${phaseSel[ph.id] ? 'var(--accent)' : 'var(--line)'}`,
+                    display: 'flex', gap: 8, alignItems: 'center',
+                  }}>
+                    <span style={{ flex: 1, fontSize: 11 }}>
+                      {ph.name} <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>· {ph.weeks || 0}WK</span>
+                      {!cand.startedPhaseIds.has(ph.id) && <span className="mono" style={{ fontSize: 9, color: 'var(--c-amber)' }}> · NOT STARTED</span>}
+                    </span>
+                    {phaseSel[ph.id] && <IconCheck size={12} style={{ color: 'var(--accent)', flexShrink: 0 }}/>}
+                  </button>
+                ))}
+              </div>
+            </FieldLabel>
+          )}
+
+          <FieldLabel label="START DATE (WEEK 1, DAY 1)">
+            <input type="date" value={anchor} onChange={e => setAnchor(e.target.value)} style={fieldSt}/>
+            <Mono style={{ marginTop: 6 }}>
+              {anchorGuessed ? 'Worked out from their earliest scheduled day - check it lines up.' : 'Aligned to the Monday of the selected week'}
+            </Mono>
+          </FieldLabel>
+
+          {loadingDays && <Mono>CHECKING THE PROGRAMME…</Mono>}
+
+          {!loadingDays && anchor && missing.length === 0 && (
+            <Mono>Up to date - every day in the selected phases is already on their calendar.</Mono>
+          )}
+
+          {!loadingDays && preview.length > 0 && (
+            <FieldLabel label={`WILL ADD (${preview.length})`}>
+              <div style={{ display: 'grid', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
+                {preview.map(r => (
+                  <div key={r.dayId} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 10px', borderRadius: 7, background: 'var(--bg-3)' }}>
+                    <span style={{ fontSize: 11 }}>{r.title}</span>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                      {new Date(`${r.scheduled_date}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </FieldLabel>
+          )}
+
+          <button onClick={sync} disabled={!preview.length || !anchor || saving} className="btn-primary"
+            style={{ opacity: preview.length && anchor ? 1 : 0.4, pointerEvents: preview.length && anchor ? 'auto' : 'none' }}>
+            {saving ? 'SYNCING…' : preview.length ? `SYNC ${preview.length} WORKOUT${preview.length === 1 ? '' : 'S'} →` : 'NOTHING TO ADD'}
           </button>
         </>
       )}
