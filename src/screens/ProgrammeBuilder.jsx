@@ -238,6 +238,20 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   // ── Section edits ─────────────────────────────────────────────
   const updateSection = (sIdx, patch) => { setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({ ...s, ...patch })) })); setDirty(true); };
   const delSection = (sIdx) => { setDay(d => ({ ...d, sections: d.sections.filter((_, si) => si !== sIdx) })); setDirty(true); };
+  // Bring a deleted section back, empty, ready to build into again. Slots
+  // into its usual place (pulse raiser first, cooldown last) rather than
+  // just tacking it on the end, so the day reads in the order it always did.
+  const addSection = (kind) => {
+    setDay(d => {
+      if (!d || d.sections.some(s => s.kind === kind)) return d;
+      const fresh = { kind, title: SECTION_DEFAULTS[kind].title, intro: '', icon: '', items: [] };
+      const myOrder = SECTION_ORDER.indexOf(kind);
+      const insertAt = d.sections.findIndex(s => SECTION_ORDER.indexOf(s.kind) > myOrder);
+      const sections = insertAt === -1 ? [...d.sections, fresh] : [...d.sections.slice(0, insertAt), fresh, ...d.sections.slice(insertAt)];
+      return { ...d, sections };
+    });
+    setDirty(true);
+  };
 
   // ── Exercise edits ────────────────────────────────────────────
   const updateEx = (sIdx, eIdx, patch) => { setDay(d => mapDay(d, sIdx, eIdx, e => ({ ...e, ...patch }))); setDirty(true); };
@@ -555,6 +569,15 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               />
             ))}
             </div>
+
+            {SECTION_ORDER.filter(k => !day.sections.some(s => s.kind === k)).map(k => (
+              <button key={k} onClick={() => addSection(k)} style={{
+                width: '100%', padding: '10px 0', marginBottom: 12,
+                background: 'transparent', border: '1px dashed var(--line-strong)', borderRadius: 10,
+                color: 'var(--accent)', fontFamily: 'JetBrains Mono', fontSize: 10, letterSpacing: '0.14em', fontWeight: 600,
+                cursor: 'pointer',
+              }}>+ ADD {SECTION_DEFAULTS[k].title.toUpperCase()}</button>
+            ))}
 
             {switchingEx !== null && (
               <ExercisePicker
@@ -2022,6 +2045,17 @@ function fmtSecs(s) {
 function intensityColor(n) { return n<=3?'var(--accent)':n<=5?'var(--accent-2)':n<=7?'var(--c-amber)':'var(--c-coral)'; }
 function intensityLabel(n) { return n<=2?'WARM-UP':n<=4?'EASY':n<=6?'MODERATE':n<=8?'HARD':'MAX EFFORT'; }
 function sectionColor(kind) { return kind==='PULSE_RAISER'?'var(--c-coral)':kind==='BANDED'?'var(--c-amber)':kind==='COOLDOWN'?'var(--accent-2)':'var(--accent)'; }
+
+// The four purpose-sections a day is built from, in the order they run - and
+// the title each one starts with fresh (matches seedDay(), the template a
+// brand new day is built from, so a re-added section looks like any other).
+const SECTION_ORDER = ['PULSE_RAISER', 'BANDED', 'MAIN', 'COOLDOWN'];
+const SECTION_DEFAULTS = {
+  PULSE_RAISER: { title: 'Pulse Raiser' },
+  BANDED:       { title: 'Banded Activation' },
+  MAIN:         { title: 'Workout' },
+  COOLDOWN:     { title: 'Cooldown' },
+};
 
 function seedDay() {
   return {
