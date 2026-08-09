@@ -45,6 +45,10 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
   const [optionsExId, setOptionsExId] = React.useState(null); // exercise options sheet
   const [copyFrom, setCopyFrom] = React.useState(null); // { day, title, sub }
   const [copying, setCopying]   = React.useState(false);
+  const [creatingKey, setCreatingKey] = React.useState(null); // col.key currently being created
+  const [drag, setDrag] = React.useState(null); // { exId, fromSectionId } - a movement being dragged to another day
+  const [hoverSectionId, setHoverSectionId] = React.useState(null);
+  const isDesktop = useDesktop();
 
   const weeks = [];
   phaseList.forEach((ph, pi) => {
@@ -88,20 +92,100 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
     setDays(prev => mapExercises(prev, exId, ex => ({ ...ex, ...patch })));
     supabase.from('section_exercises').update(patch).eq('id', exId).then(() => {});
   };
-  // Reorder within a section: renumber sort_order and persist each row. The
-  // planner has no save step, so the new order is written immediately.
-  const moveExercise = (sectionId, from, to) => {
-    const sec = findSection(days, sectionId);
-    if (!sec) return;
-    const items = [...(sec.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
-    if (from === to || to < 0 || to >= items.length) return;
-    const [moved] = items.splice(from, 1);
-    items.splice(to, 0, moved);
-    const ordered = items.map((ex, i) => ({ ...ex, sort_order: i }));
-    setDays(prev => mapSection(prev, sectionId, s => ({ ...s, section_exercises: ordered })));
-    ordered.forEach((ex, i) => {
-      supabase.from('section_exercises').update({ sort_order: i }).eq('id', ex.id).then(() => {});
+  // Move an exercise to a position within a section - the same section (a
+  // reorder) or a different one, including a different day's. The planner has
+  // no save step, so both the local state and the DB write happen immediately.
+  const moveExerciseTo = (exId, fromSectionId, toSectionId, toIndex) => {
+    const fromSec = findSection(days, fromSectionId);
+    if (!fromSec) return;
+    const fromItems = [...(fromSec.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
+    const exIdx = fromItems.findIndex(e => e.id === exId);
+    if (exIdx < 0) return;
+    const [moved] = fromItems.splice(exIdx, 1);
+    const fromOrdered = fromItems.map((e, i) => ({ ...e, sort_order: i }));
+
+    const sameSection = fromSectionId === toSectionId;
+    const toSec = sameSection ? fromSec : findSection(days, toSectionId);
+    if (!toSec) return;
+    const toItems = sameSection ? fromOrdered : [...(toSec.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
+    const insertAt = Math.max(0, Math.min(toIndex, toItems.length));
+    const toOrdered = [...toItems.slice(0, insertAt), { ...moved, section_id: toSectionId }, ...toItems.slice(insertAt)]
+      .map((e, i) => ({ ...e, sort_order: i }));
+
+    if (sameSection && exIdx === insertAt) return; // dropped back where it started
+
+    setDays(prev => {
+      let next = mapSection(prev, fromSectionId, s => ({ ...s, section_exercises: sameSection ? toOrdered : fromOrdered }));
+      if (!sameSection) next = mapSection(next, toSectionId, s => ({ ...s, section_exercises: toOrdered }));
+      return next;
     });
+
+    if (!sameSection) {
+      fromOrdered.forEach(e => { supabase.from('section_exercises').update({ sort_order: e.sort_order }).eq('id', e.id).then(() => {}); });
+    }
+    toOrdered.forEach(e => {
+      const patch = e.id === exId ? { sort_order: e.sort_order, section_id: toSectionId } : { sort_order: e.sort_order };
+      supabase.from('section_exercises').update(patch).eq('id', e.id).then(() => {});
+    });
+  };
+
+  // Track a drag across the whole board (window-level, since the drop target
+  // can be a different day's column entirely) and resolve it on release.
+  React.useEffect(() => {
+    if (!drag) return;
+    const targetFromPoint = (ev) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      return el?.closest('[data-section-id]') || null;
+    };
+    const onMove = (ev) => {
+      const secEl = targetFromPoint(ev);
+      setHoverSectionId(secEl ? secEl.getAttribute('data-section-id') : null);
+    };
+    const onUp = (ev) => {
+      const secEl = targetFromPoint(ev);
+      if (secEl) {
+        const toSectionId = secEl.getAttribute('data-section-id');
+        const rows = [...secEl.querySelectorAll('[data-ex-id]')].filter(r => r.getAttribute('data-ex-id') !== drag.exId);
+        let idx = rows.length;
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i].getBoundingClientRect();
+          if (ev.clientY < r.top + r.height / 2) { idx = i; break; }
+        }
+        moveExerciseTo(drag.exId, drag.fromSectionId, toSectionId, idx);
+      }
+      setDrag(null);
+      setHoverSectionId(null);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [drag, days]);
+
+  // Turn a rest day into a workout in place, seeded with the four standard
+  // sections (empty) - ready for "+ ADD EXERCISE" without leaving the planner.
+  const createDay = async (col) => {
+    setCreatingKey(col.key);
+    const { data: dayRow } = await supabase.from('programme_days')
+      .upsert({ phase_id: col.phaseId, week_index: col.week, day_of_week: col.dow }, { onConflict: 'phase_id,week_index,day_of_week' })
+      .select('id').single();
+    if (dayRow) {
+      const sections = [
+        { kind: 'PULSE_RAISER', title: 'Pulse Raiser' },
+        { kind: 'BANDED', title: 'Banded Activation' },
+        { kind: 'MAIN', title: 'Workout' },
+        { kind: 'COOLDOWN', title: 'Cooldown' },
+      ];
+      for (let i = 0; i < sections.length; i++) {
+        await supabase.from('workout_sections').insert({ day_id: dayRow.id, kind: sections[i].kind, title: sections[i].title, sort_order: i });
+      }
+      reload();
+    }
+    setCreatingKey(null);
   };
 
   const addExercise = async (sectionId, ex, count) => {
@@ -130,11 +214,13 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
   let columns = [];
   if (mode === 'week') {
     columns = weeks.map(w => ({ key: `${w.phaseId}|${w.weekInPhase}`, title: `${w.label} · ${w.phaseName}`, sub: DOW[dow],
-      day: dayAt(w.phaseId, w.weekInPhase, dow), onOpen: () => onPickDay(w.phaseIdx, w.weekInPhase, dow) }));
+      day: dayAt(w.phaseId, w.weekInPhase, dow), phaseId: w.phaseId, week: w.weekInPhase, dow,
+      onOpen: () => onPickDay(w.phaseIdx, w.weekInPhase, dow) }));
   } else {
     const w = weeks[gweek];
     if (w) columns = DOW.map((d, i) => ({ key: `${w.phaseId}|${i}`, title: d, sub: `${w.label} · ${w.phaseName}`,
-      day: dayAt(w.phaseId, w.weekInPhase, i), onOpen: () => onPickDay(w.phaseIdx, w.weekInPhase, i) }));
+      day: dayAt(w.phaseId, w.weekInPhase, i), phaseId: w.phaseId, week: w.weekInPhase, dow: i,
+      onOpen: () => onPickDay(w.phaseIdx, w.weekInPhase, i) }));
   }
 
   return (
@@ -166,6 +252,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
         </div>
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 8 }}>
           EDIT WEIGHT / REPS / REST INLINE · TAP A MOVEMENT FOR ITS OPTIONS · TAP A COLUMN TITLE TO OPEN THE FULL DAY
+          {isDesktop && ' · DRAG A MOVEMENT TO MOVE IT TO ANOTHER DAY'}
         </div>
       </div>
 
@@ -182,8 +269,11 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
               <PlannerColumn key={col.key} col={col}
                 onPatchSet={patchSet} onAddSet={addSet} onDelSet={delSet}
                 onDelExercise={delExercise} onAddExercise={(sectionId, count) => setAddingTo({ sectionId, count })}
-                onOpenOptions={(ex) => setOptionsExId(ex.id)} onMoveExercise={moveExercise}
-                onCopyDay={(c) => setCopyFrom({ day: c.day, title: c.title, sub: c.sub })}/>
+                onOpenOptions={(ex) => setOptionsExId(ex.id)}
+                onCopyDay={(c) => setCopyFrom({ day: c.day, title: c.title, sub: c.sub })}
+                onCreateDay={createDay} creating={creatingKey === col.key}
+                drag={drag} hoverSectionId={hoverSectionId}
+                onDragStart={(exId, sectionId) => setDrag({ exId, fromSectionId: sectionId })}/>
             ))}
           </div>
         </div>
@@ -336,7 +426,7 @@ function CopyDaySheet({ source, weeks, busy, hasDay, onClose, onCopy }) {
   );
 }
 
-function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, onMoveExercise, onCopyDay }) {
+function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, onCopyDay, onCreateDay, creating, drag, hoverSectionId, onDragStart }) {
   const day = col.day;
   const sections = day ? [...(day.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order) : [];
   return (
@@ -360,10 +450,10 @@ function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onA
       </div>
 
       {!day || sections.length === 0 ? (
-        <button onClick={col.onOpen} style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}>
-          <div style={{ padding: '22px 12px', textAlign: 'center', borderRadius: 10, border: '1px dashed var(--line-strong)', background: 'var(--bg-1)' }}>
+        <button onClick={() => onCreateDay(col)} disabled={creating} style={{ all: 'unset', cursor: creating ? 'default' : 'pointer', display: 'block', width: '100%' }}>
+          <div style={{ padding: '22px 12px', textAlign: 'center', borderRadius: 10, border: '1px dashed var(--line-strong)', background: 'var(--bg-1)', opacity: creating ? 0.6 : 1 }}>
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.1em' }}>REST DAY</div>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: '0.08em', marginTop: 6 }}>+ ADD WORKOUT</div>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: '0.08em', marginTop: 6 }}>{creating ? 'CREATING…' : '+ ADD WORKOUT'}</div>
           </div>
         </button>
       ) : (
@@ -372,7 +462,7 @@ function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onA
             <PlannerSection key={s.id} s={s}
               onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet}
               onDelExercise={onDelExercise} onAddExercise={onAddExercise} onOpenOptions={onOpenOptions}
-              onMoveExercise={onMoveExercise}/>
+              drag={drag} isHoverTarget={hoverSectionId === s.id} onDragStart={onDragStart}/>
           ))}
         </div>
       )}
@@ -380,60 +470,34 @@ function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onA
   );
 }
 
-function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, onMoveExercise }) {
+function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, drag, isHoverTarget, onDragStart }) {
   const col = sectionColor(s.kind);
   const exercises = [...(s.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
 
-  // Drag to reorder - laptop only, same as the main builder. Listeners live on
-  // the window because reordering moves the handle's node, which can drop a
-  // pointer capture mid-drag.
+  // Drag to move - laptop only, same as the main builder. The drag itself is
+  // tracked window-level up in MasterPlanner, since the drop target can be a
+  // different day's column entirely; this section just needs to know whether
+  // it's the drag's origin (to dim its own row) or the current hover target.
   const isDesktop = useDesktop();
-  const [dragId, setDragId] = React.useState(null);
-  const rowRefs = React.useRef({});
-
-  React.useEffect(() => {
-    if (dragId == null) return;
-    const move = (ev) => {
-      const idx = exercises.findIndex(it => it.id === dragId);
-      if (idx < 0) return;
-      const y = ev.clientY;
-      const prev = idx > 0 ? rowRefs.current[exercises[idx - 1].id] : null;
-      if (prev) {
-        const r = prev.getBoundingClientRect();
-        if (y < r.top + r.height / 2) { onMoveExercise(s.id, idx, idx - 1); return; }
-      }
-      const next = idx < exercises.length - 1 ? rowRefs.current[exercises[idx + 1].id] : null;
-      if (next) {
-        const r = next.getBoundingClientRect();
-        if (y > r.top + r.height / 2) { onMoveExercise(s.id, idx, idx + 1); return; }
-      }
-    };
-    const end = () => setDragId(null);
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
-    return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', end);
-      window.removeEventListener('pointercancel', end);
-    };
-  }, [dragId, exercises, onMoveExercise, s.id]);
+  const draggingExId = drag && drag.fromSectionId === s.id ? drag.exId : null;
 
   return (
-    <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden' }}>
+    <div style={{
+      background: 'var(--bg-2)', border: `1px solid ${isHoverTarget ? 'var(--accent)' : 'var(--line)'}`, borderRadius: 10, overflow: 'hidden',
+      boxShadow: isHoverTarget ? '0 0 0 3px var(--accent-soft)' : 'none', transition: 'border-color .12s ease, box-shadow .12s ease',
+    }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', borderLeft: `2px solid ${col}`, borderBottom: '1px solid var(--line)' }}>
         <span style={{ fontSize: 11, fontWeight: 700 }}>{s.title || SECTION_LABEL[s.kind] || 'Block'}</span>
         <span className="mono" style={{ fontSize: 7.5, color: 'var(--text-3)', letterSpacing: '0.1em', fontWeight: 700 }}>{sectionTag(s.kind)}</span>
       </div>
-      <div style={{ padding: 8, display: 'grid', gap: 8 }}>
+      <div data-section-id={s.id} style={{ padding: 8, display: 'grid', gap: 8 }}>
         {exercises.map((ex, i) => (
           <PlannerExercise key={ex.id} ex={ex} idx={i}
             onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet} onDelExercise={onDelExercise}
             onOpenOptions={onOpenOptions}
-            rowRef={(el) => { if (el) rowRefs.current[ex.id] = el; else delete rowRefs.current[ex.id]; }}
-            dragging={dragId === ex.id}
-            dragHandle={isDesktop && exercises.length > 1
-              ? { onPointerDown: (ev) => { ev.preventDefault(); ev.stopPropagation(); setDragId(ex.id); } }
+            dragging={draggingExId === ex.id}
+            dragHandle={isDesktop
+              ? { onPointerDown: (ev) => { ev.preventDefault(); ev.stopPropagation(); onDragStart(ex.id, s.id); } }
               : null}/>
         ))}
         <button onClick={() => onAddExercise(s.id, exercises.length)} style={{
@@ -446,13 +510,13 @@ function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAd
   );
 }
 
-function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercise, onOpenOptions, rowRef, dragging, dragHandle }) {
+function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercise, onOpenOptions, dragging, dragHandle }) {
   const sets = [...(ex.exercise_sets || [])].sort((a, b) => a.set_index - b.set_index);
   const alts = Array.isArray(ex.alternates) ? ex.alternates : [];
   return (
-    <div ref={rowRef} style={{
+    <div data-ex-id={ex.id} style={{
       background: 'var(--bg-1)', border: `1px solid ${dragging ? 'var(--accent)' : 'var(--line)'}`,
-      borderRadius: 8, padding: '7px 8px',
+      borderRadius: 8, padding: '7px 8px', opacity: dragging ? 0.5 : 1,
       boxShadow: dragging ? '0 8px 20px rgba(0,0,0,0.45)' : 'none',
       position: dragging ? 'relative' : 'static', zIndex: dragging ? 5 : 'auto',
       transition: 'box-shadow .12s ease, border-color .12s ease',
