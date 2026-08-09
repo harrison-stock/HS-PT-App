@@ -313,7 +313,9 @@ body:has([data-role="trainer"]) {
 .bnav {
   flex-shrink: 0;
   z-index: 5;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  /* Column count follows the item count - a coach viewing a client's app gets
+     a sixth "exit" tab, and a fixed 5-column grid pushed it onto its own row. */
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   padding: 8px 8px calc(env(safe-area-inset-bottom, 0px) + 6px);
   background: linear-gradient(180deg, var(--nav-from), var(--nav-to) 60%);
   backdrop-filter: blur(14px);
