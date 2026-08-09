@@ -320,8 +320,11 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     setDay(d => mapDay(d, sIdx, eIdx, e => {
       const last = e.setsList[e.setsList.length - 1];
       const base = last ? { repsText: last.repsText, weight: last.weight, rest: last.rest, time: last.time, intensity: last.intensity } : { repsText: '8', weight: 0, rest: 60, time: 60, intensity: 6 };
-      if (kind === 'WARMUP')  { base.weight = Math.max(0, Math.round(base.weight*0.5/2.5)*2.5); base.intensity = 3; base.rest = 45; }
-      if (kind === 'DROPSET') { base.weight = Math.max(0, Math.round(base.weight*0.7/2.5)*2.5); base.intensity = 8; }
+      // Derived from the working weight, kept to the nearest 0.1 rather than
+      // snapped to a plate size - an unset weight stays unset.
+      const scaleWeight = (f) => base.weight == null ? null : Math.max(0, +(base.weight * f).toFixed(1));
+      if (kind === 'WARMUP')  { base.weight = scaleWeight(0.5); base.intensity = 3; base.rest = 45; }
+      if (kind === 'DROPSET') { base.weight = scaleWeight(0.7); base.intensity = 8; }
       if (kind === 'FAILURE') { base.repsText = 'AMRAP'; base.intensity = 10; }
       if (kind === 'PARTIAL') { const n = parseInt(base.repsText); base.repsText = isNaN(n) ? base.repsText : String(Math.max(1, Math.round(n/2))); }
       return { ...e, setsList: [...e.setsList, mkSet(kind, base)] };
@@ -801,9 +804,10 @@ function progressDay(day, weekOffset, p) {
   if (!p || weekOffset === 0 || (!p.weightStep && !p.repsStep)) return day;
   const adj = (st, ex) => {
     let weight = st.weight, repsText = st.repsText;
-    if (!ex.banded && !ex.timed && p.weightStep && st.kind !== 'WARMUP') {
+    // An unset weight has nothing to progress from, so it stays unset.
+    if (!ex.banded && !ex.timed && p.weightStep && st.kind !== 'WARMUP' && st.weight != null) {
       weight = p.weightMode === 'pct'
-        ? Math.max(0, Math.round((st.weight * (1 + (p.weightStep / 100) * weekOffset)) * 2) / 2)
+        ? Math.max(0, +(st.weight * (1 + (p.weightStep / 100) * weekOffset)).toFixed(1))
         : Math.max(0, +(st.weight + p.weightStep * weekOffset).toFixed(2));
     }
     if (p.repsStep && st.kind !== 'WARMUP') {
@@ -1111,15 +1115,12 @@ function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSet
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           {onIcon ? (
             <button onClick={() => setIconOpen(true)} title="Change section icon" style={{
-              all: 'unset', cursor: 'pointer', position: 'relative',
-              width: 26, height: 26, borderRadius: 7, display: 'grid', placeItems: 'center',
-              background: `color-mix(in srgb, ${color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
+              all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0,
             }}>
-              <SectionGlyph icon={s.icon} kind={s.kind} size={15} color={color} glow />
-              <span style={{ position: 'absolute', right: -3, bottom: -3, width: 8, height: 8, borderRadius: '50%', background: color, border: '1.5px solid var(--bg-0)' }}/>
+              <SectionGlyph icon={s.icon} kind={s.kind} size={28} color={color} glow />
             </button>
           ) : (
-            <span style={{ width: 24, height: 24, borderRadius: 6, display: 'grid', placeItems: 'center', color, background: `color-mix(in srgb, ${color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`, fontFamily: 'Orbitron', fontWeight: 800, fontSize: 11 }}>{sIdx+1}</span>
+            <span style={{ display: 'grid', placeItems: 'center', color, fontFamily: 'Orbitron', fontWeight: 800, fontSize: 15, flexShrink: 0 }}>{sIdx+1}</span>
           )}
           <div className="label" style={{ color, letterSpacing: '0.14em', fontSize: 11 }}>// {s.title.toUpperCase()}</div>
         </div>
@@ -1574,7 +1575,7 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
           : banded ? (bandCol
               ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: bandCol.color, border: '1px solid rgba(255,255,255,0.35)', flexShrink: 0 }}/><span className="mono" style={{ fontSize: 9, color: 'var(--text-2)', fontWeight: 700 }}>{bandCol.short}</span></span>
               : <CellVal value="-"/>)
-          : <CellVal value={st.weight ? `${st.weight}` : 'BW'} unit={st.weight ? 'kg' : null}/>}
+          : <CellVal value={st.weight == null ? '–' : st.weight ? `${st.weight}` : 'BW'} unit={st.weight ? 'kg' : null}/>}
         {timed ? <CellVal value={st.weight ? `${st.weight}` : '-'} unit={st.weight ? 'kg' : null}/> : <CellVal value={`× ${st.repsText||0}`}/>}
         <CellVal value={fmtSecs(st.rest)}/>
         <span style={{ width: 22, height: 20, borderRadius: 4, display: 'grid', placeItems: 'center', background: `color-mix(in srgb, ${intensityColor(st.intensity)} 18%, transparent)`, color: intensityColor(st.intensity), fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 10, border: `1px solid color-mix(in srgb, ${intensityColor(st.intensity)} 40%, transparent)` }}>{st.intensity}</span>
@@ -1610,7 +1611,7 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
                 ? <TimeStepper label="TIME" value={st.time||60} onChange={v => onUpdate({ time: v })} accent={accent}/>
                 : <RepsTextInput value={st.repsText||''} onChange={v => onUpdate({ repsText: v })} accent={accent}/>
               }
-              <Stepper label="WEIGHT" unit="kg" value={st.weight||0} min={0} max={999} step={2.5} onChange={v => onUpdate({ weight: Math.min(999, v) })} accent={accent}/>
+              <Stepper label="WEIGHT" unit="kg" value={st.weight ?? null} min={0} max={999} step={2.5} blankable onChange={v => onUpdate({ weight: v })} accent={accent}/>
             </div>
           )}
           <div style={{ marginTop: 6 }}>
@@ -1686,32 +1687,53 @@ function RepsTextInput({ value, onChange, accent = 'var(--accent)' }) {
 }
 
 // ── REUSABLE CONTROLS ─────────────────────────────────────────────
-function Stepper({ label, value, unit, min=0, max=999, step=1, onChange, accent='var(--accent)' }) {
+// The +/- buttons move in `step`, but a typed value is kept exactly as typed -
+// plenty of gyms have odd plates and fixed dumbbells (15.6kg and friends), so
+// snapping typed input to the step would quietly falsify the prescription.
+// With `blankable`, clearing the field (or the "–" button) leaves the weight
+// unset, for a movement the coach has no reliable number for yet.
+function Stepper({ label, value, unit, min=0, max=999, step=1, onChange, accent='var(--accent)', blankable=false }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft]     = React.useState('');
+  const blank = value == null;
 
-  const dec = () => onChange(Math.max(min, +(value-step).toFixed(2)));
-  const inc = () => onChange(Math.min(max, +(value+step).toFixed(2)));
-  const startEdit = () => { setDraft(String(value)); setEditing(true); };
+  const clamp = (n) => +Math.min(max, Math.max(min, n)).toFixed(2);
+  const dec = () => onChange(clamp((value ?? 0) - step));
+  const inc = () => onChange(clamp((value ?? 0) + step));
+  const startEdit = () => { setDraft(blank ? '' : String(value)); setEditing(true); };
   const commit = () => {
-    const n = parseFloat(draft);
-    if (!isNaN(n)) onChange(+Math.min(max, Math.max(min, Math.round(n/step)*step)).toFixed(2));
+    const raw = draft.trim();
+    if (blankable && (raw === '' || raw === '-')) { onChange(null); setEditing(false); return; }
+    const n = parseFloat(raw);
+    if (!isNaN(n)) onChange(clamp(n));
     setEditing(false);
   };
 
   return (
     <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8, padding: '6px 8px' }}>
-      <div className="mono" style={{ fontSize: 8, color: accent, letterSpacing: '0.12em', fontWeight: 700, marginBottom: 3 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+        <span className="mono" style={{ fontSize: 8, color: accent, letterSpacing: '0.12em', fontWeight: 700 }}>{label}</span>
+        {blankable && (
+          <button onClick={() => onChange(blank ? 0 : null)} title={blank ? 'Set a weight' : 'Leave the weight unset'}
+            className="mono" style={{
+              all: 'unset', cursor: 'pointer', padding: '0 5px', borderRadius: 4, lineHeight: '13px',
+              fontSize: 8, fontWeight: 800, letterSpacing: '0.08em',
+              color: blank ? accent : 'var(--text-3)',
+              border: `1px solid ${blank ? accent : 'var(--line-strong)'}`,
+              background: blank ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : 'transparent',
+            }}>–</button>
+        )}
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '22px 1fr 22px', gap: 4, alignItems: 'center' }}>
         <StepBtn onClick={dec}>−</StepBtn>
         {editing ? (
-          <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+          <input autoFocus value={draft} onChange={e => setDraft(e.target.value)} placeholder={blankable ? '–' : undefined}
             onBlur={commit} onKeyDown={e => { if (e.key==='Enter') commit(); if (e.key==='Escape') setEditing(false); }}
             style={{ width:'100%', textAlign:'center', background:'var(--bg-1)', border:'1px solid var(--accent)', borderRadius:4, color:'var(--text)', fontFamily:'JetBrains Mono', fontSize:15, fontWeight:700, padding:'2px 0', outline:'none' }}/>
         ) : (
           <div onClick={startEdit} style={{ textAlign:'center', cursor:'text', display:'flex', alignItems:'baseline', justifyContent:'center', gap:2 }}>
-            <span className="h-bold" style={{ fontSize:16, color:'var(--text)', lineHeight:1 }}>{value}</span>
-            {unit && <span className="mono" style={{ fontSize:8, color:'var(--text-3)', letterSpacing:'0.08em' }}>{unit}</span>}
+            <span className="h-bold" style={{ fontSize:16, color: blank ? 'var(--text-3)' : 'var(--text)', lineHeight:1 }}>{blank ? '–' : value}</span>
+            {unit && !blank && <span className="mono" style={{ fontSize:8, color:'var(--text-3)', letterSpacing:'0.08em' }}>{unit}</span>}
           </div>
         )}
         <StepBtn onClick={inc}>+</StepBtn>
@@ -1996,14 +2018,14 @@ function dbToSections(sections) {
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
         id: 's'+st.id.slice(-8), kind: st.kind,
         repsText: st.reps_text || String(st.reps ?? 8),
-        weight: Number(st.weight_kg)||0, band: st.band ?? null, rest: st.rest_secs??60,
+        weight: st.weight_kg == null ? null : Number(st.weight_kg), band: st.band ?? null, rest: st.rest_secs??60,
         time: st.time_secs??60, intensity: st.intensity??6,
       })),
     })),
   }));
 }
 
-function mkSet(kind, p) { return { id: randId(), kind, repsText: p.repsText ?? String(p.reps ?? 8), weight:p.weight??0, band:p.band ?? null, rest:p.rest??60, time:p.time??60, intensity:p.intensity??6 }; }
+function mkSet(kind, p) { return { id: randId(), kind, repsText: p.repsText ?? String(p.reps ?? 8), weight: p.weight === undefined ? 0 : p.weight, band:p.band ?? null, rest:p.rest??60, time:p.time??60, intensity:p.intensity??6 }; }
 function randId() { return 's'+Math.random().toString(36).slice(2); }
 
 function summarize(e) {
@@ -2011,13 +2033,16 @@ function summarize(e) {
   if (work.length===0) return '-';
   const w = uniqueRange(work.map(s => s.weight));
   const side = e.unilateral ? '/side' : '';
-  if (e.timed) { const t = uniqueRange(work.map(s => s.time), fmtSecs); return `${t}${side}${w!=='0'?' · '+w+'kg':''}`; }
+  // uniqueRange yields '-' when every set's weight is unset.
+  const unset = w === '-';
+  if (e.timed) { const t = uniqueRange(work.map(s => s.time), fmtSecs); return `${t}${side}${(unset || w==='0')?'':' · '+w+'kg'}`; }
   const repsVal = work[0]?.repsText || '-';
   if (e.banded) { const b = bandOf(work[0]?.band); return `${b ? b.short : 'BAND'} × ${repsVal}${side}`; }
   // On a split load, append what the client will actually pick up. Only shown
   // when every working set is the same weight - a range has no single answer.
-  const each = w.includes('–') ? '' : splitLabel(parseFloat(w), e.split);
-  return `${w==='0'?'BW':w+'kg'} × ${repsVal}${side}${each ? ` · ${each} ea` : ''}`;
+  const each = (unset || w.includes('–')) ? '' : splitLabel(parseFloat(w), e.split);
+  const load = unset ? '–' : w==='0' ? 'BW' : w+'kg';
+  return `${load} × ${repsVal}${side}${each ? ` · ${each} ea` : ''}`;
 }
 
 // Concrete example for the split-load toggle, using this exercise's own weight
