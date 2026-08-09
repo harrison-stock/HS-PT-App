@@ -22,7 +22,7 @@ import { ExercisePicker } from './ProgrammeBuilder'
 // One full-page card per exercise; horizontal snap-scroll between them.
 // Phases (Pulse · Banded · Main · Cooldown) are pinned as a strip up top.
 // Tap exercise title to see/swap alternatives.
-export function ActiveLog({ go, dayId, userId, resume, edit }) {
+export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView }) {
   const [exercises, setExercises] = React.useState(ACTIVE_EXERCISES);
   const [activeIdx, setActiveIdx] = React.useState(0); // start on Pulse warm-up
   const [sessionTime, setSessionTime] = React.useState(0);
@@ -785,41 +785,15 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
         }
         {activeItem.type !== 'finish' && (() => {
           const goNext = () => { if (activeIdx < lastIdx) { setActiveIdx(activeIdx + 1); } else { try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} setComplete(true); } };
-          const goPrev = () => activeIdx > 0 && setActiveIdx(activeIdx - 1);
-          // The card right before the finish slide is the last piece of work -
-          // its forward action reads CONTINUE. With several cards to move
-          // between, navigation is a pair of arrows instead of one wide button.
+          // Moving between cards is a swipe, so no arrow pair. The last card
+          // before the finish slide still gets a CONTINUE, since "swipe to end
+          // the workout" isn't something to leave the client to guess at.
           const isFinal = activeIdx >= lastIdx - 1;
-          const multi = railItems.length > 2; // more than one card + finish slide
-          if (!multi || isFinal) return (
-            <div style={{ display: 'flex', gap: 8 }}>
-              {multi && (
-                <button onClick={goPrev} aria-label="Previous" className="btn-ghost" style={{
-                  width: 58, display: 'grid', placeItems: 'center', flexShrink: 0,
-                  opacity: activeIdx > 0 ? 1 : 0.35, pointerEvents: activeIdx > 0 ? 'auto' : 'none',
-                }}>
-                  <IconChevronLeft size={16} />
-                </button>
-              )}
-              <button className="btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={goNext}>
-                CONTINUE <IconChevronRight size={14} />
-              </button>
-            </div>
-          );
+          if (!isFinal) return null;
           return (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={goPrev} aria-label="Previous exercise" className="btn-ghost" style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                opacity: activeIdx > 0 ? 1 : 0.35, pointerEvents: activeIdx > 0 ? 'auto' : 'none',
-              }}>
-                <IconChevronLeft size={18} />
-              </button>
-              <button onClick={goNext} aria-label="Next exercise" className="btn-primary" style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <IconChevronRight size={18} />
-              </button>
-            </div>
+            <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }} onClick={goNext}>
+              CONTINUE <IconChevronRight size={14} />
+            </button>
           );
         })()}
       </div>
@@ -891,6 +865,19 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
               fontFamily: 'JetBrains Mono, monospace',
               fontWeight: 600, fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase'
             }}>QUIT WORKOUT</button>
+              {/* Coach-only: the bottom nav carries the way out of a client's
+                  app, and it's hidden during a session - so it lives here too. */}
+              {onExitClientView && (
+                <button onClick={onExitClientView} style={{
+                  width: '100%', padding: '13px 16px', borderRadius: 12,
+                  background: 'transparent',
+                  border: '1px solid color-mix(in srgb, var(--c-amber) 55%, transparent)',
+                  color: 'var(--c-amber)', cursor: 'pointer',
+                  fontFamily: 'JetBrains Mono, monospace',
+                  fontWeight: 600, fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}><IconX2 size={14} /> EXIT CLIENT VIEW</button>
+              )}
             </div>
           </div>
 
@@ -1054,78 +1041,61 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
             <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-3)' }}>{ex.tempo}</span>
           </div>
           }
+          {/* The three things reached mid-set sit out front; everything that
+              restructures the workout is folded behind the overflow menu. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={onTitle} aria-label="Swap exercise" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
-              <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
-                <IconSwap size={14} />
-              </Hex>
-            </button>
-            {onSuperset && ex.ss == null &&
-            <button onClick={onSuperset} aria-label="Superset with another exercise" title="Superset" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
-              <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
-              </Hex>
-            </button>}
-            <button onClick={onHistory} aria-label="Prior progress" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+            <button onClick={onHistory} aria-label="Prior progress" title="History" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
                 <IconTrend size={14} />
               </Hex>
             </button>
+            <button onClick={onTitle} aria-label="Swap exercise" title="Alternatives" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+              <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
+                <IconSwap size={14} />
+              </Hex>
+            </button>
             {onComment &&
-            <button onClick={onComment} aria-label="Add a comment" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+            <button onClick={onComment} aria-label="Add a comment" title="Comment" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
               <Hex size={30} square style={{ background: 'var(--bg-2)', border: '1px solid var(--line-strong)', color: 'var(--text-2)' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
               </Hex>
             </button>}
-            {onAddExercise &&
+            {(onAddExercise || onDelete || (onSuperset && ex.ss == null)) && (
             <div style={{ position: 'relative' }}>
-              <button onClick={() => setAddChoose(o => !o)} aria-label="Add exercise" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+              <button onClick={() => { setAddChoose(o => !o); setConfirmDel(false); }} aria-label="More actions" title="More" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
                 <Hex size={30} square style={{ background: addChoose ? 'var(--accent-soft)' : 'var(--bg-2)', border: `1px solid ${addChoose ? 'var(--accent)' : 'var(--line-strong)'}`, color: addChoose ? 'var(--accent)' : 'var(--text-2)' }}>
-                  <IconPlus size={14} />
+                  <span className="mono" style={{ fontSize: 15, fontWeight: 800, lineHeight: 1, letterSpacing: '0.06em' }}>⋯</span>
                 </Hex>
               </button>
               {addChoose && (
                 <>
-                  <div onClick={() => setAddChoose(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 41, background: 'var(--bg-3)', border: '1px solid var(--line-strong)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', padding: 6, display: 'grid', gap: 2, minWidth: 150 }}>
-                    <div className="label" style={{ padding: '4px 8px 6px' }}>// ADD EXERCISE</div>
-                    {[['before', '↑ ADD BEFORE'], ['after', '↓ ADD AFTER']].map(([pos, lbl]) => (
-                      <button key={pos} onClick={() => { setAddChoose(false); onAddExercise(pos); }} style={{
-                        all: 'unset', cursor: 'pointer', padding: '9px 10px', borderRadius: 7,
-                        fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text)',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-2)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >{lbl}</button>
-                    ))}
+                  <div onClick={() => { setAddChoose(false); setConfirmDel(false); }} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 41, background: 'var(--bg-3)', border: '1px solid var(--line-strong)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', padding: 6, display: 'grid', gap: 2, minWidth: 186 }}>
+                    {confirmDel ? (
+                      <div style={{ padding: 6, textAlign: 'center' }}>
+                        <div className="mono" style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 10 }}>Delete this exercise from the workout?</div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button onClick={() => setConfirmDel(false)} className="mono" style={{ all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 7, border: '1px solid var(--line-strong)', color: 'var(--text-2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>CANCEL</button>
+                          <button onClick={() => { setConfirmDel(false); setAddChoose(false); onDelete(); }} className="mono" style={{ all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 7, border: '1px solid var(--c-coral)', background: 'color-mix(in srgb, var(--c-coral) 16%, transparent)', color: 'var(--c-coral)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>DELETE</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {onSuperset && ex.ss == null && (
+                          <MenuItem onClick={() => { setAddChoose(false); onSuperset(); }}>⛓ SUPERSET</MenuItem>
+                        )}
+                        {onAddExercise && <>
+                          <div className="label" style={{ padding: '6px 8px 4px' }}>// ADD EXERCISE</div>
+                          <MenuItem onClick={() => { setAddChoose(false); onAddExercise('before'); }}>↑ ADD BEFORE</MenuItem>
+                          <MenuItem onClick={() => { setAddChoose(false); onAddExercise('after'); }}>↓ ADD AFTER</MenuItem>
+                        </>}
+                        {onDelete && <MenuItem danger onClick={() => setConfirmDel(true)}>✕ DELETE EXERCISE</MenuItem>}
+                      </>
+                    )}
                   </div>
                 </>
               )}
-            </div>}
-            {onDelete &&
-            <div style={{ position: 'relative' }}>
-              <button onClick={() => setConfirmDel(o => !o)} aria-label="Remove exercise" title="Remove exercise" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
-                <Hex size={30} square style={{
-                  background: confirmDel ? 'color-mix(in srgb, var(--c-coral) 16%, transparent)' : 'var(--bg-2)',
-                  border: `1px solid ${confirmDel ? 'var(--c-coral)' : 'var(--line-strong)'}`,
-                  color: confirmDel ? 'var(--c-coral)' : 'var(--text-2)'
-                }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>
-                </Hex>
-              </button>
-              {confirmDel && (
-                <>
-                  <div onClick={() => setConfirmDel(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 41, background: 'var(--bg-3)', border: '1px solid var(--line-strong)', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.5)', padding: 12, minWidth: 180, textAlign: 'center' }}>
-                    <div className="mono" style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 10 }}>Delete this exercise from the workout?</div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => setConfirmDel(false)} className="mono" style={{ all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 7, border: '1px solid var(--line-strong)', color: 'var(--text-2)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>CANCEL</button>
-                      <button onClick={() => { setConfirmDel(false); onDelete(); }} className="mono" style={{ all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 7, border: '1px solid var(--c-coral)', background: 'color-mix(in srgb, var(--c-coral) 16%, transparent)', color: 'var(--c-coral)', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em' }}>DELETE</button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>}
+            </div>)}
           </div>
         </div>
 
@@ -1676,6 +1646,41 @@ const PHASE_ICON = {
 };
 
 function AlternativesSheet({ ex, onClose, onPick }) {
+  const [browse, setBrowse] = React.useState(false);
+  const [lib, setLib] = React.useState(null);
+
+  // Suggestions come from the library: same movement pattern first (a swap that
+  // trains the same job), falling back to the same muscle group.
+  React.useEffect(() => {
+    let cancelled = false;
+    loadExercises().then(rows => { if (!cancelled) setLib(rows || []); }).catch(() => setLib([]));
+    return () => { cancelled = true; };
+  }, []);
+
+  const suggested = React.useMemo(() => {
+    if (!lib || !lib.length) return [];
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    // Match on what's actually loaded right now, falling back to the original.
+    const self = lib.find(r => norm(r.name) === norm(ex.name))
+      || lib.find(r => norm(r.name) === norm(ex.base?.name));
+    if (!self) return [];
+    const taken = new Set([norm(ex.name), norm(ex.base?.name), ...(ex.alternatives || []).map(a => norm(a.name))]);
+    const score = (r) => (self.movement_pattern && r.movement_pattern === self.movement_pattern ? 2 : 0)
+      + (self.muscle_group && r.muscle_group === self.muscle_group ? 1 : 0);
+    return lib
+      .filter(r => !taken.has(norm(r.name)) && score(r) > 0)
+      .sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name))
+      .slice(0, 6)
+      .map(r => ({ name: r.name, img: r.img_url || r.img || '', target: '', reason: 'Suggested' }));
+  }, [lib, ex]);
+
+  if (browse) {
+    return (
+      <ExercisePicker title="SWAP EXERCISE" onClose={() => setBrowse(false)}
+        onPick={(p) => onPick({ name: p.name, img: p.img, target: '' })} />
+    );
+  }
+
   return (
     <div onClick={onClose} style={{
       position: 'absolute', inset: 0, zIndex: 60,
@@ -1720,38 +1725,66 @@ function AlternativesSheet({ ex, onClose, onPick }) {
           <span className="chip chip-accent">● SELECTED</span>
         </div>
 
-        <div className="label" style={{ margin: '0 4px 8px' }}>// OPTIONS</div>
         {(() => {
-          // Offer the original (to revert) + coach alternates, minus the current pick.
+          // The original (to revert to) plus whatever the coach set up.
           const opts = [{ name: ex.base?.name || ex.name, img: ex.base?.img || ex.img, target: '', reason: 'Original', _orig: true },
             ...(ex.alternatives || [])].filter(o => o.name !== ex.name);
-          if (opts.length === 0) return <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '4px 4px 10px' }}>No alternates set for this exercise.</div>;
-          return (
-            <div style={{ display: 'grid', gap: 8 }}>
-              {opts.map((alt, i) =>
-              <button key={i} onClick={() => onPick(alt)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
-                <div className="card" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 8, flexShrink: 0, background: alt.img ? `url('${alt.img}') center/cover, var(--bg-3)` : 'var(--bg-3)', border: '1px solid var(--line)' }}/>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{alt.name}</div>
-                    <div className="mono" style={{ fontSize: 9, color: alt._orig ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.08em', marginTop: 2 }}>
-                      {alt._orig ? 'ORIGINAL' : 'ALTERNATE'}
-                    </div>
-                  </div>
-                  <IconChevronRight size={14} style={{ color: 'var(--text-3)' }} />
+          const row = (alt, i, tag, tagColor) => (
+            <button key={`${tag}${i}`} onClick={() => onPick(alt)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
+              <div className="card" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, flexShrink: 0, background: alt.img ? `url('${alt.img}') center/cover, var(--bg-3)` : 'var(--bg-3)', border: '1px solid var(--line)' }}/>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{alt.name}</div>
+                  <div className="mono" style={{ fontSize: 9, color: tagColor, letterSpacing: '0.08em', marginTop: 2 }}>{tag}</div>
                 </div>
-              </button>
-              )}
-            </div>
+                <IconChevronRight size={14} style={{ color: 'var(--text-3)' }} />
+              </div>
+            </button>
+          );
+          return (
+            <>
+              <div className="label" style={{ margin: '0 4px 8px' }}>// OPTIONS</div>
+              {opts.length === 0
+                ? <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '4px 4px 10px' }}>No alternates set for this exercise.</div>
+                : <div style={{ display: 'grid', gap: 8 }}>
+                    {opts.map((alt, i) => row(alt, i, alt._orig ? 'ORIGINAL' : 'ALTERNATE', alt._orig ? 'var(--accent)' : 'var(--text-3)'))}
+                  </div>}
+
+              <div className="label" style={{ margin: '16px 4px 8px' }}>// SUGGESTED</div>
+              {lib === null
+                ? <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '4px 4px 10px' }}>Finding similar movements…</div>
+                : suggested.length === 0
+                  ? <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '4px 4px 10px' }}>Nothing similar in the library yet.</div>
+                  : <div style={{ display: 'grid', gap: 8 }}>
+                      {suggested.map((alt, i) => row(alt, i, 'SIMILAR MOVEMENT', 'var(--accent-2)'))}
+                    </div>}
+            </>
           );
         })()}
 
-        <button onClick={onClose} className="btn-ghost" style={{ width: '100%', marginTop: 14 }}>
+        <button onClick={() => setBrowse(true)} className="btn-primary" style={{ width: '100%', marginTop: 16 }}>
+          BROWSE FULL LIBRARY
+        </button>
+        <button onClick={onClose} className="btn-ghost" style={{ width: '100%', marginTop: 8 }}>
           KEEP CURRENT
         </button>
       </div>
     </div>);
 
+}
+
+// A row in the exercise overflow menu.
+function MenuItem({ onClick, danger, children }) {
+  return (
+    <button onClick={onClick} style={{
+      all: 'unset', cursor: 'pointer', padding: '9px 10px', borderRadius: 7,
+      fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+      color: danger ? 'var(--c-coral)' : 'var(--text)',
+    }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-2)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+    >{children}</button>
+  );
 }
 
 // Everfit-style set-type metadata
@@ -1960,12 +1993,19 @@ function RepsCell({ set, onChange }) {
     const clean = raw.replace(/[^\d.]/g, '');
     if (clean === '') { onChange(''); return; }
     const n = parseFloat(clean);
-    onChange(isNaN(n) ? '' : Math.min(999, n)); // hard cap at 999
+    // Ignore anything over the cap rather than snapping to it. Clamping used to
+    // rewrite the field to 999 mid-keystroke - which is what a prescribed range
+    // did the moment you typed into it, since stripping the dash from "8-12"
+    // ran the digits together into 812.
+    if (isNaN(n) || n > 999) return;
+    onChange(n);
   };
   return (
     <input
       value={set.reps === '' || set.reps == null ? '' : set.reps}
       onChange={(e) => commit(e.target.value)}
+      // Editing a set replaces the prescription rather than appending to it.
+      onFocus={(e) => e.target.select()}
       inputMode="numeric" placeholder="-" aria-label="Reps"
       style={{
         width: '100%', minWidth: 0, background: 'transparent', border: 0,
@@ -2008,178 +2048,45 @@ function LoadHeader({ ex, splitView, onToggle }) {
   );
 }
 
+// Weight - a plain type-in field, same as reps. Blank leaves it unset ("–"),
+// 0 means bodyweight. On a two-handed movement the per-hand figure rides along
+// as the suffix, so the split readout survives without a second input.
 function NumCell({ value, suffix, done, split = 1, splitView = false, delay = 0, onChange }) {
-  const [calcOpen, setCalcOpen] = React.useState(false);
+  const [draft, setDraft] = React.useState(null); // non-null only while typing
   const halves = (splitView && value) ? splitLoad(value, split) : null;
-  const numStyle = {
-    fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
-    color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
-    textDecoration: done ? 'line-through var(--text-3)' : 'none',
+  const commit = (raw) => {
+    const clean = raw.replace(/[^\d.]/g, '');
+    setDraft(clean);
+    if (clean === '') { onChange(null); return; }
+    const n = parseFloat(clean);
+    if (isNaN(n) || n > 999) return;
+    onChange(n);
   };
-  // Each row starts fractionally after the one above, so tapping the toggle
-  // reads as the whole column coming apart rather than everything blinking.
-  const stagger = { animationDelay: `${delay}ms` };
+  // At rest a bodyweight set reads "BW" rather than a bare 0; focusing swaps in
+  // an empty field so the client just types the number they used.
+  const shown = draft !== null ? draft : (value == null ? '' : value === 0 ? 'BW' : String(value));
   return (
-    <>
-      <button onClick={() => setCalcOpen(true)} style={{
-        all: 'unset', cursor: 'pointer', width: '100%',
-        display: 'flex', alignItems: 'baseline', gap: 4,
-      }}>
-        {halves ? (
-          <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, whiteSpace: 'nowrap' }}>
-            <span className="split-l" style={{ ...numStyle, ...stagger, fontSize: 13, color: done ? 'var(--text-2)' : 'var(--accent)' }}>{halves.each}</span>
-            <span className="split-x mono" style={{ ...stagger, fontSize: 8.5, fontWeight: 700, color: 'var(--text-3)' }}>×</span>
-            <span className="split-r" style={{ ...numStyle, ...stagger, fontSize: 13, color: done ? 'var(--text-2)' : 'var(--accent)' }}>{halves.each}</span>
-          </span>
-        ) : (
-          <>
-            <span key={`t${splitView}`} className={split > 1 ? 'split-m' : undefined} style={{ ...numStyle, ...(split > 1 ? stagger : null) }}>
-              {value == null ? '–' : (value || 'BW')}
-            </span>
-            {suffix && !!value && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
-          </>
-        )}
-      </button>
-      {calcOpen && (
-        <CalcKeypad value={value} unit={suffix || 'kg'} split={split}
-          onClose={() => setCalcOpen(false)}
-          onApply={(v) => { onChange(v); setCalcOpen(false); }} />
-      )}
-    </>);
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}>
+      <input
+        value={shown}
+        onChange={(e) => commit(e.target.value)}
+        onFocus={(e) => { setDraft(value ? String(value) : ''); e.target.select(); }}
+        onBlur={() => setDraft(null)}
+        inputMode="decimal" placeholder="–" aria-label="Weight"
+        style={{
+          width: '100%', minWidth: 0, background: 'transparent', border: 0,
+          color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
+          fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
+          letterSpacing: '0.04em', outline: 'none',
+          textDecoration: done ? 'line-through var(--text-3)' : 'none',
+        }}
+      />
+      {halves
+        ? <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', whiteSpace: 'nowrap', flexShrink: 0 }}>{halves.n}×{halves.each}</span>
+        : suffix && !!value && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0 }}>{suffix}</span>}
+    </div>);
 
 }
-
-// Sum a +/- expression like "4.5 + 2.3" or "20-2.5" (plate maths). No eval().
-function evalExpr(s) {
-  const m = String(s).match(/[+-]?\s*\d*\.?\d+/g);
-  if (!m) return NaN;
-  const total = m.reduce((a, t) => a + (parseFloat(t.replace(/\s+/g, '')) || 0), 0);
-  return Math.round(total * 100) / 100;
-}
-
-// Weight calculator keypad - tap a weight to open it. Supports plate maths
-// (+/-) and a kg/lb toggle (lb is converted to kg on apply, since we store kg).
-function CalcKeypad({ value, unit = 'kg', mode = 'weight', split = 1, onClose, onApply }) {
-  const isWeight = mode === 'weight';
-  const [expr, setExpr] = React.useState(value ? String(value) : '');
-  const [asLb, setAsLb] = React.useState(false);
-  const preview = evalExpr(expr);
-  const hasOp = /[+\-]\s*\d/.test(expr.replace(/^[+-]/, ''));
-
-  const push = (ch) => setExpr(e => {
-    if ('+-'.includes(ch)) {
-      if (e === '' && ch === '+') return e;        // no leading +
-      if (/[+\-]\s*$/.test(e)) return e.replace(/[+\-]\s*$/, ch + ' '); // swap trailing op
-      return e + ' ' + ch + ' ';
-    }
-    if (ch === '.' && /\.\d*$/.test(e.split(/[+\-]/).pop())) return e; // one dot per number
-    return e + ch;
-  });
-  const back = () => setExpr(e => e.replace(/\s*[+\-]\s*$|.$/, ''));
-  const apply = () => {
-    let n = evalExpr(expr);
-    if (isNaN(n)) n = 0;
-    if (isWeight && asLb) n = Math.round(n * 0.45359237 * 2) / 2; // lb → kg, nearest 0.5
-    onApply(Math.max(0, Math.min(999, n))); // hard cap at 999
-  };
-
-  // Hardware-keyboard support - type digits/operators directly (desktop),
-  // while the on-screen keypad stays available for touch. No deps array so
-  // the handler always closes over the current expression.
-  React.useEffect(() => {
-    const onKey = (ev) => {
-      if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
-      const k = ev.key;
-      if (k >= '0' && k <= '9') { push(k); ev.preventDefault(); }
-      else if (k === '.') { push('.'); ev.preventDefault(); }
-      else if (k === '+' || k === '-') { push(k); ev.preventDefault(); }
-      else if (k === 'Backspace') { back(); ev.preventDefault(); }
-      else if (k === 'Enter' || k === '=') { apply(); ev.preventDefault(); }
-      else if (k === 'Escape') { ev.preventDefault(); onClose(); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
-
-  const Key = ({ label, onClick, tint, span, big }) => (
-    <button onClick={onClick} style={{
-      all: 'unset', cursor: 'pointer', textAlign: 'center',
-      gridColumn: span ? `span ${span}` : undefined,
-      padding: '16px 0', borderRadius: 12,
-      background: tint ? `color-mix(in srgb, ${tint} 16%, var(--bg-3))` : 'var(--bg-3)',
-      border: `1px solid ${tint ? `color-mix(in srgb, ${tint} 45%, transparent)` : 'var(--line-strong)'}`,
-      color: tint || 'var(--text)',
-      fontFamily: 'JetBrains Mono', fontSize: big ? 20 : 18, fontWeight: 700,
-    }}>{label}</button>
-  );
-
-  return createPortal(
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', animation: 'fadeIn .15s ease' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 20px)', animation: 'sheetUp .26s cubic-bezier(.22,.61,.36,1)' }}>
-        <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
-        {/* Display */}
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, padding: '6px 8px 14px' }}>
-          <span className="mono" style={{ fontSize: 26, fontWeight: 700, color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {expr || '0'}{hasOp && !isNaN(preview) ? <span style={{ color: 'var(--text-3)' }}>  = {preview}</span> : ''}
-          </span>
-          <span className="mono" style={{ fontSize: 13, color: 'var(--text-3)', flexShrink: 0 }}>{isWeight ? (asLb ? 'lb' : 'kg') : unit}</span>
-        </div>
-        {isWeight && (
-          <button onClick={() => onApply(0)} className="mono" style={{
-            all: 'unset', cursor: 'pointer', display: 'block', width: '100%', boxSizing: 'border-box',
-            textAlign: 'center', margin: '0 0 12px', padding: '9px 0', borderRadius: 10,
-            background: 'color-mix(in srgb, var(--accent-2) 12%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--accent-2) 40%, transparent)',
-            color: 'var(--accent-2)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
-          }}>MARK AS BODYWEIGHT (BW)</button>
-        )}
-        {/* On a two-handed movement the keypad takes the total, so say so and
-            show what that works out to per hand as it's typed. */}
-        {isWeight && split > 1 && (() => {
-          // Track what's being typed; fall back to the set's current weight
-          // while the field is empty so the readout is never blank.
-          const typed = hasOp ? preview : parseFloat(expr);
-          const kg = isNaN(typed) ? value : (asLb ? typed * 0.45359237 : typed);
-          const sp = splitLoad(kg, split);
-          return (
-            <div className="mono" style={{
-              display: 'flex', justifyContent: 'space-between', gap: 10, margin: '-6px 8px 12px',
-              padding: '7px 10px', borderRadius: 8, fontSize: 9.5, letterSpacing: '0.06em',
-              background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
-            }}>
-              <span style={{ color: 'var(--text-3)', fontWeight: 700 }}>TOTAL WEIGHT</span>
-              <span style={{ color: 'var(--accent)', fontWeight: 800 }}>
-                {sp ? `${sp.n} × ${sp.each}kg EACH HAND` : `${split} WEIGHTS`}
-              </span>
-            </div>
-          );
-        })()}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-          <Key label="1" onClick={() => push('1')} />
-          <Key label="2" onClick={() => push('2')} />
-          <Key label="3" onClick={() => push('3')} />
-          {isWeight
-            ? <Key label={asLb ? 'LB' : 'KG'} onClick={() => setAsLb(v => !v)} tint="var(--text-2)" />
-            : <Key label="C" onClick={() => setExpr('')} tint="var(--text-2)" />}
-          <Key label="4" onClick={() => push('4')} />
-          <Key label="5" onClick={() => push('5')} />
-          <Key label="6" onClick={() => push('6')} />
-          <Key label="+" onClick={() => push('+')} tint="var(--accent)" />
-          <Key label="7" onClick={() => push('7')} />
-          <Key label="8" onClick={() => push('8')} />
-          <Key label="9" onClick={() => push('9')} />
-          <Key label="−" onClick={() => push('-')} tint="var(--accent)" />
-          <Key label="." onClick={() => push('.')} />
-          <Key label="0" onClick={() => push('0')} />
-          <Key label="⌫" onClick={back} tint="var(--text-2)" />
-          <Key label="=" onClick={apply} tint="var(--accent-2)" />
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 // Reps as a number. A set the client just ticked off without retyping still
 // holds the prescribed value as a STRING ("10", or a range like "8-12"), so
 // anything that treated a non-number as zero silently ignored every set the

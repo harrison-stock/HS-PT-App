@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase'
 import { HexShape } from './components/hex'
 import { BrandIcon } from './components/BrandIcon'
 import { HexLoader } from './components/Loading'
-import { IconHome, IconCalendar, IconChart, IconBook, IconUser, IconBolt, IconActivity, IconDumbbell, IconDoc, IconPlay } from './components/icons'
+import { IconHome, IconCalendar, IconChart, IconBook, IconUser, IconBolt, IconActivity, IconDumbbell, IconDoc, IconPlay, IconX2 } from './components/icons'
 import { Login, SetPassword } from './screens/Login'
 import { Dashboard } from './screens/Dashboard'
 import { unreadCount, subscribeNotifications, maybeBrowserNotify, requestNotifyPermission } from './lib/notifications'
@@ -342,7 +342,7 @@ export default function App() {
 
   let ScreenEl;
   if (screen === 'workouts')        ScreenEl = <Workouts go={navigate} openPreview={previewWorkoutId} userId={activeUserId}/>;
-  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={activeUserId} resume={logResume} edit={logEdit}/>;
+  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={activeUserId} resume={logResume} edit={logEdit} onExitClientView={impersonating ? exitClientView : undefined}/>;
   else if (screen === 'progress')   ScreenEl = <Progress go={navigate} userId={activeUserId}/>;
   else if (screen === 'body')       ScreenEl = <Body go={navigate} userId={activeUserId} trainerId={impersonating ? session.user.id : profile?.trainer_id}/>;
   else if (screen === 'resources')  ScreenEl = <Resources go={navigate} userId={session.user.id} isTrainer={navIsTrainer}/>;
@@ -382,33 +382,10 @@ export default function App() {
       color: 'var(--text)',
       position: 'relative',
       overflow: 'hidden',
-      // While impersonating, the banner below already clears the notch and the
-      // screen wrapper is offset beneath it - so screens must not add the inset
-      // a second time (that stacked up as a big empty gap under the banner).
-      ...(clientViewId ? { '--safe-top': '0px' } : null),
     }}>
-      {clientViewId && (
-        <div onClick={exitClientView} style={{
-          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300,
-          paddingTop: 'env(safe-area-inset-top, 0px)', cursor: 'pointer',
-          background: `color-mix(in srgb, var(--c-amber) 22%, var(--bg-0))`,
-          borderBottom: '1px solid color-mix(in srgb, var(--c-amber) 55%, transparent)',
-        }}>
-          <div style={{ minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px' }}>
-            <div className="mono" style={{ fontSize: 10, letterSpacing: '0.08em', color: 'var(--c-amber)', fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              ◉ VIEWING {clientViewName?.toUpperCase() || 'CLIENT'}'S APP
-            </div>
-            <span className="mono" style={{
-              flexShrink: 0, fontSize: 10, letterSpacing: '0.1em',
-              color: 'var(--on-accent)', fontWeight: 800, padding: '7px 14px', marginLeft: 10,
-              background: 'var(--c-amber)', borderRadius: 8,
-            }}>✕ EXIT</span>
-          </div>
-        </div>
-      )}
       {/* A flex column, so the screen inside takes its height from flex rather
           than from a percentage of this box - see the note on .scroller. */}
-      <div key={screen} className="screen-enter" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', marginTop: clientViewId ? 'calc(env(safe-area-inset-top, 0px) + 45px)' : 0 }}>
+      <div key={screen} className="screen-enter" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
         <ErrorBoundary key={screen} onHome={() => navigate(homeScreen)}>
           <React.Suspense fallback={
             <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
@@ -419,7 +396,7 @@ export default function App() {
           </React.Suspense>
         </ErrorBoundary>
       </div>
-      {showNav && <BottomNav screen={screen} go={navigate} isTrainer={navIsTrainer}/>}
+      {showNav && <BottomNav screen={screen} go={navigate} isTrainer={navIsTrainer} impersonating={impersonating} onExitClientView={exitClientView}/>}
 
       {resumePrompt && screen !== 'log' && (
         <ResumeWorkoutPrompt
@@ -492,7 +469,7 @@ function ResumeWorkoutPrompt({ snap, onResume, onDiscard }) {
   );
 }
 
-function BottomNav({ screen, go, isTrainer }) {
+function BottomNav({ screen, go, isTrainer, impersonating, onExitClientView }) {
   const items = isTrainer ? [
     { id: 'coach',      label: 'COACH',     brand: 'Hub' },
     { id: 'programmes', label: 'BUILD',     brand: 'Calendar' },
@@ -532,6 +509,17 @@ function BottomNav({ screen, go, isTrainer }) {
           </button>
         );
       })}
+      {/* The way back out of a client's app. This replaced a banner pinned
+          across the top of every screen, which ate a strip of the viewport
+          for something needed once per visit. */}
+      {impersonating && (
+        <button onClick={onExitClientView} style={{ color: 'var(--c-amber)' }}>
+          <div style={{ position: 'relative', height: 32, width: 38, display: 'grid', placeItems: 'center', marginBottom: 2 }}>
+            <IconX2 size={22} />
+          </div>
+          <span>EXIT</span>
+        </button>
+      )}
     </div>
   );
 }
