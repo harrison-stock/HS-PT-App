@@ -10,7 +10,7 @@ import { copyDayToSlots } from '../lib/programmeCopy'
 import { splitLoad, guessSplit } from '../lib/loadSplit'
 import { toast } from '../lib/toast'
 
-const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DOW = ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7'];
 const SECTION_LABEL = { MAIN: 'Workout', PULSE_RAISER: 'Pulse Raiser', BANDED: 'Activation', COOLDOWN: 'Cooldown' };
 const sectionTag = (kind) => kind === 'BANDED' ? 'FREESTYLE' : 'REGULAR';
 const sectionColor = (kind) => kind === 'PULSE_RAISER' ? 'var(--c-coral)' : kind === 'BANDED' ? 'var(--c-amber)' : kind === 'COOLDOWN' ? 'var(--accent-2)' : 'var(--accent)';
@@ -47,7 +47,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
   const [copying, setCopying]   = React.useState(false);
   const [creatingKey, setCreatingKey] = React.useState(null); // col.key currently being created
   const [drag, setDrag] = React.useState(null); // { exId, fromSectionId } - a movement being dragged to another day
-  const [hoverSectionId, setHoverSectionId] = React.useState(null);
+  const [hover, setHover] = React.useState(null); // { sectionId, index } - where it'll land if dropped now
   const isDesktop = useDesktop();
 
   const weeks = [];
@@ -130,31 +130,29 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
   };
 
   // Track a drag across the whole board (window-level, since the drop target
-  // can be a different day's column entirely) and resolve it on release.
+  // can be a different day's column entirely) and resolve it on release. The
+  // same hit-test drives both the live "landing here" placeholder and the
+  // actual drop, so the card always ends up exactly where the preview showed.
   React.useEffect(() => {
     if (!drag) return;
-    const targetFromPoint = (ev) => {
-      const el = document.elementFromPoint(ev.clientX, ev.clientY);
-      return el?.closest('[data-section-id]') || null;
-    };
-    const onMove = (ev) => {
-      const secEl = targetFromPoint(ev);
-      setHoverSectionId(secEl ? secEl.getAttribute('data-section-id') : null);
-    };
-    const onUp = (ev) => {
-      const secEl = targetFromPoint(ev);
-      if (secEl) {
-        const toSectionId = secEl.getAttribute('data-section-id');
-        const rows = [...secEl.querySelectorAll('[data-ex-id]')].filter(r => r.getAttribute('data-ex-id') !== drag.exId);
-        let idx = rows.length;
-        for (let i = 0; i < rows.length; i++) {
-          const r = rows[i].getBoundingClientRect();
-          if (ev.clientY < r.top + r.height / 2) { idx = i; break; }
-        }
-        moveExerciseTo(drag.exId, drag.fromSectionId, toSectionId, idx);
+    const hitTest = (ev) => {
+      const secEl = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-section-id]');
+      if (!secEl) return null;
+      const sectionId = secEl.getAttribute('data-section-id');
+      const rows = [...secEl.querySelectorAll('[data-ex-id]')].filter(r => r.getAttribute('data-ex-id') !== drag.exId);
+      let index = rows.length;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i].getBoundingClientRect();
+        if (ev.clientY < r.top + r.height / 2) { index = i; break; }
       }
+      return { sectionId, index };
+    };
+    const onMove = (ev) => setHover(hitTest(ev));
+    const onUp = (ev) => {
+      const hit = hitTest(ev);
+      if (hit) moveExerciseTo(drag.exId, drag.fromSectionId, hit.sectionId, hit.index);
       setDrag(null);
-      setHoverSectionId(null);
+      setHover(null);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -272,7 +270,7 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
                 onOpenOptions={(ex) => setOptionsExId(ex.id)}
                 onCopyDay={(c) => setCopyFrom({ day: c.day, title: c.title, sub: c.sub })}
                 onCreateDay={createDay} creating={creatingKey === col.key}
-                drag={drag} hoverSectionId={hoverSectionId}
+                drag={drag} hover={hover}
                 onDragStart={(exId, sectionId) => setDrag({ exId, fromSectionId: sectionId })}/>
             ))}
           </div>
@@ -368,7 +366,7 @@ function CopyDaySheet({ source, weeks, busy, hasDay, onClose, onCopy }) {
               <button key={d} onClick={() => addAll(dowKeys(i))} className="mono" title={`Every ${d}`} style={{
                 all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '5px 0', borderRadius: 6,
                 fontSize: 8, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--text-3)',
-              }}>{d.toUpperCase()}</button>
+              }}>{d.replace('Day ', 'D')}</button>
             ))}
             {weeks.map(w => (
               <React.Fragment key={`${w.phaseId}|${w.weekInPhase}`}>
@@ -426,7 +424,7 @@ function CopyDaySheet({ source, weeks, busy, hasDay, onClose, onCopy }) {
   );
 }
 
-function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, onCopyDay, onCreateDay, creating, drag, hoverSectionId, onDragStart }) {
+function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, onCopyDay, onCreateDay, creating, drag, hover, onDragStart }) {
   const day = col.day;
   const sections = day ? [...(day.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order) : [];
   return (
@@ -462,7 +460,7 @@ function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onA
             <PlannerSection key={s.id} s={s}
               onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet}
               onDelExercise={onDelExercise} onAddExercise={onAddExercise} onOpenOptions={onOpenOptions}
-              drag={drag} isHoverTarget={hoverSectionId === s.id} onDragStart={onDragStart}/>
+              drag={drag} hoverIndex={hover?.sectionId === s.id ? hover.index : null} onDragStart={onDragStart}/>
           ))}
         </div>
       )}
@@ -470,7 +468,7 @@ function PlannerColumn({ col, onPatchSet, onAddSet, onDelSet, onDelExercise, onA
   );
 }
 
-function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, drag, isHoverTarget, onDragStart }) {
+function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAddExercise, onOpenOptions, drag, hoverIndex, onDragStart }) {
   const col = sectionColor(s.kind);
   const exercises = [...(s.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
 
@@ -480,6 +478,19 @@ function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAd
   // it's the drag's origin (to dim its own row) or the current hover target.
   const isDesktop = useDesktop();
   const draggingExId = drag && drag.fromSectionId === s.id ? drag.exId : null;
+  const isHoverTarget = hoverIndex != null;
+
+  // A "landing here" placeholder - a hologram-style outline slotted into the
+  // list at the index the drop would use, so the preview and the actual drop
+  // always agree on where the card ends up.
+  const placeholder = (
+    <div style={{
+      height: 30, borderRadius: 7, border: '1.5px dashed var(--accent)',
+      background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+      boxShadow: '0 0 calc(10px * var(--glow)) var(--accent-glow)',
+      animation: 'pulse-accent 1.1s ease-in-out infinite',
+    }}/>
+  );
 
   return (
     <div style={{
@@ -491,14 +502,18 @@ function PlannerSection({ s, onPatchSet, onAddSet, onDelSet, onDelExercise, onAd
         <span className="mono" style={{ fontSize: 7.5, color: 'var(--text-3)', letterSpacing: '0.1em', fontWeight: 700 }}>{sectionTag(s.kind)}</span>
       </div>
       <div data-section-id={s.id} style={{ padding: 8, display: 'grid', gap: 8 }}>
+        {isHoverTarget && hoverIndex === 0 && placeholder}
         {exercises.map((ex, i) => (
-          <PlannerExercise key={ex.id} ex={ex} idx={i}
-            onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet} onDelExercise={onDelExercise}
-            onOpenOptions={onOpenOptions}
-            dragging={draggingExId === ex.id}
-            dragHandle={isDesktop
-              ? { onPointerDown: (ev) => { ev.preventDefault(); ev.stopPropagation(); onDragStart(ex.id, s.id); } }
-              : null}/>
+          <React.Fragment key={ex.id}>
+            <PlannerExercise ex={ex} idx={i}
+              onPatchSet={onPatchSet} onAddSet={onAddSet} onDelSet={onDelSet} onDelExercise={onDelExercise}
+              onOpenOptions={onOpenOptions}
+              dragging={draggingExId === ex.id}
+              dragHandle={isDesktop
+                ? { onPointerDown: (ev) => { ev.preventDefault(); ev.stopPropagation(); onDragStart(ex.id, s.id); } }
+                : null}/>
+            {isHoverTarget && hoverIndex === i + 1 && placeholder}
+          </React.Fragment>
         ))}
         <button onClick={() => onAddExercise(s.id, exercises.length)} style={{
           all: 'unset', cursor: 'pointer', textAlign: 'center', padding: '7px 0', borderRadius: 7,
