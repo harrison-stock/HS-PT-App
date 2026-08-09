@@ -175,7 +175,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit }) {
                     }
                   : {
                       reps: st.reps_text || String(st.reps ?? 8),
-                      kg: parseFloat(st.weight_kg) || null,
+                      // 0 is a real prescription (bodyweight); null means the
+                      // coach left it open, so keep the two apart.
+                      kg: st.weight_kg == null ? null : (parseFloat(st.weight_kg) || 0),
                       band: st.band ?? null,
                       perSide: !!ex.unilateral,
                       kind: (st.kind && st.kind !== 'WORK') ? st.kind : undefined,
@@ -1885,11 +1887,11 @@ function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, split = 1,
       <SetTypeBadge set={set} setNum={setNum} onKind={onKind} />
       {banded ?
       <BandCell band={set.band} done={set.done} onChange={onBand} /> :
-      set.kg != null ?
-      <NumCell value={set.kg} suffix="kg" done={set.done} split={split} splitView={splitView} delay={delay} onChange={onKg} /> :
+      set.time ?
       <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            {set.time ? <><IconTimer size={11} />TIMED</> : 'BW'}
-          </span>}
+            <IconTimer size={11} />TIMED
+          </span> :
+      <NumCell value={set.kg} suffix="kg" done={set.done} split={split} splitView={splitView} delay={delay} onChange={onKg} />}
       {set.time ?
       <TimeCell value={set.reps} done={set.done} onChange={onReps} /> :
       <RepsCell set={set} onChange={onReps} />}
@@ -1984,7 +1986,7 @@ function RepsCell({ set, onChange }) {
 function LoadHeader({ ex, splitView, onToggle }) {
   const base = { letterSpacing: '0.08em', whiteSpace: 'nowrap' };
   if (ex.banded) return <span style={base}>BAND</span>;
-  if (ex.sets[0]?.kg == null) return <span style={base}>TYPE</span>;
+  if (ex.sets[0]?.time) return <span style={base}>TYPE</span>;
   if (!(ex.split > 1)) return <span style={base}>KG</span>;
   return (
     <button onClick={onToggle} aria-pressed={splitView}
@@ -2032,7 +2034,7 @@ function NumCell({ value, suffix, done, split = 1, splitView = false, delay = 0,
         ) : (
           <>
             <span key={`t${splitView}`} className={split > 1 ? 'split-m' : undefined} style={{ ...numStyle, ...(split > 1 ? stagger : null) }}>
-              {value || 'BW'}
+              {value == null ? '–' : (value || 'BW')}
             </span>
             {suffix && !!value && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{suffix}</span>}
           </>

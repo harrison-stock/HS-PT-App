@@ -604,11 +604,12 @@ function PlannerExercise({ ex, idx, onPatchSet, onAddSet, onDelSet, onDelExercis
                       already says these are totals. */}
                   <Cell value={st.weight_kg}
                     format={v => {
+                      if (v == null) return '–';
                       if (!(v > 0)) return 'BW';
                       const sp = splitLoad(v, ex.load_split);
                       return sp ? `${v} · ${sp.n}x${sp.each}` : String(v);
                     }}
-                    onCommit={v => onPatchSet(st.id, { weight_kg: parseFloat(v) || 0 })}/>
+                    onCommit={v => onPatchSet(st.id, { weight_kg: v.trim() === '' || v.trim() === '-' ? null : (parseFloat(v) || 0) })}/>
                   <Cell value={st.reps_text || st.reps || ''} onCommit={v => onPatchSet(st.id, { reps_text: v, reps: parseInt(v) || 0 })}/>
                 </>
               )}

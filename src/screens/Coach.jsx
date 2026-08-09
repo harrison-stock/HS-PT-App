@@ -1784,12 +1784,10 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
               background: 'var(--bg-2)', border: '1px solid var(--line)',
               borderRadius: 10, borderLeft: '2px solid var(--accent)',
             }}>
-              <div style={{
-                width: 30, height: 30, borderRadius: 8,
+              <Hex size={32} square style={{
                 background: 'var(--accent-soft)', border: '1px solid var(--accent)',
-                display: 'grid', placeItems: 'center',
                 color: 'var(--accent)', fontFamily: 'Orbitron', fontWeight: 800, fontSize: 12,
-              }}>P{i+1}</div>
+              }}>P{i+1}</Hex>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{ph.name}</div>
                 <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 3 }}>
@@ -1843,6 +1841,7 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
 
       <div style={{ padding: '12px 18px calc(env(safe-area-inset-bottom, 0px) + 28px)', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-primary" style={{ flex: 1 }} onClick={onEdit}>EDIT</button>
           <button
             className="btn-ghost"
             style={{ flex: 1, opacity: duplicating ? 0.6 : 1 }}
@@ -1851,25 +1850,24 @@ function ProgrammeSheet({ p, trainerId, onClose, onEdit, onDuplicate, onDelete }
           >
             {duplicating ? 'COPYING…' : 'DUPLICATE'}
           </button>
-          <button className="btn-primary" style={{ flex: 1 }} onClick={onEdit}>EDIT</button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            style={{
+              all: 'unset', cursor: 'pointer',
+              flex: 1, boxSizing: 'border-box',
+              padding: '11px 0', textAlign: 'center',
+              borderRadius: 10, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
+              fontFamily: 'JetBrains Mono',
+              background: confirmDelete ? 'color-mix(in srgb, var(--c-coral) 18%, transparent)' : 'transparent',
+              border: `1px solid ${confirmDelete ? 'var(--c-coral)' : 'color-mix(in srgb, var(--c-coral) 40%, transparent)'}`,
+              color: 'var(--c-coral)',
+              transition: 'all 0.15s',
+            }}
+          >
+            {deleting ? 'DELETING…' : confirmDelete ? 'CONFIRM?' : 'DELETE'}
+          </button>
         </div>
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          style={{
-            all: 'unset', cursor: 'pointer',
-            width: '100%', boxSizing: 'border-box',
-            padding: '11px 0', textAlign: 'center',
-            borderRadius: 10, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
-            fontFamily: 'JetBrains Mono',
-            background: confirmDelete ? 'color-mix(in srgb, var(--c-coral) 18%, transparent)' : 'transparent',
-            border: `1px solid ${confirmDelete ? 'var(--c-coral)' : 'color-mix(in srgb, var(--c-coral) 40%, transparent)'}`,
-            color: 'var(--c-coral)',
-            transition: 'all 0.15s',
-          }}
-        >
-          {deleting ? 'DELETING…' : confirmDelete ? 'CONFIRM DELETE' : 'DELETE PROGRAMME'}
-        </button>
         {confirmDelete && !deleting && (
           <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', textAlign: 'center' }}>
             This cannot be undone. Tap again to confirm.
