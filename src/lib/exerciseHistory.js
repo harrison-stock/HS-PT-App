@@ -22,18 +22,40 @@ function formatMMSS(secs) {
 // in.() list - makes the quotes part of the pattern here, so every one of these
 // lookups came back empty. Commas are safe unquoted: PostgREST only splits a
 // value on commas inside in.() and or=() lists.
-export async function loadExerciseHistory(clientId, exerciseName, limit = 5) {
-  if (!clientId || !exerciseName) return [];
-  const { data } = await supabase
+// `libraryId` identifies the movement no matter what a given programme called
+// it, so a squat logged as "Barbell Squat" still shows up under "Back Squat".
+// Sets logged before the id existed (or against a free-typed exercise that was
+// never picked from the library) carry no id, so the name lookup stays as a
+// fallback and the two results are merged.
+export async function loadExerciseHistory(clientId, exerciseName, limit = 5, libraryId = null) {
+  if (!clientId || (!exerciseName && !libraryId)) return [];
+
+  const base = () => supabase
     .from('workout_sessions')
     .select('id, completed_at, logged_sets!inner(set_index, actual_reps, actual_weight_kg, actual_band, actual_time_secs)')
     .eq('client_id', clientId)
     .not('completed_at', 'is', null)
-    .ilike('logged_sets.exercise_name', exerciseName.trim())
     .order('completed_at', { ascending: false })
     .limit(limit);
 
-  return (data || []).map(sess => {
+  const queries = [];
+  if (libraryId) queries.push(base().eq('logged_sets.library_exercise_id', libraryId));
+  if (exerciseName) queries.push(base().ilike('logged_sets.exercise_name', exerciseName.trim()));
+
+  const results = await Promise.all(queries);
+  // Same session can come back from both lookups - key by id, keep the richer row.
+  const byId = new Map();
+  for (const { data } of results) {
+    for (const sess of (data || [])) {
+      const prev = byId.get(sess.id);
+      if (!prev || (sess.logged_sets || []).length > (prev.logged_sets || []).length) byId.set(sess.id, sess);
+    }
+  }
+  const merged = [...byId.values()]
+    .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))
+    .slice(0, limit);
+
+  return merged.map(sess => {
     const rows = [...(sess.logged_sets || [])].sort((a, b) => a.set_index - b.set_index);
     const sets = rows.map(r => {
       if (r.actual_time_secs) return { warmup: false, label: formatMMSS(r.actual_time_secs) };

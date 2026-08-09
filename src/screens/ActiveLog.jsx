@@ -149,7 +149,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
     if (!dayId) return;
     setDbLoading(true);
     setLoadError(false);
-    const SECTION_FIELDS = (withIntro) => `id, kind, title, sort_order${withIntro ? ', intro' : ''}, section_exercises ( id, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) )`;
+    const SECTION_FIELDS = (withIntro) => `id, kind, title, sort_order${withIntro ? ', intro' : ''}, section_exercises ( id, library_exercise_id, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) )`;
     (async () => {
       let { data, error } = await supabase
         .from('programme_days')
@@ -196,7 +196,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
                     }));
               rows.push({
                 id: ex.id, name: ex.name, img: ex.img_url || '',
-                base: { name: ex.name, img: ex.img_url || '' },
+                libraryId: ex.library_exercise_id ?? null,
+                base: { name: ex.name, img: ex.img_url || '', libraryId: ex.library_exercise_id ?? null },
                 banded: !!ex.banded, unilateral: !!ex.unilateral,
                 split: parseInt(ex.load_split) || 1,
                 phase, tempo: ex.tempo || '', ss: ex.superset_group ?? null,
@@ -325,7 +326,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       exercises.forEach(ex => {
         ex.sets.forEach((s, i) => {
           if (s.done) pendingSets.push({
-            exercise_id: isDbId(ex.id) ? ex.id : null, exercise_name: ex.name, set_index: i,
+            exercise_id: isDbId(ex.id) ? ex.id : null, exercise_name: ex.name,
+            library_exercise_id: ex.libraryId ?? null, set_index: i,
             actual_reps: s.time ? null : (typeof s.reps === 'number' ? s.reps : (parseInt(s.reps) || null)),
             actual_weight_kg: (s.time || s.band) ? null : (s.kg || null),
             actual_band: s.band || null,
@@ -453,6 +455,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
         name: alt.name,
         img: alt.img || e.img,
         target: alt.target,
+        // A coach-set alternate carries no library id; that row falls back to
+        // name matching, same as before.
+        libraryId: alt.libraryId ?? null,
         // keep same set scheme; reset perf
         sets: e.sets.map((s) => ({ ...s, done: false, active: false, rpe: null }))
       };
@@ -497,8 +502,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       }
       const newEx = {
         id: 'cx' + Date.now(),
-        name: ex.name, img: ex.img || '',
-        base: { name: ex.name, img: ex.img || '' },
+        name: ex.name, img: ex.img || '', libraryId: ex.libraryId ?? null,
+        base: { name: ex.name, img: ex.img || '', libraryId: ex.libraryId ?? null },
         phase: phaseId, ss: null, banded: !!ex.banded, unilateral: !!ex.unilateral,
         split: parseInt(ex.load_split) || guessSplit(ex.name),
         tempo: '', rest: 60, coach: '', alternatives: [],
@@ -535,8 +540,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       const ssVal = anchor.ss != null ? anchor.ss : (Date.now() % 1000000);
       const newEx = {
         id: 'cx' + Date.now(),
-        name: ex.name, img: ex.img || '',
-        base: { name: ex.name, img: ex.img || '' },
+        name: ex.name, img: ex.img || '', libraryId: ex.libraryId ?? null,
+        base: { name: ex.name, img: ex.img || '', libraryId: ex.libraryId ?? null },
         phase: anchor.phase, ss: ssVal, banded: !!ex.banded, unilateral: !!ex.unilateral,
         split: parseInt(ex.load_split) || guessSplit(ex.name),
         tempo: '', rest: 60, coach: '', alternatives: [],
@@ -1687,13 +1692,13 @@ function AlternativesSheet({ ex, onClose, onPick }) {
       .filter(r => !taken.has(norm(r.name)) && score(r) > 0)
       .sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name))
       .slice(0, 6)
-      .map(r => ({ name: r.name, img: r.img_url || r.img || '', target: '', reason: 'Suggested' }));
+      .map(r => ({ libraryId: r.id, name: r.name, img: r.img_url || r.img || '', target: '', reason: 'Suggested' }));
   }, [lib, ex]);
 
   if (browse) {
     return (
       <ExercisePicker title="SWAP EXERCISE" onClose={() => setBrowse(false)}
-        onPick={(p) => onPick({ name: p.name, img: p.img, target: '' })} />
+        onPick={(p) => onPick({ libraryId: p.libraryId ?? null, name: p.name, img: p.img, target: '' })} />
     );
   }
 
@@ -1743,7 +1748,7 @@ function AlternativesSheet({ ex, onClose, onPick }) {
 
         {(() => {
           // The original (to revert to) plus whatever the coach set up.
-          const opts = [{ name: ex.base?.name || ex.name, img: ex.base?.img || ex.img, target: '', reason: 'Original', _orig: true },
+          const opts = [{ libraryId: ex.base?.libraryId ?? null, name: ex.base?.name || ex.name, img: ex.base?.img || ex.img, target: '', reason: 'Original', _orig: true },
             ...(ex.alternatives || [])].filter(o => o.name !== ex.name);
           const row = (alt, i, tag, tagColor) => (
             <button key={`${tag}${i}`} onClick={() => onPick(alt)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
@@ -2384,9 +2389,9 @@ function PriorProgressSheet({ ex, userId, onClose }) {
   React.useEffect(() => {
     let alive = true;
     if (!userId) { setSessions([]); return; }
-    loadExerciseHistory(userId, ex.name, 5).then(out => { if (alive) setSessions(out); });
+    loadExerciseHistory(userId, ex.name, 5, ex.libraryId ?? null).then(out => { if (alive) setSessions(out); });
     return () => { alive = false; };
-  }, [ex.name, userId]);
+  }, [ex.name, ex.libraryId, userId]);
 
   const trend = (sessions || []).map((s) => s.top).filter((v) => v != null).reverse();
   const isWeighted = trend.length >= 2;

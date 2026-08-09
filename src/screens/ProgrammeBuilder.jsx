@@ -134,7 +134,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         const ex = s.items[eOrd];
         const { data: exRow } = await supabase
           .from('section_exercises')
-          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, banded: ex.banded || false, unilateral: ex.unilateral || false, load_split: ex.split || 1, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd })
+          .insert({ section_id: sec.id, library_exercise_id: ex.libraryId ?? null, name: ex.name, img_url: ex.img, timed: ex.timed, banded: ex.banded || false, unilateral: ex.unilateral || false, load_split: ex.split || 1, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd })
           .select('id').single();
         if (!exRow) continue;
 
@@ -266,7 +266,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const addEx = (sIdx, ex = {}) => {
     const id = 'x' + Date.now();
     setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({
-      ...s, items: [...s.items, { id, name: ex.name || 'New Exercise', img: ex.img || IMG_FALLBACK, timed: false, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name), tempo: '', coachNotes: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6, band: ex.banded ? 'medium' : null })] }],
+      ...s, items: [...s.items, { id, libraryId: ex.libraryId ?? null, name: ex.name || 'New Exercise', img: ex.img || IMG_FALLBACK, timed: false, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name), tempo: '', coachNotes: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6, band: ex.banded ? 'medium' : null })] }],
     })) }));
     setDirty(true);
     setExpandedExId(id);
@@ -587,7 +587,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               <ExercisePicker
                 onClose={() => setSwitchingEx(null)}
                 onPick={(ex) => {
-                  updateEx(switchingEx.sIdx, switchingEx.eIdx, { name: ex.name, img: ex.img, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name) });
+                  updateEx(switchingEx.sIdx, switchingEx.eIdx, { libraryId: ex.libraryId ?? null, name: ex.name, img: ex.img, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name) });
                   setSwitchingEx(null);
                 }}
               />
@@ -1434,7 +1434,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
             color: 'var(--accent)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
           }}>◷ CLIENT HISTORY</button>
           {historyOpen && (
-            <ClientHistorySheet exerciseName={e.name} trainerId={trainerId} programmeId={programmeId}
+            <ClientHistorySheet exerciseName={e.name} libraryId={e.libraryId ?? null} trainerId={trainerId} programmeId={programmeId}
               onClose={() => setHistoryOpen(false)} />
           )}
 
@@ -1824,7 +1824,7 @@ function StepBtn({ children, onClick }) {
 // What a client has actually lifted on this movement, so the next block can be
 // written against real numbers instead of memory. Defaults to whoever the
 // programme is assigned to; any of the coach's clients can be picked.
-function ClientHistorySheet({ exerciseName, trainerId, programmeId, onClose }) {
+function ClientHistorySheet({ exerciseName, libraryId, trainerId, programmeId, onClose }) {
   const [clients, setClients] = React.useState(null);
   const [clientId, setClientId] = React.useState(null);
   const [sessions, setSessions] = React.useState(null);
@@ -1858,9 +1858,9 @@ function ClientHistorySheet({ exerciseName, trainerId, programmeId, onClose }) {
     let alive = true;
     if (!clientId) { setSessions([]); return; }
     setSessions(null);
-    loadExerciseHistory(clientId, exerciseName, 8).then(out => { if (alive) setSessions(out); });
+    loadExerciseHistory(clientId, exerciseName, 8, libraryId).then(out => { if (alive) setSessions(out); });
     return () => { alive = false; };
-  }, [clientId, exerciseName]);
+  }, [clientId, exerciseName, libraryId]);
 
   const tops = (sessions || []).map(s => s.top).filter(v => v != null);
   const best = tops.length ? Math.max(...tops) : null;
@@ -2058,6 +2058,7 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
 
   React.useEffect(() => {
     loadExercises().then(rows => setLib(rows.map(e => ({
+      libraryId: e.id,
       name: e.name,
       img: e.thumbnail_url || videoThumb(e.video_url) || (e.photos && e.photos[0]) || IMG_FALLBACK,
       cat: (e.muscle_group || 'OTHER').toUpperCase(),
@@ -2109,7 +2110,7 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
               <div className="label" style={{ marginBottom: 8 }}>// {cat}</div>
               <div style={{ display: 'grid', gap: 6 }}>
                 {filtered.filter(e => e.cat === cat).map(ex => (
-                  <button key={ex.name} onClick={() => onPick({ name: ex.name, img: ex.img, banded: ex.banded, unilateral: ex.unilateral, split: ex.split })} style={{
+                  <button key={ex.name} onClick={() => onPick({ libraryId: ex.libraryId, name: ex.name, img: ex.img, banded: ex.banded, unilateral: ex.unilateral, split: ex.split })} style={{
                     all: 'unset', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: '10px 12px', background: 'var(--bg-2)',
@@ -2161,7 +2162,7 @@ function dbToSections(sections) {
   return sections.map(s => ({
     kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '',
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
-      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.load_split) || 1, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
+      id: ex.id, libraryId: ex.library_exercise_id ?? null, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.load_split) || 1, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
         id: 's'+st.id.slice(-8), kind: st.kind,
         repsText: st.reps_text || String(st.reps ?? 8),
