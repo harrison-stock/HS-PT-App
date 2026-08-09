@@ -47,7 +47,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const [showCopy, setShowCopy]           = React.useState(false);
 
   const phase = prog.phaseList[phaseIdx];
-  const days  = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const days  = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7'];
 
   // Load day from DB whenever phase/week/day or prog changes (but not in roadmap mode)
   React.useEffect(() => {

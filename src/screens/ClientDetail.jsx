@@ -2125,7 +2125,7 @@ function VaultTab({ c, trainerId }) {
 }
 
 // ── ASSIGN WORKOUT (duplicate from Coach.jsx for self-contained use) ───────
-const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7'];
 
 function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, onAssigned }) {
   const [mode, setMode]         = React.useState('all'); // 'all' = whole programme, 'day' = single day
