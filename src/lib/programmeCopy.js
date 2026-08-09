@@ -91,7 +91,7 @@ async function writeDayInto(src, target) {
     const exs = [...(s.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
     exs.forEach((e, i) => {
       exRows.push({
-        section_id: newSecId, name: e.name, img_url: e.img_url,
+        section_id: newSecId, library_exercise_id: e.library_exercise_id ?? null, name: e.name, img_url: e.img_url,
         timed: !!e.timed, banded: !!e.banded, unilateral: !!e.unilateral,
         load_split: e.load_split ?? 1,
         tempo: e.tempo || '', coach_notes: e.coach_notes || '',
@@ -229,7 +229,7 @@ export async function duplicateProgramme(trainerId, prog) {
       const exs = [...(src.section_exercises || [])].sort((a, b) => a.sort_order - b.sort_order);
       exs.forEach((e, i) => {
         exRows.push({
-          section_id: newSecId, name: e.name, img_url: e.img_url,
+          section_id: newSecId, library_exercise_id: e.library_exercise_id ?? null, name: e.name, img_url: e.img_url,
           timed: !!e.timed, banded: !!e.banded, unilateral: !!e.unilateral,
           load_split: e.load_split ?? 1,
           tempo: e.tempo || '', coach_notes: e.coach_notes || '',

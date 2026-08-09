@@ -41,8 +41,8 @@
 
   --glow: 1;
   --type-intensity: 1;
-  --density-pad: 16px;
-  --density-gap: 14px;
+  --density-pad: 18px;
+  --density-gap: 18px;
   --radius: 14px;
   --radius-lg: 20px;
   font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
@@ -165,7 +165,7 @@ body:has([data-role="trainer"]) {
 .pb-pickers { padding: 12px 14px 8px; }
 .pb-picker-grid { display: grid; gap: 12px; }
 .pb-body    { max-width: 720px; }
-.pb-sections { display: grid; grid-template-columns: minmax(0, 1fr); }
+.pb-sections { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 8px; }
 
 @media (min-width: 1100px) {
   .coach-wrap { padding-left: 40px; padding-right: 40px; }
@@ -173,7 +173,7 @@ body:has([data-role="trainer"]) {
   .pb-pickers { padding: 14px 28px 12px; }
   .pb-picker-grid { grid-template-columns: minmax(200px, 1fr) minmax(260px, 1.3fr) minmax(280px, 1.3fr); gap: 28px; align-items: start; }
   .pb-body    { max-width: 1320px; padding-left: 28px !important; padding-right: 28px !important; }
-  .pb-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; align-items: start; }
+  .pb-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; row-gap: 10px; align-items: start; }
   .sheet-panel { max-width: 700px; margin: 0 auto; width: 100%; }
 }
 
@@ -486,6 +486,35 @@ body:has([data-role="trainer"]) {
 
 @media (prefers-reduced-motion: reduce) {
   .split-l, .split-r, .split-x, .split-m { animation-duration: .01ms; }
+}
+
+/* ── Coach note ──────────────────────────────────────────────────
+   Something the coach wrote for this exact movement, so it shouldn't
+   read as another grey panel. Tinted, with an accent edge, and it
+   pulses a few times when the card comes into view - three beats, not
+   a loop, so it catches the eye once and then leaves you alone. */
+.coach-note {
+  position: relative;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  border-left: 3px solid var(--accent);
+  animation: noteAttention 1.5s cubic-bezier(.4,0,.6,1) 3;
+}
+@keyframes noteAttention {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 40%, transparent); }
+  45%      { box-shadow: 0 0 calc(16px * var(--glow)) 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+}
+/* The bell nudges in time with the first beats, then settles. */
+.coach-note-icon { display: inline-block; transform-origin: 50% 10%; animation: noteRing 1.5s ease-in-out 3; }
+@keyframes noteRing {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  8%  { transform: rotate(-13deg); }
+  16% { transform: rotate(11deg); }
+  24% { transform: rotate(-7deg); }
+  32% { transform: rotate(5deg); }
+  40% { transform: rotate(-2deg); }
 }
 
 /* ── Sign-in splash (console-style boot) ─────────────────────────

@@ -149,7 +149,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
     if (!dayId) return;
     setDbLoading(true);
     setLoadError(false);
-    const SECTION_FIELDS = (withIntro) => `id, kind, title, sort_order${withIntro ? ', intro' : ''}, section_exercises ( id, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) )`;
+    const SECTION_FIELDS = (withIntro) => `id, kind, title, sort_order${withIntro ? ', intro' : ''}, section_exercises ( id, library_exercise_id, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) )`;
     (async () => {
       let { data, error } = await supabase
         .from('programme_days')
@@ -196,7 +196,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
                     }));
               rows.push({
                 id: ex.id, name: ex.name, img: ex.img_url || '',
-                base: { name: ex.name, img: ex.img_url || '' },
+                libraryId: ex.library_exercise_id ?? null,
+                base: { name: ex.name, img: ex.img_url || '', libraryId: ex.library_exercise_id ?? null },
                 banded: !!ex.banded, unilateral: !!ex.unilateral,
                 split: parseInt(ex.load_split) || 1,
                 phase, tempo: ex.tempo || '', ss: ex.superset_group ?? null,
@@ -325,7 +326,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       exercises.forEach(ex => {
         ex.sets.forEach((s, i) => {
           if (s.done) pendingSets.push({
-            exercise_id: isDbId(ex.id) ? ex.id : null, exercise_name: ex.name, set_index: i,
+            exercise_id: isDbId(ex.id) ? ex.id : null, exercise_name: ex.name,
+            library_exercise_id: ex.libraryId ?? null, set_index: i,
             actual_reps: s.time ? null : (typeof s.reps === 'number' ? s.reps : (parseInt(s.reps) || null)),
             actual_weight_kg: (s.time || s.band) ? null : (s.kg || null),
             actual_band: s.band || null,
@@ -453,6 +455,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
         name: alt.name,
         img: alt.img || e.img,
         target: alt.target,
+        // A coach-set alternate carries no library id; that row falls back to
+        // name matching, same as before.
+        libraryId: alt.libraryId ?? null,
         // keep same set scheme; reset perf
         sets: e.sets.map((s) => ({ ...s, done: false, active: false, rpe: null }))
       };
@@ -497,8 +502,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       }
       const newEx = {
         id: 'cx' + Date.now(),
-        name: ex.name, img: ex.img || '',
-        base: { name: ex.name, img: ex.img || '' },
+        name: ex.name, img: ex.img || '', libraryId: ex.libraryId ?? null,
+        base: { name: ex.name, img: ex.img || '', libraryId: ex.libraryId ?? null },
         phase: phaseId, ss: null, banded: !!ex.banded, unilateral: !!ex.unilateral,
         split: parseInt(ex.load_split) || guessSplit(ex.name),
         tempo: '', rest: 60, coach: '', alternatives: [],
@@ -535,8 +540,8 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       const ssVal = anchor.ss != null ? anchor.ss : (Date.now() % 1000000);
       const newEx = {
         id: 'cx' + Date.now(),
-        name: ex.name, img: ex.img || '',
-        base: { name: ex.name, img: ex.img || '' },
+        name: ex.name, img: ex.img || '', libraryId: ex.libraryId ?? null,
+        base: { name: ex.name, img: ex.img || '', libraryId: ex.libraryId ?? null },
         phase: anchor.phase, ss: ssVal, banded: !!ex.banded, unilateral: !!ex.unilateral,
         split: parseInt(ex.load_split) || guessSplit(ex.name),
         tempo: '', rest: 60, coach: '', alternatives: [],
@@ -1164,12 +1169,7 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
         </div>
 
         {/* Coach note */}
-        {ex.coach &&
-        <div className="card" style={{ marginTop: 12, padding: 12 }}>
-            <div className="label" style={{ marginBottom: 6 }}>// COACH NOTE</div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>{ex.coach}</div>
-          </div>
-        }
+        {ex.coach && <CoachNote text={ex.coach} style={{ marginTop: 12 }} />}
       </div>
     </div>);
 
@@ -1186,6 +1186,24 @@ function kindPatch(set, kind) {
   }
   if (kind === 'PARTIAL' && typeof set.reps === 'number') patch.reps = Math.max(1, Math.round(set.reps / 2));
   return patch;
+}
+
+// A note the coach left on this movement. Pulses a few times as the card
+// arrives so it isn't read as just another panel, then sits quiet.
+function CoachNote({ text, style }) {
+  return (
+    <div className="coach-note" style={style}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+        <span className="coach-note-icon" style={{ color: 'var(--accent)', display: 'grid', placeItems: 'center' }} aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+          </svg>
+        </span>
+        <span className="label" style={{ color: 'var(--accent)' }}>// COACH NOTE</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.55 }}>{text}</div>
+    </div>
+  );
 }
 
 // Athlete-side comment field shown under the coach note.
@@ -1422,10 +1440,7 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
       }); })()}
       <AddSetControl onAdd={onAddSet} onRemove={e.sets.length > 1 ? onDelSet : null} />
       {e.coach && (
-        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--line)' }}>
-          <div className="label" style={{ marginBottom: 4 }}>// COACH NOTE</div>
-          <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>{e.coach}</div>
-        </div>
+        <div style={{ padding: '10px 12px' }}><CoachNote text={e.coach} /></div>
       )}
     </div>
   );
@@ -1687,13 +1702,13 @@ function AlternativesSheet({ ex, onClose, onPick }) {
       .filter(r => !taken.has(norm(r.name)) && score(r) > 0)
       .sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name))
       .slice(0, 6)
-      .map(r => ({ name: r.name, img: r.img_url || r.img || '', target: '', reason: 'Suggested' }));
+      .map(r => ({ libraryId: r.id, name: r.name, img: r.img_url || r.img || '', target: '', reason: 'Suggested' }));
   }, [lib, ex]);
 
   if (browse) {
     return (
       <ExercisePicker title="SWAP EXERCISE" onClose={() => setBrowse(false)}
-        onPick={(p) => onPick({ name: p.name, img: p.img, target: '' })} />
+        onPick={(p) => onPick({ libraryId: p.libraryId ?? null, name: p.name, img: p.img, target: '' })} />
     );
   }
 
@@ -1743,7 +1758,7 @@ function AlternativesSheet({ ex, onClose, onPick }) {
 
         {(() => {
           // The original (to revert to) plus whatever the coach set up.
-          const opts = [{ name: ex.base?.name || ex.name, img: ex.base?.img || ex.img, target: '', reason: 'Original', _orig: true },
+          const opts = [{ libraryId: ex.base?.libraryId ?? null, name: ex.base?.name || ex.name, img: ex.base?.img || ex.img, target: '', reason: 'Original', _orig: true },
             ...(ex.alternatives || [])].filter(o => o.name !== ex.name);
           const row = (alt, i, tag, tagColor) => (
             <button key={`${tag}${i}`} onClick={() => onPick(alt)} style={{ all: 'unset', cursor: 'pointer', display: 'block' }}>
@@ -2092,7 +2107,10 @@ function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay
   // an empty field so the client just types the number they used.
   const shown = draft !== null ? draft : (value == null ? '' : value === 0 ? 'BW' : String(shownValue));
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}>
+    // A label, so the whole cell focuses the field, while the input itself is
+    // sized to its value - otherwise a full-width input pushed "kg" away from
+    // the number it belongs to.
+    <label style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0, cursor: 'text' }}>
       <input
         value={shown}
         onChange={(e) => commit(e.target.value)}
@@ -2100,7 +2118,9 @@ function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay
         onBlur={() => setDraft(null)}
         inputMode="decimal" placeholder="–" aria-label="Weight"
         style={{
-          width: '100%', minWidth: 0, background: 'transparent', border: 0,
+          // +4px covers the letter-spacing 'ch' doesn't account for.
+          width: `calc(${Math.max(2, shown.length)}ch + 4px)`, minWidth: 0, flexShrink: 0,
+          background: 'transparent', border: 0,
           color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
           fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
           letterSpacing: '0.04em', outline: 'none',
@@ -2110,7 +2130,7 @@ function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay
       {halves
         ? <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', whiteSpace: 'nowrap', flexShrink: 0 }}>{halves.n}×{toDisplay(halves.each)}</span>
         : suffix && !!value && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0 }}>{suffix}</span>}
-    </div>);
+    </label>);
 
 }
 // Reps as a number. A set the client just ticked off without retyping still
@@ -2384,9 +2404,9 @@ function PriorProgressSheet({ ex, userId, onClose }) {
   React.useEffect(() => {
     let alive = true;
     if (!userId) { setSessions([]); return; }
-    loadExerciseHistory(userId, ex.name, 5).then(out => { if (alive) setSessions(out); });
+    loadExerciseHistory(userId, ex.name, 5, ex.libraryId ?? null).then(out => { if (alive) setSessions(out); });
     return () => { alive = false; };
-  }, [ex.name, userId]);
+  }, [ex.name, ex.libraryId, userId]);
 
   const trend = (sessions || []).map((s) => s.top).filter((v) => v != null).reverse();
   const isWeighted = trend.length >= 2;

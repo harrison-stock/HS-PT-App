@@ -134,7 +134,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
         const ex = s.items[eOrd];
         const { data: exRow } = await supabase
           .from('section_exercises')
-          .insert({ section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, banded: ex.banded || false, unilateral: ex.unilateral || false, load_split: ex.split || 1, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd })
+          .insert({ section_id: sec.id, library_exercise_id: ex.libraryId ?? null, name: ex.name, img_url: ex.img, timed: ex.timed, banded: ex.banded || false, unilateral: ex.unilateral || false, load_split: ex.split || 1, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd })
           .select('id').single();
         if (!exRow) continue;
 
@@ -266,7 +266,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
   const addEx = (sIdx, ex = {}) => {
     const id = 'x' + Date.now();
     setDay(d => ({ ...d, sections: d.sections.map((s, si) => si !== sIdx ? s : ({
-      ...s, items: [...s.items, { id, name: ex.name || 'New Exercise', img: ex.img || IMG_FALLBACK, timed: false, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name), tempo: '', coachNotes: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6, band: ex.banded ? 'medium' : null })] }],
+      ...s, items: [...s.items, { id, libraryId: ex.libraryId ?? null, name: ex.name || 'New Exercise', img: ex.img || IMG_FALLBACK, timed: false, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name), tempo: '', coachNotes: '', setsList: [mkSet('WORK', { reps: 10, weight: 0, rest: 60, intensity: 6, band: ex.banded ? 'medium' : null })] }],
     })) }));
     setDirty(true);
     setExpandedExId(id);
@@ -514,7 +514,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               onChange={(url) => { setDay(d => ({ ...d, img: url })); setDirty(true); }} />
 
             {/* Workout name */}
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 22 }}>
               <div className="label" style={{ marginBottom: 8 }}>// WORKOUT NAME</div>
               <input
                 value={day.title || ''}
@@ -530,7 +530,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
             </div>
 
             {/* Workout intro */}
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 22 }}>
               <div className="label" style={{ marginBottom: 8 }}>// WORKOUT INTRO</div>
               <textarea
                 value={day.intro || ''}
@@ -587,7 +587,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               <ExercisePicker
                 onClose={() => setSwitchingEx(null)}
                 onPick={(ex) => {
-                  updateEx(switchingEx.sIdx, switchingEx.eIdx, { name: ex.name, img: ex.img, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name) });
+                  updateEx(switchingEx.sIdx, switchingEx.eIdx, { libraryId: ex.libraryId ?? null, name: ex.name, img: ex.img, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.split) || guessSplit(ex.name) });
                   setSwitchingEx(null);
                 }}
               />
@@ -1111,7 +1111,7 @@ function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSet
     return `${seen[it.ssGroup]}${cnt[it.ssGroup]}`;
   });
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ marginBottom: 22 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           {onIcon ? (
@@ -1223,7 +1223,7 @@ function CoverPhoto({ img, trainerId, onChange }) {
   };
 
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ marginBottom: 22 }}>
       <div className="label" style={{ marginBottom: 8 }}>// COVER PHOTO</div>
       <input ref={fileRef} type="file" accept="image/*" onChange={pick} style={{ display: 'none' }} />
       <div
@@ -1406,7 +1406,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
             </svg>
           </div>
         )}
-      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: '46px 1fr auto', gap: 12, alignItems: 'center', padding: 12 }}>
+      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: '46px 1fr auto', gap: 12, alignItems: 'center', padding: 14 }}>
         <div style={{ width: 46, height: 46, borderRadius: 9, background: `url('${e.img}') center/cover, var(--bg-3)`, border: '1px solid var(--line)' }}/>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1434,33 +1434,33 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
             color: 'var(--accent)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
           }}>◷ CLIENT HISTORY</button>
           {historyOpen && (
-            <ClientHistorySheet exerciseName={e.name} trainerId={trainerId} programmeId={programmeId}
+            <ClientHistorySheet exerciseName={e.name} libraryId={e.libraryId ?? null} trainerId={trainerId} programmeId={programmeId}
               onClose={() => setHistoryOpen(false)} />
           )}
 
           {/* Timed mode */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>TIMED MODE</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{e.timed ? 'Sets track duration' : 'Sets track reps'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>{e.timed ? 'Sets track duration' : 'Sets track reps'}</div>
             </div>
             <Toggle on={e.timed} onChange={v => onUpdateEx({ timed: v })}/>
           </div>
 
           {/* Banded mode - track a band colour instead of weight */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>BANDED</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{e.banded ? 'Sets track band colour' : 'Sets track weight'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>{e.banded ? 'Sets track band colour' : 'Sets track weight'}</div>
             </div>
             <Toggle on={e.banded} onChange={v => onUpdateEx({ banded: v })}/>
           </div>
 
           {/* Unilateral - done one side at a time */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>EACH SIDE</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{e.unilateral ? 'Reps shown per side' : 'Both sides together'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>{e.unilateral ? 'Reps shown per side' : 'Both sides together'}</div>
             </div>
             <Toggle on={e.unilateral} onChange={v => onUpdateEx({ unilateral: v })}/>
           </div>
@@ -1468,10 +1468,10 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           {/* Split load - a weight held one per hand. Prescribed weights stay
               totals; the client just also sees what to pick up. */}
           {!e.banded && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 6px', borderBottom: '1px dashed var(--line)', gap: 16 }}>
               <div style={{ minWidth: 0 }}>
                 <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>TWO WEIGHTS</div>
-                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>
                   {(e.split || 1) > 1
                     ? `One in each hand - ${splitHint(e)}`
                     : 'A single bar, machine or weight'}
@@ -1482,7 +1482,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           )}
 
           {/* Tempo */}
-          <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>TEMPO</div>
               <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.08em' }}>DOWN · PAUSE · UP · PAUSE</div>
@@ -1491,7 +1491,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           </div>
 
           {/* Coach notes */}
-          <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600, marginBottom: 8 }}>COACH NOTES</div>
             <textarea
               value={e.coachNotes || ''}
@@ -1539,7 +1539,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           </div>
 
           {/* Alternates - swap options the client can switch to */}
-          <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600, marginBottom: 8 }}>ALTERNATES <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· client can swap to these</span></div>
             <div style={{ display: 'grid', gap: 6 }}>
               {(e.alternates || []).map((alt, idx) => (
@@ -1583,7 +1583,7 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
   return (
     <div style={{ background: expanded ? 'var(--bg-3)' : 'var(--bg-1)', border: '1px solid '+(expanded?accent:'var(--line)'), borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'stretch' }}>
-      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: '26px 1fr 1fr 1fr 28px 16px', gap: 4, alignItems: 'center', padding: '6px 4px', boxSizing: 'border-box' }}>
+      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: '26px 1fr 1fr 1fr 28px 16px', gap: 6, alignItems: 'center', padding: '9px 6px', boxSizing: 'border-box' }}>
         <span style={{ width: 20, height: 20, borderRadius: 4, background: sk?`color-mix(in srgb, ${sk.c} 15%, transparent)`:'rgba(255,255,255,0.04)', color: sk?sk.c:'var(--text-2)', border: sk?`1px solid color-mix(in srgb, ${sk.c} 50%, transparent)`:'1px solid var(--line)', fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 9, display: 'grid', placeItems: 'center' }}>
           {sk ? sk.l : String(setIdx+1).padStart(2,'0')}
         </span>
@@ -1609,7 +1609,7 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px', marginBottom: 6 }}>
             <div>
               <div className="mono" style={{ fontSize: 9, color: 'var(--c-amber)', letterSpacing: '0.1em', fontWeight: 700 }}>WARM-UP SET</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{st.kind === 'WARMUP' ? 'Excluded from working-set count' : 'Counts toward working sets'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>{st.kind === 'WARMUP' ? 'Excluded from working-set count' : 'Counts toward working sets'}</div>
             </div>
             <Toggle on={st.kind === 'WARMUP'} onChange={v => onUpdate({ kind: v ? 'WARMUP' : 'WORK' })}/>
           </div>
@@ -1824,7 +1824,7 @@ function StepBtn({ children, onClick }) {
 // What a client has actually lifted on this movement, so the next block can be
 // written against real numbers instead of memory. Defaults to whoever the
 // programme is assigned to; any of the coach's clients can be picked.
-function ClientHistorySheet({ exerciseName, trainerId, programmeId, onClose }) {
+function ClientHistorySheet({ exerciseName, libraryId, trainerId, programmeId, onClose }) {
   const [clients, setClients] = React.useState(null);
   const [clientId, setClientId] = React.useState(null);
   const [sessions, setSessions] = React.useState(null);
@@ -1858,9 +1858,9 @@ function ClientHistorySheet({ exerciseName, trainerId, programmeId, onClose }) {
     let alive = true;
     if (!clientId) { setSessions([]); return; }
     setSessions(null);
-    loadExerciseHistory(clientId, exerciseName, 8).then(out => { if (alive) setSessions(out); });
+    loadExerciseHistory(clientId, exerciseName, 8, libraryId).then(out => { if (alive) setSessions(out); });
     return () => { alive = false; };
-  }, [clientId, exerciseName]);
+  }, [clientId, exerciseName, libraryId]);
 
   const tops = (sessions || []).map(s => s.top).filter(v => v != null);
   const best = tops.length ? Math.max(...tops) : null;
@@ -2058,6 +2058,7 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
 
   React.useEffect(() => {
     loadExercises().then(rows => setLib(rows.map(e => ({
+      libraryId: e.id,
       name: e.name,
       img: e.thumbnail_url || videoThumb(e.video_url) || (e.photos && e.photos[0]) || IMG_FALLBACK,
       cat: (e.muscle_group || 'OTHER').toUpperCase(),
@@ -2109,7 +2110,7 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
               <div className="label" style={{ marginBottom: 8 }}>// {cat}</div>
               <div style={{ display: 'grid', gap: 6 }}>
                 {filtered.filter(e => e.cat === cat).map(ex => (
-                  <button key={ex.name} onClick={() => onPick({ name: ex.name, img: ex.img, banded: ex.banded, unilateral: ex.unilateral, split: ex.split })} style={{
+                  <button key={ex.name} onClick={() => onPick({ libraryId: ex.libraryId, name: ex.name, img: ex.img, banded: ex.banded, unilateral: ex.unilateral, split: ex.split })} style={{
                     all: 'unset', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: '10px 12px', background: 'var(--bg-2)',
@@ -2161,7 +2162,7 @@ function dbToSections(sections) {
   return sections.map(s => ({
     kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '',
     items: [...(s.section_exercises||[])].sort((a,b) => a.sort_order-b.sort_order).map(ex => ({
-      id: ex.id, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.load_split) || 1, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
+      id: ex.id, libraryId: ex.library_exercise_id ?? null, name: ex.name, img: ex.img_url||IMG_FALLBACK, timed: ex.timed, banded: !!ex.banded, unilateral: !!ex.unilateral, split: parseInt(ex.load_split) || 1, tempo: ex.tempo||'', coachNotes: ex.coach_notes||'', ssGroup: ex.superset_group ?? null, alternates: ex.alternates || [],
       setsList: [...(ex.exercise_sets||[])].sort((a,b) => a.set_index-b.set_index).map(st => ({
         id: 's'+st.id.slice(-8), kind: st.kind,
         repsText: st.reps_text || String(st.reps ?? 8),
