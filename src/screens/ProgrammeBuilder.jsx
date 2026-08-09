@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { HexBackButton, HexShape } from '../components/hex'
 import { IconChevronRight, IconX2 } from '../components/icons'
 import { loadExercises, videoThumb } from '../lib/exercises'
+import { loadExerciseHistory } from '../lib/exerciseHistory'
 import { splitLabel, guessSplit } from '../lib/loadSplit'
 import { MasterPlanner } from './MasterPlanner'
 import { BandPicker, BandChip, bandOf } from '../components/bands'
@@ -547,7 +548,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
 
             <div className="pb-sections">
             {day.sections.map((s, sIdx) => (
-              <Section key={s.kind + sIdx} s={s} sIdx={sIdx}
+              <Section key={s.kind + sIdx} s={s} sIdx={sIdx} trainerId={trainerId} programmeId={prog.id}
                 onIntro={(v) => updateSection(sIdx, { intro: v })}
                 onIcon={(v) => updateSection(sIdx, { icon: v })}
                 onDelete={() => delSection(sIdx)}
@@ -1050,7 +1051,7 @@ function RestDay({ onAdd }) {
 }
 
 // ── SECTION ───────────────────────────────────────────────────────
-function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll, onMoveEx }) {
+function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSetId, onExpandEx, onExpandSet, onUpdateEx, onDupEx, onDelEx, onAddEx, onSwitchEx, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll, onMoveEx, trainerId, programmeId }) {
   const color = sectionColor(s.kind);
   const [slideOpen, setSlideOpen] = React.useState(false);
   const [iconOpen, setIconOpen] = React.useState(false);
@@ -1169,7 +1170,7 @@ function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSet
       )}
       <div style={{ display: 'grid', gap: 9 }}>
         {s.items.map((e, eIdx) => (
-          <ExerciseEditor key={e.id} e={e} color={color}
+          <ExerciseEditor key={e.id} e={e} color={color} trainerId={trainerId} programmeId={programmeId}
             rowRef={(el) => { if (el) rowRefs.current[e.id] = el; else delete rowRefs.current[e.id]; }}
             dragging={dragId === e.id}
             dragHandle={isDesktop && s.items.length > 1 ? { onPointerDown: startDrag(e.id) } : null}
@@ -1373,7 +1374,8 @@ function IconPickerSheet({ current, kind, color, onPick, onClose }) {
 }
 
 // ── EXERCISE EDITOR ───────────────────────────────────────────────
-function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperset, grouped, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll, rowRef, dragging, dragHandle }) {
+function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperset, grouped, onSuperset, onUnsuperset, onAddAlt, onDelAlt, onExpand, onExpandSet, onUpdateEx, onDupEx, onDelEx, onSwitchEx, onUpdateSet, onAddSet, onDelSet, onDupSet, onApplyToAll, rowRef, dragging, dragHandle, trainerId, programmeId }) {
+  const [historyOpen, setHistoryOpen] = React.useState(false);
   const workSets = e.setsList.filter(s => s.kind !== 'WARMUP');
   const summary  = workSets.length === 0 ? `${e.setsList.length} warm-up` : `${e.setsList.length} sets · ${summarize(e)}`;
 
@@ -1422,6 +1424,20 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
 
       {expanded && (
         <div style={{ padding: '0 10px 12px', borderTop: '1px solid var(--line)' }}>
+          {/* What the client has actually been lifting - the number the next
+              block should be written against. */}
+          <button onClick={() => setHistoryOpen(true)} className="mono" style={{
+            all: 'unset', cursor: 'pointer', boxSizing: 'border-box', width: '100%',
+            margin: '10px 0 2px', padding: '9px 0', textAlign: 'center', borderRadius: 8,
+            border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+            background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
+            color: 'var(--accent)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+          }}>◷ CLIENT HISTORY</button>
+          {historyOpen && (
+            <ClientHistorySheet exerciseName={e.name} trainerId={trainerId} programmeId={programmeId}
+              onClose={() => setHistoryOpen(false)} />
+          )}
+
           {/* Timed mode */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
             <div>
@@ -1801,6 +1817,137 @@ function InlineNum({ value, min=1, max=52, onChange }) {
 function StepBtn({ children, onClick }) {
   return (
     <button onClick={onClick} style={{ all:'unset', cursor:'pointer', width:22, height:22, borderRadius:5, background:'var(--bg-1)', border:'1px solid var(--line-strong)', color:'var(--text)', fontFamily:'JetBrains Mono', fontSize:13, fontWeight:700, display:'grid', placeItems:'center', textAlign:'center' }}>{children}</button>
+  );
+}
+
+// ── CLIENT HISTORY ────────────────────────────────────────────────
+// What a client has actually lifted on this movement, so the next block can be
+// written against real numbers instead of memory. Defaults to whoever the
+// programme is assigned to; any of the coach's clients can be picked.
+function ClientHistorySheet({ exerciseName, trainerId, programmeId, onClose }) {
+  const [clients, setClients] = React.useState(null);
+  const [clientId, setClientId] = React.useState(null);
+  const [sessions, setSessions] = React.useState(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data: people } = await supabase.from('profiles')
+        .select('id, name').eq('trainer_id', trainerId).eq('role', 'client').eq('archived', false)
+        .order('name');
+      if (!alive) return;
+      const list = people || [];
+      setClients(list);
+      // Prefer someone actually running this programme.
+      let preferred = null;
+      if (programmeId) {
+        const { data: assigned } = await supabase.from('client_workouts')
+          .select('client_id, programme_days!inner(programme_phases!inner(programme_id))')
+          .eq('trainer_id', trainerId)
+          .eq('programme_days.programme_phases.programme_id', programmeId)
+          .limit(200);
+        const ids = new Set((assigned || []).map(r => r.client_id));
+        preferred = list.find(c => ids.has(c.id))?.id || null;
+      }
+      if (alive) setClientId(preferred || list[0]?.id || null);
+    })();
+    return () => { alive = false; };
+  }, [trainerId, programmeId]);
+
+  React.useEffect(() => {
+    let alive = true;
+    if (!clientId) { setSessions([]); return; }
+    setSessions(null);
+    loadExerciseHistory(clientId, exerciseName, 8).then(out => { if (alive) setSessions(out); });
+    return () => { alive = false; };
+  }, [clientId, exerciseName]);
+
+  const tops = (sessions || []).map(s => s.top).filter(v => v != null);
+  const best = tops.length ? Math.max(...tops) : null;
+  const latest = (sessions || []).find(s => s.top != null)?.top ?? null;
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 260, background: 'rgba(6,10,12,0.7)',
+      backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxHeight: '88%', background: 'var(--bg-1)',
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        border: '1px solid var(--line-strong)', borderBottom: 0,
+        display: 'flex', flexDirection: 'column', animation: 'sheetUp .24s cubic-bezier(.22,.61,.36,1)',
+      }}>
+        <div style={{ padding: '12px 16px 10px', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }}/>
+          <div className="label">// CLIENT HISTORY</div>
+          <div className="h-bold" style={{ fontSize: 16, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exerciseName}</div>
+          {clients === null ? null : clients.length === 0 ? null : (
+            <select value={clientId || ''} onChange={e => setClientId(e.target.value)}
+              style={{
+                width: '100%', boxSizing: 'border-box', appearance: 'auto', marginTop: 10,
+                background: 'var(--bg-2)', border: '1px solid var(--line-strong)', borderRadius: 8,
+                padding: '9px 11px', color: 'var(--text)', outline: 'none',
+                fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 600,
+              }}>
+              {clients.map(c => <option key={c.id} value={c.id}>{c.name || 'Unnamed'}</option>)}
+            </select>
+          )}
+        </div>
+
+        <div className="scroller" style={{ flex: 1, minHeight: 0, height: 'auto', padding: '4px 16px 20px' }}>
+          {clients !== null && clients.length === 0 ? (
+            <Mini>No clients yet.</Mini>
+          ) : sessions === null ? (
+            <Mini>Loading…</Mini>
+          ) : sessions.length === 0 ? (
+            <Mini>Nothing logged for this movement yet.</Mini>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+                <Kpi label="LAST" value={latest != null ? `${latest}kg` : '-'} />
+                <Kpi label="BEST" value={best != null ? `${best}kg` : '-'} />
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {sessions.map((s, i) => (
+                  <div key={i} style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                      <span className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: i === 0 ? 'var(--accent)' : 'var(--text-2)' }}>
+                        {s.date.toUpperCase()}{i === 0 ? ' · LATEST' : ''}
+                      </span>
+                      {s.top != null && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>TOP {s.top}kg</span>}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {s.sets.map((st, j) => (
+                        <span key={j} className="mono" style={{
+                          fontSize: 10, fontWeight: 600, padding: '3px 7px', borderRadius: 6,
+                          background: 'var(--bg-3)', border: '1px solid var(--line)', color: 'var(--text-2)',
+                        }}>{st.label}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{ padding: '10px 16px calc(env(safe-area-inset-bottom, 0px) + 14px)', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+          <button onClick={onClose} className="btn-ghost" style={{ width: '100%' }}>CLOSE</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Mini({ children }) {
+  return <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '10px 2px' }}>{children}</div>;
+}
+function Kpi({ label, value }) {
+  return (
+    <div style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '9px 11px' }}>
+      <div className="mono" style={{ fontSize: 8, letterSpacing: '0.12em', color: 'var(--text-3)', fontWeight: 700 }}>{label}</div>
+      <div className="h-bold" style={{ fontSize: 18, marginTop: 3, color: 'var(--accent)' }}>{value}</div>
+    </div>
   );
 }
 
