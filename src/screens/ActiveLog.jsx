@@ -1169,12 +1169,7 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
         </div>
 
         {/* Coach note */}
-        {ex.coach &&
-        <div className="card" style={{ marginTop: 12, padding: 12 }}>
-            <div className="label" style={{ marginBottom: 6 }}>// COACH NOTE</div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>{ex.coach}</div>
-          </div>
-        }
+        {ex.coach && <CoachNote text={ex.coach} style={{ marginTop: 12 }} />}
       </div>
     </div>);
 
@@ -1191,6 +1186,24 @@ function kindPatch(set, kind) {
   }
   if (kind === 'PARTIAL' && typeof set.reps === 'number') patch.reps = Math.max(1, Math.round(set.reps / 2));
   return patch;
+}
+
+// A note the coach left on this movement. Pulses a few times as the card
+// arrives so it isn't read as just another panel, then sits quiet.
+function CoachNote({ text, style }) {
+  return (
+    <div className="coach-note" style={style}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+        <span className="coach-note-icon" style={{ color: 'var(--accent)', display: 'grid', placeItems: 'center' }} aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+          </svg>
+        </span>
+        <span className="label" style={{ color: 'var(--accent)' }}>// COACH NOTE</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: 'var(--text)', lineHeight: 1.55 }}>{text}</div>
+    </div>
+  );
 }
 
 // Athlete-side comment field shown under the coach note.
@@ -1427,10 +1440,7 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
       }); })()}
       <AddSetControl onAdd={onAddSet} onRemove={e.sets.length > 1 ? onDelSet : null} />
       {e.coach && (
-        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--line)' }}>
-          <div className="label" style={{ marginBottom: 4 }}>// COACH NOTE</div>
-          <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>{e.coach}</div>
-        </div>
+        <div style={{ padding: '10px 12px' }}><CoachNote text={e.coach} /></div>
       )}
     </div>
   );
@@ -2097,7 +2107,10 @@ function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay
   // an empty field so the client just types the number they used.
   const shown = draft !== null ? draft : (value == null ? '' : value === 0 ? 'BW' : String(shownValue));
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}>
+    // A label, so the whole cell focuses the field, while the input itself is
+    // sized to its value - otherwise a full-width input pushed "kg" away from
+    // the number it belongs to.
+    <label style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0, cursor: 'text' }}>
       <input
         value={shown}
         onChange={(e) => commit(e.target.value)}
@@ -2105,7 +2118,9 @@ function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay
         onBlur={() => setDraft(null)}
         inputMode="decimal" placeholder="–" aria-label="Weight"
         style={{
-          width: '100%', minWidth: 0, background: 'transparent', border: 0,
+          // +4px covers the letter-spacing 'ch' doesn't account for.
+          width: `calc(${Math.max(2, shown.length)}ch + 4px)`, minWidth: 0, flexShrink: 0,
+          background: 'transparent', border: 0,
           color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
           fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
           letterSpacing: '0.04em', outline: 'none',
@@ -2115,7 +2130,7 @@ function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay
       {halves
         ? <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', whiteSpace: 'nowrap', flexShrink: 0 }}>{halves.n}×{toDisplay(halves.each)}</span>
         : suffix && !!value && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0 }}>{suffix}</span>}
-    </div>);
+    </label>);
 
 }
 // Reps as a number. A set the client just ticked off without retyping still

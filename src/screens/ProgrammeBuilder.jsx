@@ -514,7 +514,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
               onChange={(url) => { setDay(d => ({ ...d, img: url })); setDirty(true); }} />
 
             {/* Workout name */}
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 22 }}>
               <div className="label" style={{ marginBottom: 8 }}>// WORKOUT NAME</div>
               <input
                 value={day.title || ''}
@@ -530,7 +530,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
             </div>
 
             {/* Workout intro */}
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 22 }}>
               <div className="label" style={{ marginBottom: 8 }}>// WORKOUT INTRO</div>
               <textarea
                 value={day.intro || ''}
@@ -1111,7 +1111,7 @@ function Section({ s, sIdx, onIntro, onIcon, onDelete, expandedExId, expandedSet
     return `${seen[it.ssGroup]}${cnt[it.ssGroup]}`;
   });
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ marginBottom: 22 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           {onIcon ? (
@@ -1223,7 +1223,7 @@ function CoverPhoto({ img, trainerId, onChange }) {
   };
 
   return (
-    <div style={{ marginBottom: 16 }}>
+    <div style={{ marginBottom: 22 }}>
       <div className="label" style={{ marginBottom: 8 }}>// COVER PHOTO</div>
       <input ref={fileRef} type="file" accept="image/*" onChange={pick} style={{ display: 'none' }} />
       <div
@@ -1406,7 +1406,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
             </svg>
           </div>
         )}
-      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: '46px 1fr auto', gap: 12, alignItems: 'center', padding: 12 }}>
+      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: '46px 1fr auto', gap: 12, alignItems: 'center', padding: 14 }}>
         <div style={{ width: 46, height: 46, borderRadius: 9, background: `url('${e.img}') center/cover, var(--bg-3)`, border: '1px solid var(--line)' }}/>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1439,28 +1439,28 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           )}
 
           {/* Timed mode */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>TIMED MODE</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{e.timed ? 'Sets track duration' : 'Sets track reps'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>{e.timed ? 'Sets track duration' : 'Sets track reps'}</div>
             </div>
             <Toggle on={e.timed} onChange={v => onUpdateEx({ timed: v })}/>
           </div>
 
           {/* Banded mode - track a band colour instead of weight */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>BANDED</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{e.banded ? 'Sets track band colour' : 'Sets track weight'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>{e.banded ? 'Sets track band colour' : 'Sets track weight'}</div>
             </div>
             <Toggle on={e.banded} onChange={v => onUpdateEx({ banded: v })}/>
           </div>
 
           {/* Unilateral - done one side at a time */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>EACH SIDE</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{e.unilateral ? 'Reps shown per side' : 'Both sides together'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>{e.unilateral ? 'Reps shown per side' : 'Both sides together'}</div>
             </div>
             <Toggle on={e.unilateral} onChange={v => onUpdateEx({ unilateral: v })}/>
           </div>
@@ -1468,10 +1468,10 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           {/* Split load - a weight held one per hand. Prescribed weights stay
               totals; the client just also sees what to pick up. */}
           {!e.banded && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px', borderBottom: '1px dashed var(--line)', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 6px', borderBottom: '1px dashed var(--line)', gap: 16 }}>
               <div style={{ minWidth: 0 }}>
                 <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>TWO WEIGHTS</div>
-                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>
                   {(e.split || 1) > 1
                     ? `One in each hand - ${splitHint(e)}`
                     : 'A single bar, machine or weight'}
@@ -1482,7 +1482,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           )}
 
           {/* Tempo */}
-          <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600 }}>TEMPO</div>
               <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.08em' }}>DOWN · PAUSE · UP · PAUSE</div>
@@ -1491,7 +1491,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           </div>
 
           {/* Coach notes */}
-          <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600, marginBottom: 8 }}>COACH NOTES</div>
             <textarea
               value={e.coachNotes || ''}
@@ -1539,7 +1539,7 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
           </div>
 
           {/* Alternates - swap options the client can switch to */}
-          <div style={{ padding: '10px 4px', borderBottom: '1px dashed var(--line)' }}>
+          <div style={{ padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 600, marginBottom: 8 }}>ALTERNATES <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· client can swap to these</span></div>
             <div style={{ display: 'grid', gap: 6 }}>
               {(e.alternates || []).map((alt, idx) => (
@@ -1583,7 +1583,7 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
   return (
     <div style={{ background: expanded ? 'var(--bg-3)' : 'var(--bg-1)', border: '1px solid '+(expanded?accent:'var(--line)'), borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'stretch' }}>
-      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: '26px 1fr 1fr 1fr 28px 16px', gap: 4, alignItems: 'center', padding: '6px 4px', boxSizing: 'border-box' }}>
+      <button onClick={onExpand} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: '26px 1fr 1fr 1fr 28px 16px', gap: 6, alignItems: 'center', padding: '9px 6px', boxSizing: 'border-box' }}>
         <span style={{ width: 20, height: 20, borderRadius: 4, background: sk?`color-mix(in srgb, ${sk.c} 15%, transparent)`:'rgba(255,255,255,0.04)', color: sk?sk.c:'var(--text-2)', border: sk?`1px solid color-mix(in srgb, ${sk.c} 50%, transparent)`:'1px solid var(--line)', fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 9, display: 'grid', placeItems: 'center' }}>
           {sk ? sk.l : String(setIdx+1).padStart(2,'0')}
         </span>
@@ -1609,7 +1609,7 @@ function SetRow({ st, setIdx, total, timed, banded, color, expanded, onExpand, o
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px', marginBottom: 6 }}>
             <div>
               <div className="mono" style={{ fontSize: 9, color: 'var(--c-amber)', letterSpacing: '0.1em', fontWeight: 700 }}>WARM-UP SET</div>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{st.kind === 'WARMUP' ? 'Excluded from working-set count' : 'Counts toward working sets'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.4 }}>{st.kind === 'WARMUP' ? 'Excluded from working-set count' : 'Counts toward working sets'}</div>
             </div>
             <Toggle on={st.kind === 'WARMUP'} onChange={v => onUpdate({ kind: v ? 'WARMUP' : 'WORK' })}/>
           </div>
