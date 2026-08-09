@@ -1449,7 +1449,7 @@ function DetailStat({ label, value, color }) {
 // ── BODY MAP SVG ─────────────────────────────────────────────────
 // Stylized anterior/posterior figure. Each region is a path that's
 // filled with accent color at intensity-based opacity.
-export function BodyMap({ side, intensity, picked, onPick, data, labels, heatColor, slugMap, perSide, zoomable, neutralBase, tintFor }) {
+export function BodyMap({ side, intensity, picked, onPick, data, labels, heatColor, slugMap, perSide, zoomable, neutralBase, tintFor, monochrome }) {
   const body = MUSCLE_BODY[side];
   if (!body) return null;
   const vb = body.viewBox.split(' ').map(Number);
@@ -1474,8 +1474,12 @@ export function BodyMap({ side, intensity, picked, onPick, data, labels, heatCol
   };
 
   // Muscles render in their anatomical region colour (legs pink, back amber,
-  // …); heatColor is a fallback for regions without a mapped colour.
-  const colorFor = (group) => MUSCLE_COLOR[group] || heatColor || 'var(--accent)';
+  // …); heatColor is a fallback for regions without a mapped colour. In
+  // `monochrome` the whole body reads in one colour instead, so the map is a
+  // heat scale - alpha still tracks how hard a region was worked.
+  const colorFor = (group) => monochrome
+    ? (heatColor || 'var(--accent)')
+    : (MUSCLE_COLOR[group] || heatColor || 'var(--accent)');
   const isPickedKey = (key) => picked instanceof Set ? picked.has(key) : picked === key;
   const neutralStroke = 'color-mix(in srgb, var(--text-3) 24%, transparent)';
   const neutralFill = 'color-mix(in srgb, var(--text-3) 14%, var(--bg-3))';

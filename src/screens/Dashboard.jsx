@@ -1,6 +1,6 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
-import { HEX_RATIO, HexShape, Hex } from '../components/hex'
+import { HEX_RATIO, HexShape, Hex, HexBackButton } from '../components/hex'
 import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc, IconChevronRight } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
 import { setTaskComplete } from '../lib/tasks'
@@ -280,11 +280,19 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       {/* Programme roadmap - tap through to the progress report */}
       <ProgrammeRoadmap userId={userId} onOpen={() => setShowReport(true)} />
       {showReport && (
-        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column',
-          // Viewport-positioned, so this must clear the notch itself (the real
-          // inset) rather than --safe-top, which is zeroed while impersonating.
-          top: impersonating ? 'calc(env(safe-area-inset-top, 0px) + 45px)' : 0 }}>
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'calc(var(--safe-top) + 14px) 16px 40px' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
+          {/* Embedded mode has no chrome of its own, so the way back out lives
+              here - without it the report covered the screen with no exit. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+            padding: '10px 14px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)',
+            borderBottom: '1px solid var(--line)', background: 'var(--bg-1)' }}>
+            <HexBackButton onClick={() => setShowReport(false)} size={34} />
+            <div style={{ minWidth: 0 }}>
+              <div className="label">// PERFORMANCE REPORT</div>
+              <div className="h-bold" style={{ fontSize: 15, marginTop: 2 }}>YOUR PROGRESS</div>
+            </div>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px 40px' }}>
             <React.Suspense fallback={<SkeletonCard rows={4} />}>
               <ProgrammeReport clientId={userId} clientName={user?.name || ''} embedded onClose={() => setShowReport(false)} />
             </React.Suspense>
