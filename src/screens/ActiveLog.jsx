@@ -235,7 +235,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
           // prescribed, and neither has anywhere to land in a rebuilt-from-the-
           // programme sheet. So restore all three - the prescribed sets, the
           // extra sets, and the extra exercises - and the elapsed time with them.
-          if (edit && userId && rows.length > 0) {
+          if (edit && userId) {
             const { data: sess } = await supabase.from('workout_sessions')
               .select('id, started_at, completed_at, logged_sets ( exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, intensity )')
               .eq('client_id', userId).eq('day_id', dayId)
@@ -253,6 +253,12 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
               }
             }
 
+            // Called even with no prescription rows: its "exercises the client
+            // added mid-session" branch rebuilds a card from the logged sets
+            // alone, which is exactly what's needed when the day this was
+            // trained from has since lost its exercises (reworked or deleted by
+            // the coach). Better that than dead-ending on a session the client
+            // can plainly see they completed.
             restoreLoggedSession(rows, sess?.logged_sets, formatMMSS);
           }
           // A real assigned day must have exercises - never fall back to the
@@ -622,6 +628,11 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
     : activeItem.type === 'superset' ? activeItem.group[0].id
     : activeExRef.current;
   const lastIdx = railItems.length - 1;
+  // The bottom strip only exists for the rest timer, the time's-up banner and
+  // the final CONTINUE. With none of those showing it was reserving ~96px of
+  // empty screen mid-workout, so it comes out of the layout entirely.
+  const onFinalCard = activeItem && activeItem.type !== 'finish' && activeIdx >= lastIdx - 1;
+  const showBottomBar = resting || timesUp || onFinalCard;
 
   if (dbLoading) return (
     <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--bg-0)' }}>
@@ -715,7 +726,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       `}</style>
       <div ref={scrollRef} onScroll={onScroll} className="everfit-rail"
       style={{
-        position: 'absolute', top: 148, bottom: 96, left: 0, right: 0,
+        position: 'absolute', top: 162, bottom: showBottomBar ? 96 : 16, left: 0, right: 0,
         overflowX: 'auto', overflowY: 'hidden',
         display: 'flex',
         scrollSnapType: 'x mandatory',
@@ -755,6 +766,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       </div>
 
       {/* Bottom action bar */}
+      {showBottomBar && (
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 9,
         padding: '14px 14px calc(env(safe-area-inset-bottom, 0px) + 24px)',
@@ -813,6 +825,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
           );
         })()}
       </div>
+      )}
 
       {/* Alternatives sheet */}
       {addingEx && <ExercisePicker title="ADD EXERCISE" onClose={() => setAddingEx(false)} onPick={addExercise} />}
@@ -1492,8 +1505,11 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
       background: 'var(--bg-1)', display: 'flex', flexDirection: 'column',
       animation: 'fadeIn .25s ease'
     }}>
+      <div className="scroller" style={{ height: 'auto', flex: 1, padding: '0 0 28px', minHeight: 0 }}>
+      {/* The hero scrolls away with everything else, and its controls go with
+          it rather than floating over the cards underneath. */}
       <div style={{
-        flexShrink: 0, padding: 'max(54px, calc(var(--safe-top) + 14px)) 18px 18px', textAlign: 'center', position: 'relative', overflow: 'hidden',
+        padding: 'max(54px, calc(var(--safe-top) + 14px)) 18px 18px', textAlign: 'center', position: 'relative', overflow: 'hidden',
         background: 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, var(--bg-1)), var(--bg-1))'
       }}>
         {onClose &&
@@ -1538,7 +1554,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
         )}
       </div>
 
-      <div className="scroller" style={{ height: 'auto', flex: 1, padding: '12px 16px 28px', minHeight: 0 }}>
+      <div style={{ padding: '12px 16px 0' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
           <SCKpi label="TIME" value={fmtT(sessionTime)} unit="" />
           <SCKpi label="VOLUME" value={volume.toLocaleString()} unit="KG" />
@@ -1637,7 +1653,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
         <div className="card" style={{ padding: 8, marginBottom: 12 }}>
           {BodyMap &&
           <BodyMap side={side} intensity={intensity} picked={null} onPick={() => {}}
-            data={data} labels={MUSCLE_LABELS || {}} heatColor="var(--accent)" />}
+            data={data} labels={MUSCLE_LABELS || {}} heatColor="var(--accent)" monochrome />}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 22 }}>
           {trainedLabels.map((l) =>
@@ -1651,6 +1667,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
         <button className="btn-ghost" style={{ width: '100%' }} onClick={() => go('dashboard')}>
           BACK TO HOME
         </button>
+      </div>
       </div>
     </div>);
 
@@ -2118,8 +2135,9 @@ function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay
         onBlur={() => setDraft(null)}
         inputMode="decimal" placeholder="–" aria-label="Weight"
         style={{
-          // +4px covers the letter-spacing 'ch' doesn't account for.
-          width: `calc(${Math.max(2, shown.length)}ch + 4px)`, minWidth: 0, flexShrink: 0,
+          // 'ch' is the width of a zero, so letters ("BW") and the tracking on
+          // top of them need the extra em of slack or the value clips.
+          width: `calc(${Math.max(2, shown.length)}ch + 0.75em)`, minWidth: 0, flexShrink: 0,
           background: 'transparent', border: 0,
           color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
           fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
