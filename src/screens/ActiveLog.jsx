@@ -14,6 +14,7 @@ import { saveActiveWorkout, loadActiveWorkout, clearActiveWorkout } from '../lib
 import { BrandIcon } from '../components/BrandIcon'
 import { BANDS, bandOf } from '../components/bands'
 import { loadExercises, videoThumb } from '../lib/exercises'
+import { loadExerciseHistory } from '../lib/exerciseHistory'
 import { splitLoad, guessSplit } from '../lib/loadSplit'
 import { restoreLoggedSession } from '../lib/editSession'
 import { ExercisePicker } from './ProgrammeBuilder'
@@ -36,6 +37,16 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
   const [addingEx, setAddingEx] = React.useState(false);
   const [supersetForId, setSupersetForId] = React.useState(null); // exId being superset-linked
   const [paused, setPaused] = React.useState(false);
+  // Weights are always stored in kg; this only changes what the client reads
+  // and types. Remembered, so a client who thinks in pounds sets it once.
+  const [unit, setUnit] = React.useState(() => {
+    try { return localStorage.getItem('hs_weight_unit') === 'lb' ? 'lb' : 'kg'; } catch (e) { return 'kg'; }
+  });
+  const toggleUnit = () => setUnit(u => {
+    const next = u === 'kg' ? 'lb' : 'kg';
+    try { localStorage.setItem('hs_weight_unit', next); } catch (e) {}
+    return next;
+  });
   const [finishing, setFinishing] = React.useState(false);
   const [confirmQuit, setConfirmQuit] = React.useState(false);
   const [complete, setComplete] = React.useState(false);
@@ -710,7 +721,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
         it.type === 'finish' ?
         <FinishSlide key={`f${i}`} phaseId={it.phaseId} missed={missedCount} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
         it.type === 'superset' ?
-        <SupersetCard key={`ss${it.group[0].id}`} group={it.group}
+        <SupersetCard key={`ss${it.group[0].id}`} group={it.group} unit={unit} onToggleUnit={toggleUnit}
           onComplete={(exId, si) => completeSet(exId, si)}
           onUpdate={(exId, si, p) => updateSet(exId, si, p)}
           onAddSet={(exId, kind) => addSet(exId, kind)}
@@ -721,7 +732,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
           onComment={dayId ? (exId) => setCommentForId(exId) : null}
           onHistory={(exId) => setHistoryForId(exId)}
           intro={i === 0 ? dayIntro : ''} /> :
-        <ExerciseCard key={it.ex.id} ex={it.ex} idx={it.exIdx} total={exercises.length} media={mediaFor(it.ex)}
+        <ExerciseCard key={it.ex.id} ex={it.ex} idx={it.exIdx} total={exercises.length} media={mediaFor(it.ex)} unit={unit} onToggleUnit={toggleUnit}
         intro={i === 0 ? dayIntro : ''}
         onComplete={(si) => completeSet(it.ex.id, si)}
         onUpdate={(si, p) => updateSet(it.ex.id, si, p)}
@@ -980,7 +991,7 @@ function ytEmbed(url) {
   return '';
 }
 
-function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onSuperset, onDelete, onCompleteAll, onHistory, onComment, intro }) {
+function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, onAddSet, onDelSet, onAddExercise, onSuperset, onDelete, onCompleteAll, onHistory, onComment, intro, unit = 'kg', onToggleUnit }) {
   const phase = PHASES.find((p) => p.id === ex.phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   const [addChoose, setAddChoose] = React.useState(false);
@@ -1060,7 +1071,7 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
               </Hex>
             </button>}
-            {(onAddExercise || onDelete || (onSuperset && ex.ss == null)) && (
+            {(onAddExercise || onDelete || onToggleUnit || (onSuperset && ex.ss == null)) && (
             <div style={{ position: 'relative' }}>
               <button onClick={() => { setAddChoose(o => !o); setConfirmDel(false); }} aria-label="More actions" title="More" style={{ all: 'unset', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
                 <Hex size={30} square style={{ background: addChoose ? 'var(--accent-soft)' : 'var(--bg-2)', border: `1px solid ${addChoose ? 'var(--accent)' : 'var(--line-strong)'}`, color: addChoose ? 'var(--accent)' : 'var(--text-2)' }}>
@@ -1081,6 +1092,11 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
                       </div>
                     ) : (
                       <>
+                        {onToggleUnit && (
+                          <MenuItem onClick={() => { setAddChoose(false); onToggleUnit(); }}>
+                            ⇄ SHOW IN {unit === 'kg' ? 'LB' : 'KG'}
+                          </MenuItem>
+                        )}
                         {onSuperset && ex.ss == null && (
                           <MenuItem onClick={() => { setAddChoose(false); onSuperset(); }}>⛓ SUPERSET</MenuItem>
                         )}
@@ -1123,7 +1139,7 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
           {/* header row */}
           <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)' }} className="mono">
             <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
-            <LoadHeader ex={ex} splitView={splitView} onToggle={() => setSplitView(v => !v)} />
+            <LoadHeader ex={ex} splitView={splitView} onToggle={() => setSplitView(v => !v)} unit={unit} />
             <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{ex.sets[0]?.time ? 'TIME' : 'REPS'}{ex.unilateral ? '/SIDE' : ''}</span>
             <span style={{ letterSpacing: '0', whiteSpace: 'nowrap' }}>DIFFICULTY</span>
             <span />
@@ -1134,7 +1150,7 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
               if (!s) return null;
               if (!s.kind) wn += 1;
               return (
-                <LogSetRow key={i} idx={i} setNum={wn} set={s} color={phaseColor} banded={ex.banded}
+                <LogSetRow key={i} idx={i} setNum={wn} set={s} color={phaseColor} banded={ex.banded} unit={unit}
                 split={ex.split} splitView={splitView} delay={i * 45}
                 onComplete={() => onComplete(i)}
                 onRpe={(rpe) => onUpdate(i, { rpe })}
@@ -1306,7 +1322,7 @@ function FinishSlide({ phaseId, missed = 0, onFinish }) {
 // ── SUPERSET CARD (interleaved, round-based) ─────────────────────
 // Renders a superset group as rounds: round 1 = one set of each exercise,
 // round 2 = the next set of each, etc., so the client alternates A1→A2→A1…
-function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onUnlink, onCompleteAll, onComment, onHistory, intro }) {
+function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onUnlink, onCompleteAll, onComment, onHistory, intro, unit = 'kg', onToggleUnit }) {
   const phase = PHASES.find((p) => p.id === group[0].phase);
   const phaseColor = phase?.accent || 'var(--accent)';
   const letter = (gi) => `${String.fromCharCode(65)}${gi + 1}`; // A1, A2, …
@@ -1346,7 +1362,7 @@ function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle
               onAddSet={(kind) => onAddSet(e.id, kind)}
               onDelSet={() => onDelSet(e.id)}
               onTitle={() => onTitle(e.id)}
-              onHistory={() => onHistory(e.id)}
+              onHistory={() => onHistory(e.id)} unit={unit}
               onComment={onComment ? () => onComment(e.id) : null} />
           ))}
         </div>
@@ -1363,7 +1379,7 @@ function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle
 
 // One exercise inside a superset - its own title row + set table, tinted with
 // the superset accent and tagged A1/A2… so the grouping stays clear.
-function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onHistory, onComment }) {
+function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onDelSet, onTitle, onHistory, onComment, unit = 'kg' }) {
   const [splitView, setSplitView] = React.useState(e.split > 1);
   React.useEffect(() => { setSplitView(e.split > 1); }, [e.id, e.split]);
   return (
@@ -1386,7 +1402,7 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
       {/* Set table */}
       <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)', borderTop: '1px solid var(--line)' }} className="mono">
         <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
-        <LoadHeader ex={e} splitView={splitView} onToggle={() => setSplitView(v => !v)} />
+        <LoadHeader ex={e} splitView={splitView} onToggle={() => setSplitView(v => !v)} unit={unit} />
         <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{e.sets[0]?.time ? 'TIME' : 'REPS'}{e.unilateral ? '/SIDE' : ''}</span>
         <span style={{ letterSpacing: '0', whiteSpace: 'nowrap' }}>DIFFICULTY</span>
         <span />
@@ -1395,7 +1411,7 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
         if (!s) return null;
         if (!s.kind) wn += 1;
         return (
-          <LogSetRow key={i} idx={i} setNum={wn} set={s} color={color} banded={e.banded}
+          <LogSetRow key={i} idx={i} setNum={wn} set={s} color={color} banded={e.banded} unit={unit}
             split={e.split} splitView={splitView} delay={i * 45}
             onComplete={() => onComplete(i)}
             onRpe={(rpe) => onUpdate(i, { rpe })}
@@ -1905,7 +1921,7 @@ function SetTypeBadge({ set, setNum, onKind }) {
 }
 
 // ── SET ROW ──────────────────────────────────────────────────────
-function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, split = 1, splitView = false, delay = 0, onComplete, onReps, onKg, onBand, onRpe, onKind }) {
+function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, split = 1, splitView = false, delay = 0, unit = 'kg', onComplete, onReps, onKg, onBand, onRpe, onKind }) {
   if (!set) return null;
   const type = SET_TYPE[set.kind];
   return (
@@ -1924,7 +1940,7 @@ function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, split = 1,
       <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <IconTimer size={11} />TIMED
           </span> :
-      <NumCell value={set.kg} suffix="kg" done={set.done} split={split} splitView={splitView} delay={delay} onChange={onKg} />}
+      <NumCell value={set.kg} unit={unit} done={set.done} split={split} splitView={splitView} delay={delay} onChange={onKg} />}
       {set.time ?
       <TimeCell value={set.reps} done={set.done} onChange={onReps} /> :
       <RepsCell set={set} onChange={onReps} />}
@@ -2023,11 +2039,11 @@ function RepsCell({ set, onChange }) {
 // The weight column's header doubles as the split toggle on two-handed
 // movements: tap it and every weight in the column comes apart into the pair
 // you actually pick up, tap again and they merge back into the total.
-function LoadHeader({ ex, splitView, onToggle }) {
+function LoadHeader({ ex, splitView, onToggle, unit = 'kg' }) {
   const base = { letterSpacing: '0.08em', whiteSpace: 'nowrap' };
   if (ex.banded) return <span style={base}>BAND</span>;
   if (ex.sets[0]?.time) return <span style={base}>TYPE</span>;
-  if (!(ex.split > 1)) return <span style={base}>KG</span>;
+  if (!(ex.split > 1)) return <span style={base}>{unit.toUpperCase()}</span>;
   return (
     <button onClick={onToggle} aria-pressed={splitView}
       aria-label={splitView ? 'Show the total weight' : 'Show the weight per hand'}
@@ -2036,7 +2052,7 @@ function LoadHeader({ ex, splitView, onToggle }) {
         color: splitView ? 'var(--accent)' : 'var(--text-2)', ...base,
         fontFamily: 'JetBrains Mono', fontSize: 9.5, fontWeight: 700,
       }}>
-      {splitView ? 'KG EACH' : 'KG TOTAL'}
+      {splitView ? `${unit.toUpperCase()} EACH` : `${unit.toUpperCase()} TOTAL`}
       {/* Two bars merging into one, and back - the toggle's own little diagram. */}
       <svg width="13" height="9" viewBox="0 0 13 9" aria-hidden="true" style={{ flexShrink: 0, overflow: 'visible' }}>
         <rect x={splitView ? 0 : 3.5} y="1" width="3" height="7" rx="1" fill="currentColor"
@@ -2051,26 +2067,36 @@ function LoadHeader({ ex, splitView, onToggle }) {
 // Weight - a plain type-in field, same as reps. Blank leaves it unset ("–"),
 // 0 means bodyweight. On a two-handed movement the per-hand figure rides along
 // as the suffix, so the split readout survives without a second input.
-function NumCell({ value, suffix, done, split = 1, splitView = false, delay = 0, onChange }) {
+const LB_PER_KG = 2.20462;
+const round1 = (n) => Math.round(n * 10) / 10;
+
+function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay = 0, onChange }) {
   const [draft, setDraft] = React.useState(null); // non-null only while typing
+  const suffix = unit;
+  // Storage stays kg; only what's shown and typed follows the unit.
+  const toDisplay = (kg) => kg == null ? null : (unit === 'lb' ? round1(kg * LB_PER_KG) : kg);
+  const toKg = (n) => unit === 'lb' ? round1(n / LB_PER_KG) : n;
+  const shownValue = toDisplay(value);
   const halves = (splitView && value) ? splitLoad(value, split) : null;
   const commit = (raw) => {
     const clean = raw.replace(/[^\d.]/g, '');
     setDraft(clean);
     if (clean === '') { onChange(null); return; }
     const n = parseFloat(clean);
-    if (isNaN(n) || n > 999) return;
-    onChange(n);
+    if (isNaN(n) || n > 9999) return;
+    const kg = toKg(n);
+    if (kg > 999) return;
+    onChange(kg);
   };
   // At rest a bodyweight set reads "BW" rather than a bare 0; focusing swaps in
   // an empty field so the client just types the number they used.
-  const shown = draft !== null ? draft : (value == null ? '' : value === 0 ? 'BW' : String(value));
+  const shown = draft !== null ? draft : (value == null ? '' : value === 0 ? 'BW' : String(shownValue));
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}>
       <input
         value={shown}
         onChange={(e) => commit(e.target.value)}
-        onFocus={(e) => { setDraft(value ? String(value) : ''); e.target.select(); }}
+        onFocus={(e) => { setDraft(value ? String(shownValue) : ''); e.target.select(); }}
         onBlur={() => setDraft(null)}
         inputMode="decimal" placeholder="–" aria-label="Weight"
         style={{
@@ -2082,7 +2108,7 @@ function NumCell({ value, suffix, done, split = 1, splitView = false, delay = 0,
         }}
       />
       {halves
-        ? <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', whiteSpace: 'nowrap', flexShrink: 0 }}>{halves.n}×{halves.each}</span>
+        ? <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', whiteSpace: 'nowrap', flexShrink: 0 }}>{halves.n}×{toDisplay(halves.each)}</span>
         : suffix && !!value && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0 }}>{suffix}</span>}
     </div>);
 
@@ -2358,47 +2384,7 @@ function PriorProgressSheet({ ex, userId, onClose }) {
   React.useEffect(() => {
     let alive = true;
     if (!userId) { setSessions([]); return; }
-    // Query from the session side so the ordering and the limit apply to
-    // workout_sessions.completed_at, a top-level column. Reading logged_sets
-    // first meant slicing an arbitrary chunk of every set the client had ever
-    // logged and sifting it here - fine on a short history, but once a year of
-    // imported training is in the table the cap lands nowhere near this
-    // exercise's recent sessions. !inner drops sessions with no matching set,
-    // so limit(5) really is the last five times they did this movement.
-    // Pass the name as-is. Wrapping it in double quotes - the convention for
-    // an in.() list - makes the quotes part of the pattern here, so every one
-    // of these lookups came back empty. Commas are safe unquoted: PostgREST
-    // only splits a value on commas inside in.() and or=() lists.
-    const name = ex.name.trim();
-    supabase
-      .from('workout_sessions')
-      .select('id, completed_at, logged_sets!inner(set_index, actual_reps, actual_weight_kg, actual_band, actual_time_secs)')
-      .eq('client_id', userId)
-      .not('completed_at', 'is', null)
-      .ilike('logged_sets.exercise_name', name)
-      .order('completed_at', { ascending: false })
-      .limit(5)
-      .then(({ data }) => {
-        if (!alive) return;
-        const out = (data || []).map((sess) => {
-            const rows = [...(sess.logged_sets || [])].sort((a, b) => a.set_index - b.set_index);
-            const sets = rows.map((r) => {
-              if (r.actual_time_secs) return { warmup: false, label: formatMMSS(r.actual_time_secs) };
-              const kg = r.actual_weight_kg ? parseFloat(r.actual_weight_kg) : null;
-              const band = bandOf(r.actual_band);
-              if (band) return { warmup: false, label: `${band.short} × ${r.actual_reps ?? '-'}` };
-              if (kg != null) return { warmup: false, label: `${kg}kg × ${r.actual_reps ?? '-'}` };
-              return { warmup: false, label: `${r.actual_reps ?? '-'} reps` };
-            });
-            const kgs = rows.map((r) => parseFloat(r.actual_weight_kg)).filter((v) => !isNaN(v));
-            return {
-              date: new Date(sess.completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-              sets,
-              top: kgs.length ? Math.max(...kgs) : null,
-            };
-          });
-        setSessions(out);
-      });
+    loadExerciseHistory(userId, ex.name, 5).then(out => { if (alive) setSessions(out); });
     return () => { alive = false; };
   }, [ex.name, userId]);
 
