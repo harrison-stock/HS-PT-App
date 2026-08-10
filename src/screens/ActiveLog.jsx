@@ -228,14 +228,20 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
           } else if (userId) {
             clearActiveWorkout(userId);
           }
-          // Editing a past session. Saving replaces the session wholesale, so
-          // anything the edit screen fails to show is destroyed on save. The
-          // prescription alone is not enough to rebuild what was logged: a
-          // client can add sets to an exercise and add exercises that were never
-          // prescribed, and neither has anywhere to land in a rebuilt-from-the-
-          // programme sheet. So restore all three - the prescribed sets, the
-          // extra sets, and the extra exercises - and the elapsed time with them.
-          if (edit && userId) {
+          // Two reasons to reach for the stored session:
+          //
+          //  - Editing a past one. Saving replaces the session wholesale, so
+          //    anything the sheet fails to show is destroyed on save. The
+          //    prescription alone can't rebuild what was logged: a client can
+          //    add sets to an exercise and add exercises that were never
+          //    prescribed, and neither has anywhere to land in a rebuilt-from-
+          //    the-programme sheet.
+          //  - The day has no exercises left. Opening it any other way used to
+          //    dead-end on "workout unavailable" even when the client had
+          //    plainly trained it - which is what a coach hit reviewing a
+          //    client's logged session after the day had been reworked.
+          const needStored = edit || rows.length === 0;
+          if (needStored && userId) {
             const { data: sess } = await supabase.from('workout_sessions')
               .select('id, started_at, completed_at, logged_sets ( exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, intensity )')
               .eq('client_id', userId).eq('day_id', dayId)
@@ -255,10 +261,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
 
             // Called even with no prescription rows: its "exercises the client
             // added mid-session" branch rebuilds a card from the logged sets
-            // alone, which is exactly what's needed when the day this was
-            // trained from has since lost its exercises (reworked or deleted by
-            // the coach). Better that than dead-ending on a session the client
-            // can plainly see they completed.
+            // alone, which is what carries a session whose day is now empty.
             restoreLoggedSession(rows, sess?.logged_sets, formatMMSS);
           }
           // A real assigned day must have exercises - never fall back to the
