@@ -38,6 +38,9 @@ export async function loadExerciseHistory(clientId, exerciseName, limit = 5, lib
     .order('completed_at', { ascending: false })
     .limit(limit);
 
+  // Run as two independent lookups rather than one or-filter so that if the
+  // library_exercise_id column isn't there yet, only that query comes back
+  // empty and the name lookup still answers.
   const queries = [];
   if (libraryId) queries.push(base().eq('logged_sets.library_exercise_id', libraryId));
   if (exerciseName) queries.push(base().ilike('logged_sets.exercise_name', exerciseName.trim()));
