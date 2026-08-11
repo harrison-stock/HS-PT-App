@@ -132,10 +132,21 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
 
       for (let eOrd = 0; eOrd < s.items.length; eOrd++) {
         const ex = s.items[eOrd];
-        const { data: exRow } = await supabase
+        const exRowValues = { section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, banded: ex.banded || false, unilateral: ex.unilateral || false, load_split: ex.split || 1, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd };
+        let { data: exRow } = await supabase
           .from('section_exercises')
-          .insert({ section_id: sec.id, library_exercise_id: ex.libraryId ?? null, name: ex.name, img_url: ex.img, timed: ex.timed, banded: ex.banded || false, unilateral: ex.unilateral || false, load_split: ex.split || 1, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd })
+          .insert({ ...exRowValues, library_exercise_id: ex.libraryId ?? null })
           .select('id').single();
+        // Fallback if migration 055 (library exercise id) isn't applied yet.
+        // This save has already deleted the day's sections, so an insert that
+        // fails here doesn't just lose one column - it leaves the day empty,
+        // and the client opens a workout with nothing in it.
+        if (!exRow) {
+          ({ data: exRow } = await supabase
+            .from('section_exercises')
+            .insert(exRowValues)
+            .select('id').single());
+        }
         if (!exRow) continue;
 
         await supabase.from('exercise_sets').insert(

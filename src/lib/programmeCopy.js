@@ -104,7 +104,7 @@ async function writeDayInto(src, target) {
   if (!exRows.length) return;
 
   const { data: newExs, error: eErr } = await insertRows('section_exercises', exRows,
-    ['banded', 'unilateral', 'superset_group', 'alternates', 'load_split']);
+    ['library_exercise_id', 'banded', 'unilateral', 'superset_group', 'alternates', 'load_split']);
   if (eErr) throw new Error(eErr.message);
   const exByKey = indexBy(newExs, r => `${r.section_id}:${r.sort_order}`);
 
@@ -241,7 +241,7 @@ export async function duplicateProgramme(trainerId, prog) {
       });
     }
     const { data: newExs, error: eErr } = await insertRows('section_exercises', exRows,
-      ['banded', 'unilateral', 'superset_group', 'alternates', 'load_split']);
+      ['library_exercise_id', 'banded', 'unilateral', 'superset_group', 'alternates', 'load_split']);
     if (eErr) return { error: eErr };
     const exByKey = indexBy(newExs, r => `${r.section_id}:${r.sort_order}`);
 

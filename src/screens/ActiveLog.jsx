@@ -149,22 +149,28 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
     if (!dayId) return;
     setDbLoading(true);
     setLoadError(false);
-    const SECTION_FIELDS = (withIntro) => `id, kind, title, sort_order${withIntro ? ', intro' : ''}, section_exercises ( id, library_exercise_id, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) )`;
+    // Naming a column the database doesn't have fails the whole select, so
+    // every optional one is dropped and retried rather than assumed. Migrations
+    // here are applied by hand, so a deploy can easily be ahead of the schema -
+    // and a workout that won't load is a session the client can't train.
+    const SECTION_FIELDS = (withIntro, withLibId) =>
+      `id, kind, title, sort_order${withIntro ? ', intro' : ''}, section_exercises ( id${withLibId ? ', library_exercise_id' : ''}, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, superset_group, alternates, sort_order, exercise_sets ( set_index, reps, reps_text, weight_kg, band, rest_secs, time_secs, kind ) )`;
     (async () => {
-      let { data, error } = await supabase
+      // Most complete first, then drop 055 (library id), then 036 (slide text),
+      // then both.
+      for (const [withIntro, withLibId] of [[true, true], [true, false], [false, true], [false, false]]) {
+        const { data, error } = await supabase
+          .from('programme_days')
+          .select(`id, intro, workout_sections ( ${SECTION_FIELDS(withIntro, withLibId)} )`)
+          .eq('id', dayId)
+          .single();
+        if (data || !error) return { data, error };
+      }
+      return await supabase
         .from('programme_days')
-        .select(`id, intro, workout_sections ( ${SECTION_FIELDS(true)} )`)
+        .select(`id, intro, workout_sections ( ${SECTION_FIELDS(false, false)} )`)
         .eq('id', dayId)
         .single();
-      // Fallback if migration 036 (per-section slide text) isn't applied yet.
-      if (!data && error) {
-        ({ data, error } = await supabase
-          .from('programme_days')
-          .select(`id, intro, workout_sections ( ${SECTION_FIELDS(false)} )`)
-          .eq('id', dayId)
-          .single());
-      }
-      return { data, error };
     })()
       .then(async ({ data, error }) => {
         if (data) {
@@ -386,12 +392,19 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
         savedSessionRef.current = ws.id;
         editSessionRef.current = ws.id;
         const logRows = pendingSets.map(r => ({ ...r, session_id: ws.id }));
-        const { error: logErr } = await supabase.from('logged_sets').insert(logRows);
-        // Fallback if migration 032 (exercise_name / nullable exercise_id) isn't
-        // applied yet: log the programme exercises without the new fields.
+        let { error: logErr } = await supabase.from('logged_sets').insert(logRows);
+        // Fallback if migration 055 (library exercise id) isn't applied yet.
+        // This one only drops the new column, so nothing logged is lost.
         if (logErr) {
-          const safe = logRows.filter(r => r.exercise_id).map(({ exercise_name, ...r }) => r);
-          if (safe.length) await supabase.from('logged_sets').insert(safe);
+          const noLib = logRows.map(({ library_exercise_id, ...r }) => r);
+          ({ error: logErr } = await supabase.from('logged_sets').insert(noLib));
+          // Fallback if migration 032 (exercise_name / nullable exercise_id)
+          // isn't applied either: log the programme exercises without the new
+          // fields. Lossy, so it stays the last resort.
+          if (logErr) {
+            const safe = noLib.filter(r => r.exercise_id).map(({ exercise_name, ...r }) => r);
+            if (safe.length) await supabase.from('logged_sets').insert(safe);
+          }
         }
         await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
         // Notify the coach that the client finished a workout - or, if they
