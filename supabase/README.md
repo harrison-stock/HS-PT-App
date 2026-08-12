@@ -15,18 +15,22 @@ deploy down with it instead of shipping code the database can't serve.
 
 One environment variable, **`SUPABASE_DB_URL`**, scoped to **Production** only.
 
-Get it from Supabase → Project Settings → Database → Connection string → **URI**.
+Get it from the **Connect** button at the top of the Supabase project — not from
+Settings, which no longer carries a Database page.
 
-Use the **direct connection** (port `5432`) or the **session pooler**. Do *not*
-use the transaction pooler on port `6543`: it can't hold the advisory lock or
-run the DDL these migrations are made of.
+Pick the **Direct connection** tab (port `5432`), or **Session pooler** if the
+project has no direct IPv4. Do *not* use the **Transaction pooler** on port
+`6543`: it can't hold the advisory lock or run the DDL these migrations are made
+of.
 
 ```
 postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres
 ```
 
-The password is the database password, not the anon key or the service role
-key. URL-encode it if it contains `@`, `:`, `/` or `?`.
+The URI arrives with `[YOUR-PASSWORD]` as a placeholder. That's the database
+password, not the anon key or the service role key; if it isn't saved anywhere,
+reset it under **Database** in the left sidebar. URL-encode it if it contains
+`@`, `:`, `/` or `?`.
 
 Nothing else changes — `vercel.json`, the build command and the install step all
 stay as they are.
