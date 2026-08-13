@@ -18,14 +18,21 @@ One environment variable, **`SUPABASE_DB_URL`**, scoped to **Production** only.
 Get it from the **Connect** button at the top of the Supabase project — not from
 Settings, which no longer carries a Database page.
 
-Pick the **Direct connection** tab (port `5432`), or **Session pooler** if the
-project has no direct IPv4. Do *not* use the **Transaction pooler** on port
-`6543`: it can't hold the advisory lock or run the DDL these migrations are made
-of.
+Pick the **Session pooler** tab:
 
 ```
-postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres
+postgresql://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres
 ```
+
+Two other tabs, and why neither of them:
+
+- **Direct connection** — `db.<ref>.supabase.co` resolves to IPv6 only unless
+  the project has the IPv4 add-on, and Vercel's build machines have no IPv6.
+  The build fails with `connect ENETUNREACH 2a05:...:5432`.
+- **Transaction pooler** (port `6543`) — reachable, but it can't hold an
+  advisory lock or run the DDL these migrations are made of.
+
+Note the session pooler's username is `postgres.<ref>`, not plain `postgres`.
 
 The URI arrives with `[YOUR-PASSWORD]` as a placeholder. That's the database
 password, not the anon key or the service role key; if it isn't saved anywhere,

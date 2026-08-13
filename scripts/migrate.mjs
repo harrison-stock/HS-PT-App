@@ -119,6 +119,24 @@ try {
 } catch (err) {
   console.error('[migrate] migration failed - aborting the build');
   console.error(err.message);
+  // The two ways the connection string itself is wrong are both worth naming,
+  // because neither error says anything about Supabase.
+  // Two colons in the address is an IPv6 one; node puts it on err.address, and
+  // in the message either way.
+  if (err.code === 'ENETUNREACH' && /:.*:/.test(err.address || err.message || '')) {
+    console.error(
+      "[migrate] that's an IPv6 address, and Vercel's build machines are IPv4-only. " +
+      "Supabase's direct connection (db.<ref>.supabase.co) is IPv6 unless the project " +
+      'has the IPv4 add-on. Use the Session pooler string from the Connect dialog ' +
+      'instead: postgres.<ref>@aws-N-<region>.pooler.supabase.com:5432.'
+    );
+  }
+  if (url.includes(':6543')) {
+    console.error(
+      '[migrate] port 6543 is the transaction pooler, which cannot run DDL or hold ' +
+      'an advisory lock. Use the session pooler on 5432.'
+    );
+  }
   process.exitCode = 1;
 } finally {
   if (locked) await client.query('select pg_advisory_unlock($1)', [LOCK_KEY]).catch(() => {});
