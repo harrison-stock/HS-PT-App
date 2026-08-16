@@ -130,13 +130,42 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
     try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch (e) {}
   }, []);
 
+  // Rest counts down to a wall-clock deadline rather than by subtracting one a
+  // second. iOS suspends timers the moment the app goes to the background, so
+  // a client who locked the phone or flicked to their music came back to a rest
+  // timer frozen where they left it - 40 seconds still showing after five
+  // minutes away, and the chime never due. Anchoring to a deadline means the
+  // clock is right whenever the screen comes back, and a rest that ran out
+  // while away resolves immediately on return.
+  const restEndsAtRef = React.useRef(null);
+  // The deadline is the source of truth, so both of these move it rather than
+  // the number on screen - which the next tick would only overwrite. Starting a
+  // rest while one is already running re-anchors without the effect re-running,
+  // because the tick reads the ref every time.
+  const startRest = React.useCallback((secs) => {
+    restEndsAtRef.current = Date.now() + secs * 1000;
+    setRestTime(secs); setResting(true); setTimesUp(false);
+  }, []);
+  const extendRest = React.useCallback((secs) => {
+    restEndsAtRef.current = (restEndsAtRef.current ?? Date.now()) + secs * 1000;
+    setRestTime((s) => Math.max(0, s + secs));
+  }, []);
   React.useEffect(() => {
-    if (!resting || restLeaving || paused) return;
-    const t = setInterval(() => setRestTime((s) => {
-      if (s <= 1) { playRestChime(); endRest(true); return 0; }
-      return s - 1;
-    }), 1000);
-    return () => clearInterval(t);
+    if (!resting || restLeaving || paused) { restEndsAtRef.current = null; return; }
+    // Re-anchor from what's on screen, so starting a rest, un-pausing and
+    // resuming from a snapshot all go through the same path.
+    if (restEndsAtRef.current == null) restEndsAtRef.current = Date.now() + restTime * 1000;
+    const tick = () => {
+      const left = Math.ceil((restEndsAtRef.current - Date.now()) / 1000);
+      if (left <= 0) { restEndsAtRef.current = null; setRestTime(0); playRestChime(); endRest(true); return; }
+      setRestTime(left);
+    };
+    const t = setInterval(tick, 250);
+    // Coming back to the tab re-reads the clock before the next interval, so
+    // there's no visible catch-up.
+    const onVis = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
   }, [resting, restLeaving, paused, endRest, playRestChime]);
   // Auto-dismiss the "time's up" banner
   React.useEffect(() => {
@@ -461,11 +490,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
     if (!wasDone) {
       const nextIdx = setIdx + 1;
       if (nextIdx < e.sets.length) updateSet(exId, nextIdx, { active: true });
-      if (e.rest > 0) {
-        setRestTime(e.rest);
-        setResting(true);
-        setTimesUp(false);
-      }
+      if (e.rest > 0) startRest(e.rest);
     }
   };
 
@@ -800,7 +825,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
               <div className="h-bold" style={{ fontSize: 20, color: 'var(--accent-2)' }}>{fmt(restTime)}</div>
             </div>
             <button className="btn-ghost" onClick={() => endRest()}>SKIP</button>
-            <button className="btn-ghost" onClick={() => setRestTime((s) => s + 30)}>+30s</button>
+            <button className="btn-ghost" onClick={() => extendRest(30)}>+30s</button>
           </div>
         }
         {timesUp &&
