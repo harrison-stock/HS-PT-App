@@ -17,8 +17,9 @@ import { IconPlus, IconCheck, IconX2, IconChevronRight } from '../components/ico
 import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { ImportHistory } from './ImportHistory'
+import { FormArchive } from './FormArchive'
 import { toast } from '../lib/toast'
-import { setTaskComplete, RECURRENCE_OPTIONS } from '../lib/tasks'
+import { setTaskComplete, catchUpRecurring, RECURRENCE_OPTIONS } from '../lib/tasks'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
 import { Skel } from '../components/Loading'
@@ -49,6 +50,7 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go,
     { id: 'data',      label: 'DATA'      },
     { id: 'report',    label: 'REPORT'    },
     { id: 'tasks',     label: 'TASKS'     },
+    { id: 'checkins',  label: 'CHECK-INS' },
     { id: 'goals',     label: 'GOALS'     },
     { id: 'vault',     label: 'DOCUMENTS' },
     { id: 'settings',  label: 'SETTINGS'  },
@@ -108,6 +110,7 @@ export function ClientDetail({ c, trainerId, programmes, onClose, onChanged, go,
         {tab === 'body'     && <BodyTab      c={c} trainerId={trainerId} initialInjuryId={initialInjuryId} />}
         {tab === 'data'     && <DataTab      c={c} trainerId={trainerId} />}
         {tab === 'tasks'    && <TasksTab     c={c} trainerId={trainerId} />}
+        {tab === 'checkins' && <FormArchive  clientId={c.id} clientName={c.name} />}
         {tab === 'goals'    && <GoalsTab     c={c} trainerId={trainerId} />}
         {tab === 'vault'    && <VaultTab     c={c} trainerId={trainerId} />}
         {tab === 'report'   && <ProgrammeReport clientId={c.id} clientName={c.name} embedded onClose={() => setTab('overview')} />}
@@ -1646,10 +1649,20 @@ function TasksTab({ c, trainerId }) {
   const [saving, setSaving] = React.useState(false);
   const [templates, setTemplates] = React.useState([]);
 
-  const reload = () =>
-    supabase.from('client_tasks').select('*').eq('client_id', c.id)
-      .order('due_date', { ascending: true })
-      .then(({ data }) => setTasks(data || []));
+  // Loading the list is also the moment to notice a repeating task that never
+  // got ticked and lay down the occurrence it owes. Writing needs the trainer's
+  // rights, so this is the coach's side of the job by necessity.
+  const reload = React.useCallback(async () => {
+    const { data } = await supabase.from('client_tasks').select('*').eq('client_id', c.id)
+      .order('due_date', { ascending: true });
+    if (await catchUpRecurring(data)) {
+      const { data: fresh } = await supabase.from('client_tasks').select('*').eq('client_id', c.id)
+        .order('due_date', { ascending: true });
+      setTasks(fresh || []);
+      return;
+    }
+    setTasks(data || []);
+  }, [c.id]);
 
   React.useEffect(() => {
     reload();

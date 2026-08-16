@@ -51,3 +51,62 @@ export async function loadResponses(formId, clientId) {
   const { data } = await q;
   return data || [];
 }
+
+// Every form submission a client has made, newest first, with the form
+// definition alongside so the answers can be labelled and typed. `loadResponses`
+// above answers "who filled in this form"; this answers "what has this client
+// sent me", which is the question a weekly check-in actually raises.
+export async function loadClientResponses(clientId) {
+  if (!clientId) return [];
+  const { data } = await supabase.from('form_responses')
+    .select('id, form_id, task_id, answers, submitted_at, forms ( id, title, description, fields )')
+    .eq('client_id', clientId)
+    .order('submitted_at', { ascending: false });
+  return data || [];
+}
+
+// Group a client's submissions by the form they answered, newest form activity
+// first, and pull out the fields worth tracking across weeks - the ones with a
+// number behind them. Text answers are read, numbers are compared.
+export function groupResponses(rows) {
+  const byForm = new Map();
+  for (const r of rows || []) {
+    const f = r.forms;
+    if (!f) continue; // form deleted since; the response is orphaned
+    if (!byForm.has(f.id)) byForm.set(f.id, { form: f, entries: [] });
+    byForm.get(f.id).entries.push(r);
+  }
+  return [...byForm.values()].map(g => ({
+    ...g,
+    // Ascending for the trend, so left-to-right reads as time passing.
+    trend: (g.form.fields || [])
+      .filter(fl => fl.type === 'number' || fl.type === 'scale')
+      .map(fl => ({
+        field: fl,
+        points: [...g.entries].reverse()
+          .map(e => ({ at: e.submitted_at, v: toNum(e.answers?.[fl.id]) }))
+          .filter(p => p.v != null),
+      }))
+      // One reading isn't a trend - it just puts an empty table above the entry
+      // it came from.
+      .filter(t => t.points.length > 1),
+  })).sort((a, b) => (b.entries[0]?.submitted_at || '').localeCompare(a.entries[0]?.submitted_at || ''));
+}
+
+function toNum(v) {
+  if (v == null || v === '') return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+// How an answer reads back, whatever the field type stored.
+export function answerText(field, raw) {
+  if (raw == null || raw === '') return null;
+  if (field.type === 'yesno') return raw === true || raw === 'yes' || raw === 'true' ? 'Yes' : 'No';
+  if (Array.isArray(raw)) return raw.join(', ');
+  if (field.type === 'scale') {
+    const max = field.max ?? 5;
+    return `${raw} / ${max}`;
+  }
+  return String(raw);
+}
