@@ -604,7 +604,7 @@ function KPIRow({ kpis }) {
   const items = [
     { label: 'ACTIVE',    value: kpis.active,     color: 'var(--accent)',  icon: <IconUser size={11}/> },
     { label: 'TODAY',     value: kpis.today,      color: 'var(--accent-2)',icon: <IconCalendar size={11}/> },
-    { label: 'SESS · 7d', value: kpis.sessions7d, color: 'var(--c-amber)', icon: <IconBolt size={11}/> },
+    { label: 'SESS 7D',   value: kpis.sessions7d, color: 'var(--c-amber)', icon: <IconBolt size={11}/> },
     { label: 'PENDING',   value: kpis.pending,    color: 'var(--c-coral)', icon: <IconBell size={11}/> },
   ];
   return (
@@ -613,7 +613,10 @@ function KPIRow({ kpis }) {
         <div key={it.label} className="card" style={{ padding: '10px 8px', textAlign: 'left' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: it.color, marginBottom: 4 }}>
             {it.icon}
-            <span className="mono" style={{ fontSize: 8, letterSpacing: '0.1em', fontWeight: 700, color: it.color }}>{it.label}</span>
+            {/* A quarter of a phone screen is about 54px of usable label once
+                the icon has taken its share - enough for these four, but only
+                if they're never allowed to wrap onto a second line. */}
+            <span className="mono" style={{ fontSize: 8, letterSpacing: '0.08em', fontWeight: 700, color: it.color, whiteSpace: 'nowrap' }}>{it.label}</span>
           </div>
           <div className="h-bold" style={{ fontSize: 22, color: it.color, lineHeight: 1 }}>{it.value}</div>
         </div>
