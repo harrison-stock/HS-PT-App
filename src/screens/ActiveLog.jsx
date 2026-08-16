@@ -11,6 +11,7 @@ import { toast } from '../lib/toast'
 import { ExerciseComments } from './ExerciseComments'
 import { notify, trainerOf } from '../lib/notifications'
 import { saveActiveWorkout, loadActiveWorkout, clearActiveWorkout } from '../lib/activeWorkout'
+import { showLocalNotification } from '../lib/push'
 import { BrandIcon } from '../components/BrandIcon'
 import { BANDS, bandOf } from '../components/bands'
 import { loadExercises, videoThumb } from '../lib/exercises'
@@ -128,6 +129,19 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
     if (a) { try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
     // Buzz too, so a muted / pocketed phone still signals the next set.
     try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch (e) {}
+    // Screen off or another app in front: the chime is inaudible and there's
+    // nothing to see, so raise a notification as well. This is local rather
+    // than pushed - the deadline is held on the device and the server knows
+    // nothing about it. It fires when the page is hidden but still alive
+    // (Android, desktop) and, on iOS, the moment the app is reopened, which is
+    // when the timer resolves anyway. A rest that ends while an iPhone is
+    // genuinely suspended cannot be announced by any web API.
+    if (document.visibilityState === 'hidden') {
+      showLocalNotification('Rest over', {
+        body: 'Next set is ready.', tag: 'hs-pt-rest', renotify: true,
+        silent: false,
+      });
+    }
   }, []);
 
   // Rest counts down to a wall-clock deadline rather than by subtracting one a

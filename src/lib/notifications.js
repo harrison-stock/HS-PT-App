@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { sendPush } from './push'
 
 // Insert a notification for the counterparty. Best-effort: failures (e.g. no
 // trainer linked) are swallowed so they never block the triggering action.
@@ -16,6 +17,10 @@ export async function notify({ recipientId, actorId, kind, title, body, link }) 
       recipient_id: recipientId, actor_id: actorId, kind,
       title: title || '', body: body || '', link: link || null,
     });
+    // Same event, out to their phone. Deliberately not awaited into the caller's
+    // critical path and never allowed to throw: the in-app notification is the
+    // record, the push is only the tap on the shoulder.
+    sendPush({ recipientId, title, body, link, tag: `hs-pt-${kind || 'general'}` });
   } catch (e) { /* ignore */ }
 }
 
