@@ -36,6 +36,13 @@ const Forms          = lazyScreen(() => import('./screens/Forms'), 'Forms');
 // Screens safe to restore verbatim after a reload/app-switch (no required
 // params). Logger/results/client-view need context, so they fall back home.
 const RESTORABLE = new Set(['dashboard', 'workouts', 'progress', 'resources', 'body', 'coach', 'programmes', 'exercises', 'forms', 'profile']);
+// Of those, the ones a coach can legitimately be sitting on as themselves.
+// hs_screen is shared between both sides of the app and lives in localStorage,
+// while impersonation lives in sessionStorage - so a coach who dropped into a
+// client's app, opened their calendar, and closed the tab came back as
+// themselves on that client-side calendar. Anything not in here sends them to
+// their hub instead.
+const COACH_RESTORABLE = new Set(['coach', 'programmes', 'exercises', 'forms', 'resources', 'profile']);
 
 const ACCENTS = {
   sea:      { c: '#46BBC0', soft: 'rgba(70,187,192,0.16)',  glow: 'rgba(70,187,192,0.45)',  on: '#06262A' },
@@ -165,7 +172,7 @@ export default function App() {
         didInitialRoute.current = true;
         let impersonating = false;
         try { impersonating = !!sessionStorage.getItem('hs_cv_id'); } catch (e) {}
-        if (!impersonating) setScreen(s => s === 'dashboard' ? 'coach' : s);
+        if (!impersonating) setScreen(s => COACH_RESTORABLE.has(s) ? s : 'coach');
       }
     } catch (e) {
       setBootError(true);
@@ -374,7 +381,7 @@ export default function App() {
   else ScreenEl = <Dashboard go={navigate} user={dashUser} userId={activeUserId} impersonating={impersonating} unread={unread} onClientSettings={impersonating ? openClientSettings : undefined}/>;
 
   return (
-    <div data-role={navIsTrainer ? 'trainer' : 'client'} style={{
+    <div data-role={navIsTrainer ? 'trainer' : 'client'} className="app-shell" style={{
       width: '100%', height: '100dvh',
       display: 'flex', flexDirection: 'column',
       fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', monospace",

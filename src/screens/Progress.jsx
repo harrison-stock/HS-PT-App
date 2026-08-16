@@ -114,7 +114,8 @@ async function loadWeightData(userId) {
 // Progress - Body metrics + Weight metrics tabs. `embedded` lets the coach
 // render a client's exact Metrics view inside the client file.
 export function Progress({ go, userId, embedded }) {
-  const [tab, setTab] = React.useState('body');
+  // Weights first: strength is what both sides open this screen for day to day.
+  const [tab, setTab] = React.useState('weight');
   const [range, setRange] = React.useState('90d');
 
   return (
@@ -136,8 +137,8 @@ export function Progress({ go, userId, embedded }) {
 
       {/* Tab switcher */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <TabPill active={tab === 'body'} onClick={() => setTab('body')} icon={<IconHeart size={14} />} label="BODY" />
         <TabPill active={tab === 'weight'} onClick={() => setTab('weight')} icon={<IconDumbbell size={14} />} label="WEIGHTS" />
+        <TabPill active={tab === 'body'} onClick={() => setTab('body')} icon={<IconHeart size={14} />} label="BODY" />
         <TabPill active={tab === 'photos'} onClick={() => setTab('photos')} icon={<IconCamera2 size={14} />} label="PHOTOS" />
       </div>
 
@@ -796,11 +797,32 @@ const fmtTickVal = (v) => Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'k' : (N
 export function MetricChart({ series, unit = '', color = 'var(--accent)', height = 280 }) {
   const [hover, setHover] = React.useState(null);
   const uid = React.useId();
+  // The viewBox used to be a fixed 760 wide with the height set in px. On a
+  // phone that scales the drawing to about 47% to fit ~360px of width, and
+  // because the height attribute holds the box open at full size, the chart
+  // ends up shrunk into the middle of a tall empty card - with 9px labels
+  // rendering at 4px. Measuring the container instead keeps one SVG unit equal
+  // to one CSS pixel, so nothing is scaled and the type is the size it says.
+  const wrapRef = React.useRef(null);
+  const [boxW, setBoxW] = React.useState(760);
+  React.useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => setBoxW(Math.max(260, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   if (!series || series.length < 2) {
-    return <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', padding: '28px 0', textAlign: 'center' }}>LOG MORE DATA TO SEE A TREND</div>;
+    return <div ref={wrapRef} className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', padding: '28px 0', textAlign: 'center' }}>LOG MORE DATA TO SEE A TREND</div>;
   }
-  const W = 760, H = height;
-  const padL = 48, padR = 20, padT = 18, padB = 36;
+  const W = boxW, H = height;
+  // A phone can't spare 48px of gutter out of 360, and at 1:1 the labels need
+  // to be a couple of points larger to read at arm's length.
+  const narrow = W < 520;
+  const padL = narrow ? 36 : 48, padR = narrow ? 12 : 20, padT = 18, padB = narrow ? 32 : 36;
+  const fsAxis = narrow ? 11 : 10;
+  const dotR = narrow ? 5 : 4;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const vals = series.map((s) => s.v);
   const dataMin = Math.min(...vals), dataMax = Math.max(...vals);
@@ -816,13 +838,13 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
   const line = pts.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
   const area = line + ` L ${pts[pts.length - 1].x} ${padT + plotH} L ${pts[0].x} ${padT + plotH} Z`;
   // Choose ~5 evenly-spaced x labels by index.
-  const nX = Math.min(5, series.length);
+  const nX = Math.min(narrow ? 3 : 5, series.length);
   const xIdx = Array.from({ length: nX }, (_, i) => Math.round(i * (series.length - 1) / (nX - 1)));
   const gid = 'mc' + uid.replace(/[:]/g, '');
   const hp = hover != null ? pts[hover] : null;
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block', overflow: 'visible' }}
         onMouseLeave={() => setHover(null)}>
         <defs>
@@ -837,7 +859,7 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
           return (
             <g key={i}>
               <line x1={padL} y1={y} x2={padL + plotW} y2={y} stroke="color-mix(in srgb, var(--text-3) 16%, transparent)" strokeWidth="1" strokeDasharray="2 4" />
-              <text x={padL - 8} y={y + 3} textAnchor="end" fontFamily="JetBrains Mono" fontSize="9" fill="var(--text-3)">{fmtTickVal(v)}</text>
+              <text x={padL - 6} y={y + 3} textAnchor="end" fontFamily="JetBrains Mono" fontSize={fsAxis} fill="var(--text-3)">{fmtTickVal(v)}</text>
             </g>
           );
         })}
@@ -847,10 +869,10 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
         {/* X labels (dates) */}
         {xIdx.map((idx, i) => (
           <text key={i} x={pts[idx].x} y={H - 12} textAnchor={i === 0 ? 'start' : i === xIdx.length - 1 ? 'end' : 'middle'}
-            fontFamily="JetBrains Mono" fontSize="9" fill="var(--text-3)">{fmtDayMonth(series[idx].date)}</text>
+            fontFamily="JetBrains Mono" fontSize={fsAxis} fill="var(--text-3)">{fmtDayMonth(series[idx].date)}</text>
         ))}
         {/* Unit label */}
-        <text x={padL - 8} y={padT - 6} textAnchor="end" fontFamily="JetBrains Mono" fontSize="8" fill="var(--text-3)">{unit}</text>
+        <text x={padL - 6} y={padT - 6} textAnchor="end" fontFamily="JetBrains Mono" fontSize={fsAxis - 1} fill="var(--text-3)">{unit}</text>
         {/* Series */}
         <path d={area} fill={`url(#${gid})`} />
         <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -858,7 +880,7 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
         {hp && <line x1={hp.x} x2={hp.x} y1={padT} y2={padT + plotH} stroke={color} strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />}
         {/* One marker per point */}
         {pts.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r={hover === i ? 6 : 4} fill={hover === i ? color : 'var(--bg-1)'}
+          <circle key={i} cx={p.x} cy={p.y} r={hover === i ? dotR + 2 : dotR} fill={hover === i ? color : 'var(--bg-1)'}
             stroke={color} strokeWidth="2" style={{ transition: 'r .1s', cursor: 'pointer' }} />
         ))}
         {/* Hover targets */}
