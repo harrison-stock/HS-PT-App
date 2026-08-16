@@ -3,6 +3,7 @@ import { HexBackButton, Hex } from '../components/hex'
 import { IconSun, IconMoon, IconCheck } from '../components/icons'
 import { InstallPrompt } from './InstallPrompt'
 import { loadConnections, startWearableConnect } from '../lib/health'
+import { enablePush, disablePush, isPushEnabled, pushBlockedReason } from '../lib/push'
 
 // Half-filled circle = "auto / follow system" appearance.
 const IconAuto = ({ size = 22, sw = 1.6 }) => (
@@ -121,6 +122,10 @@ function ProfileTab({ user, userId, onSave, theme, onThemeChange }) {
             style={inputStyle} />
         </Field>
       </div>
+
+      {/* Notifications */}
+      <div className="label" style={{ margin: '22px 0 7px' }}>// NOTIFICATIONS</div>
+      <PushSetting userId={userId} />
 
       {/* Appearance */}
       <div className="label" style={{ margin: '22px 0 7px' }}>// APPEARANCE</div>
@@ -340,6 +345,59 @@ function Field({ label, children }) {
     <div>
       <div className="label" style={{ marginBottom: 7 }}>{label}</div>
       {children}
+    </div>
+  );
+}
+
+
+// Turning push on has to happen inside a tap - browsers refuse a permission
+// prompt raised any other way, and iOS refuses it without saying so. Everything
+// that can stop it working (wrong browser, Safari rather than the installed
+// app, keys not deployed, permission already denied at the OS level) is named
+// rather than left as a button that quietly does nothing.
+function PushSetting({ userId }) {
+  const [on, setOn] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState('');
+
+  React.useEffect(() => { isPushEnabled().then(setOn); }, []);
+  const blocked = pushBlockedReason();
+
+  const toggle = async () => {
+    setBusy(true); setMsg('');
+    const r = on ? await disablePush() : await enablePush(userId);
+    setBusy(false);
+    if (r?.error) { setMsg(r.error); return; }
+    setOn(await isPushEnabled());
+  };
+
+  return (
+    <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Push notifications</div>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 3, lineHeight: 1.5 }}>
+            {blocked || (on
+              ? 'On for this device. Check-ins, tasks and coach messages reach you with the app closed.'
+              : 'Get told when a check-in is due, a task is set, or your rest timer runs out.')}
+          </div>
+        </div>
+        <button onClick={toggle} disabled={busy || (!!blocked && !on)}
+          aria-pressed={!!on}
+          style={{
+            all: 'unset', cursor: busy || (blocked && !on) ? 'default' : 'pointer', flexShrink: 0,
+            width: 46, height: 27, borderRadius: 999, position: 'relative',
+            background: on ? 'var(--accent)' : 'var(--bg-3)',
+            border: `1px solid ${on ? 'var(--accent)' : 'var(--line-strong)'}`,
+            opacity: busy || (blocked && !on) ? 0.45 : 1, transition: 'background .15s',
+          }}>
+          <span style={{
+            position: 'absolute', top: 2, left: on ? 21 : 2, width: 21, height: 21, borderRadius: '50%',
+            background: on ? 'var(--on-accent)' : 'var(--text-3)', transition: 'left .15s',
+          }}/>
+        </button>
+      </div>
+      {msg && <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)', lineHeight: 1.5 }}>{msg}</div>}
     </div>
   );
 }

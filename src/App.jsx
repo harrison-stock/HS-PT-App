@@ -229,11 +229,25 @@ export default function App() {
     return () => clearTimeout(t);
   }, [session]);
 
+  // Tapping a push lands here: the service worker focuses the existing window
+  // and posts where it was about, since a single-page app has no URL to open.
+  React.useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMsg = (e) => {
+      if (e.data?.type !== 'push-nav') return;
+      const link = e.data.link;
+      navigateRef.current?.(link?.screen || 'dashboard', link || undefined);
+    };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg);
+  }, []);
+
   const closeInstall = () => {
     setShowInstall(false);
     try { localStorage.setItem('hs_a2hs_seen', '1'); } catch (e) {}
   };
 
+  const navigateRef = React.useRef(null);
   const navigate = (target, opts) => {
     if (target === 'preview') {
       setScreen('workouts');
@@ -337,6 +351,8 @@ export default function App() {
   // The bottom nav stays accessible everywhere except the immersive workout
   // logger (where the session player owns the full screen).
   const showNav = screen !== 'log';
+
+  navigateRef.current = navigate;
 
   const exitClientView = () => { setClientViewId(null); setClientViewName(null); navigate('coach'); };
   // From the assume-control view, jump straight to this client's admin settings.
