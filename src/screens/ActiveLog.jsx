@@ -1171,7 +1171,7 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
             </div>
           </div>
           {/* header row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)' }} className="mono">
+          <div style={{ display: 'grid', gridTemplateColumns: setCols(splitView && ex.split > 1), gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)' }} className="mono">
             <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
             <LoadHeader ex={ex} splitView={splitView} onToggle={() => setSplitView(v => !v)} unit={unit} />
             <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{ex.sets[0]?.time ? 'TIME' : 'REPS'}{ex.unilateral ? '/SIDE' : ''}</span>
@@ -1447,7 +1447,7 @@ function SupersetExercise({ e, label, color, onComplete, onUpdate, onAddSet, onD
         <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.06em', padding: '0 12px 8px' }}>TEMPO · {e.tempo}</div>
       )}
       {/* Set table */}
-      <div style={{ display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)', borderTop: '1px solid var(--line)' }} className="mono">
+      <div style={{ display: 'grid', gridTemplateColumns: setCols(splitView && e.split > 1), gap: 8, padding: '6px 12px', fontSize: 9.5, fontWeight: 700, color: 'var(--text-2)', borderTop: '1px solid var(--line)' }} className="mono">
         <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET</span>
         <LoadHeader ex={e} splitView={splitView} onToggle={() => setSplitView(v => !v)} unit={unit} />
         <span style={{ letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{e.sets[0]?.time ? 'TIME' : 'REPS'}{e.unilateral ? '/SIDE' : ''}</span>
@@ -1969,12 +1969,19 @@ function SetTypeBadge({ set, setNum, onKind }) {
 }
 
 // ── SET ROW ──────────────────────────────────────────────────────
+// The load column carries a second value when per-hand loading is on
+// ("25  2×12.5"), which crowded reps right up against it. Give that column the
+// extra room when it's actually in use, and reps shift right out of the way.
+const setCols = (wideLoad) => wideLoad
+  ? '30px 1.45fr 0.75fr 62px 34px'
+  : '30px 1fr 1fr 62px 34px';
+
 function LogSetRow({ idx, setNum, set, color = 'var(--lime)', banded, split = 1, splitView = false, delay = 0, unit = 'kg', onComplete, onReps, onKg, onBand, onRpe, onKind }) {
   if (!set) return null;
   const type = SET_TYPE[set.kind];
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: '30px 1fr 1fr 62px 34px', gap: 8,
+      display: 'grid', gridTemplateColumns: setCols(splitView && split > 1), gap: 8,
       padding: '7px 12px', alignItems: 'center',
       background: set.active ? 'rgba(70,187,192,0.05)' : type ? `color-mix(in srgb, ${type.color} 6%, transparent)` : 'transparent',
       borderTop: '1px solid var(--line)',
@@ -2139,28 +2146,48 @@ function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay
   // At rest a bodyweight set reads "BW" rather than a bare 0; focusing swaps in
   // an empty field so the client just types the number they used.
   const shown = draft !== null ? draft : (value == null ? '' : value === 0 ? 'BW' : String(shownValue));
+  // Shared by the input and the hidden twin that measures it, so the two agree
+  // to the pixel.
+  const type = {
+    fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600, letterSpacing: '0.04em',
+  };
   return (
     // A label, so the whole cell focuses the field, while the input itself is
     // sized to its value - otherwise a full-width input pushed "kg" away from
     // the number it belongs to.
     <label style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0, cursor: 'text' }}>
-      <input
-        value={shown}
-        onChange={(e) => commit(e.target.value)}
-        onFocus={(e) => { setDraft(value ? String(shownValue) : ''); e.target.select(); }}
-        onBlur={() => setDraft(null)}
-        inputMode="decimal" placeholder="–" aria-label="Weight"
-        style={{
-          // 'ch' is the width of a zero, so letters ("BW") and the tracking on
-          // top of them need the extra em of slack or the value clips.
-          width: `calc(${Math.max(2, shown.length)}ch + 0.75em)`, minWidth: 0, flexShrink: 0,
-          background: 'transparent', border: 0,
-          color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
-          fontFamily: 'JetBrains Mono', fontSize: 14, fontWeight: 600,
-          letterSpacing: '0.04em', outline: 'none',
-          textDecoration: done ? 'line-through var(--text-3)' : 'none',
-        }}
-      />
+      {/* Width came from counting characters and multiplying by 'ch'. That is
+          the width of a zero in the *computed* font, which is not what ends up
+          on screen once a fallback face, iOS text auto-sizing or the letter
+          tracking get involved - and when the estimate came up short the tail
+          of the value was clipped inside the input ("22.5" reading as "22.").
+          A hidden twin holding the same string in the same typography measures
+          the real thing, and the input stretches to it. */}
+      <span style={{ display: 'inline-grid', flexShrink: 0 }}>
+        <span aria-hidden="true" style={{
+          ...type, gridArea: '1 / 1', visibility: 'hidden', whiteSpace: 'pre',
+          paddingRight: '0.2em', // room for the caret past the last digit
+        }}>{shown || '–'}</span>
+        <input
+          value={shown}
+          onChange={(e) => commit(e.target.value)}
+          onFocus={(e) => { setDraft(value ? String(shownValue) : ''); e.target.select(); }}
+          onBlur={() => setDraft(null)}
+          inputMode="decimal" placeholder="–" aria-label="Weight"
+          // An input's intrinsic width is ~20 characters, and that - not the
+          // twin - is what a grid track sizes itself from, since width:100% is
+          // indefinite at that stage. size=1 drops the input's own claim to
+          // nothing so the measured string wins.
+          size={1}
+          style={{
+            ...type, gridArea: '1 / 1', width: '100%', minWidth: 0,
+            background: 'transparent', border: 0, padding: 0,
+            color: done ? 'var(--text-2)' : (value ? 'var(--text)' : 'var(--text-3)'),
+            outline: 'none',
+            textDecoration: done ? 'line-through var(--text-3)' : 'none',
+          }}
+        />
+      </span>
       {halves
         ? <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', whiteSpace: 'nowrap', flexShrink: 0 }}>{halves.n}×{toDisplay(halves.each)}</span>
         : suffix && !!value && <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0 }}>{suffix}</span>}
