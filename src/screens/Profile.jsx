@@ -3,7 +3,7 @@ import { HexBackButton, Hex } from '../components/hex'
 import { IconSun, IconMoon, IconCheck } from '../components/icons'
 import { InstallPrompt } from './InstallPrompt'
 import { loadConnections, startWearableConnect } from '../lib/health'
-import { enablePush, disablePush, isPushEnabled, pushBlockedReason } from '../lib/push'
+import { enablePush, disablePush, isPushEnabled, pushBlockedReason, sendTestPush } from '../lib/push'
 
 // Half-filled circle = "auto / follow system" appearance.
 const IconAuto = ({ size = 22, sw = 1.6 }) => (
@@ -363,12 +363,25 @@ function PushSetting({ userId }) {
   React.useEffect(() => { isPushEnabled().then(setOn); }, []);
   const blocked = pushBlockedReason();
 
+  const [okMsg, setOkMsg] = React.useState('');
+
   const toggle = async () => {
-    setBusy(true); setMsg('');
+    setBusy(true); setMsg(''); setOkMsg('');
     const r = on ? await disablePush() : await enablePush(userId);
     setBusy(false);
     if (r?.error) { setMsg(r.error); return; }
     setOn(await isPushEnabled());
+  };
+
+  // The round trip that matters: through the server, out to the push service,
+  // and back to this device. A toggle that flipped only proves the browser
+  // handed us a subscription, not that anything can reach it.
+  const test = async () => {
+    setBusy(true); setMsg(''); setOkMsg('');
+    const r = await sendTestPush();
+    setBusy(false);
+    if (r?.error) { setMsg(r.error); return; }
+    setOkMsg('Sent. It should arrive within a few seconds.');
   };
 
   return (
@@ -397,7 +410,14 @@ function PushSetting({ userId }) {
           }}/>
         </button>
       </div>
+      {on && (
+        <button onClick={test} disabled={busy} className="btn-ghost"
+          style={{ fontSize: 10, padding: '9px 0', width: '100%', boxSizing: 'border-box', opacity: busy ? 0.5 : 1 }}>
+          {busy ? 'SENDING…' : 'SEND A TEST NOTIFICATION'}
+        </button>
+      )}
       {msg && <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)', lineHeight: 1.5 }}>{msg}</div>}
+      {okMsg && <div className="mono" style={{ fontSize: 9.5, color: 'var(--accent)', lineHeight: 1.5 }}>{okMsg}</div>}
     </div>
   );
 }

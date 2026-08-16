@@ -31,24 +31,34 @@ export default async function handler(req, res) {
   const { data: { user } } = await asCaller.auth.getUser();
   if (!user) return res.status(401).json({ error: 'invalid token' });
 
-  const { recipientId, title, body, link, tag } = await readJson(req);
-  if (!recipientId || !title) return res.status(400).json({ error: 'recipientId and title required' });
-  // Pushing to yourself is always a mistake somewhere upstream, never a threat.
-  if (recipientId === user.id) return res.status(200).json({ sent: 0 });
+  const { recipientId, title, body, link, tag, self } = await readJson(req);
+  if (!title) return res.status(400).json({ error: 'title required' });
 
   const db = admin();
-  const { data: pair } = await db.from('profiles')
-    .select('id, trainer_id').in('id', [user.id, recipientId]);
-  const me = pair?.find(p => p.id === user.id);
-  const them = pair?.find(p => p.id === recipientId);
-  if (!me || !them) return res.status(404).json({ error: 'unknown user' });
+  const target = self ? user.id : recipientId;
+  if (!target) return res.status(400).json({ error: 'recipientId required' });
 
-  const linked = me.trainer_id === them.id || them.trainer_id === me.id;
-  if (!linked) return res.status(403).json({ error: 'not your coach or client' });
+  if (!self) {
+    // Pushing to yourself through the normal path is a mistake upstream, never
+    // a threat - notify() already skips it, so answer quietly rather than 400.
+    if (recipientId === user.id) return res.status(200).json({ sent: 0 });
+
+    const { data: pair } = await db.from('profiles')
+      .select('id, trainer_id').in('id', [user.id, recipientId]);
+    const me = pair?.find(p => p.id === user.id);
+    const them = pair?.find(p => p.id === recipientId);
+    if (!me || !them) return res.status(404).json({ error: 'unknown user' });
+
+    const linked = me.trainer_id === them.id || them.trainer_id === me.id;
+    if (!linked) return res.status(403).json({ error: 'not your coach or client' });
+  }
+  // self:true needs no relationship check - the only devices it can reach are
+  // the caller's own, which they already control. It exists so the setting can
+  // prove itself without a second account and a second phone.
 
   // Titles and bodies come from the app but end up on someone's lock screen,
   // so they're capped rather than trusted to be sensible.
-  const result = await pushToUser(db, recipientId, {
+  const result = await pushToUser(db, target, {
     title: String(title).slice(0, 120),
     body: String(body || '').slice(0, 300),
     link: link || null,

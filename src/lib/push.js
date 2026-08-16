@@ -157,3 +157,30 @@ export async function showLocalNotification(title, options = {}) {
     return true;
   } catch (e) { return false; }
 }
+
+// Push to your own devices, so the setting can prove itself without a second
+// account and a second phone. Returns what actually happened rather than a
+// bare boolean - "on, but this device isn't registered" is a different problem
+// from "the server has no keys", and the UI should be able to say which.
+export async function sendTestPush() {
+  if (!pushConfigured()) return { error: 'Notifications are not configured on this deployment.' };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return { error: 'Not signed in.' };
+    const res = await fetch('/api/push', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({
+        self: true, title: 'HS PT', body: 'Notifications are working.',
+        link: { screen: 'dashboard' }, tag: 'hs-pt-test',
+      }),
+    });
+    if (res.status === 503) return { error: 'The server has no push keys set. Check the Vercel environment variables.' };
+    if (!res.ok) return { error: `The server refused it (${res.status}).` };
+    const { sent = 0 } = await res.json().catch(() => ({}));
+    if (!sent) return { error: 'No device is registered for you. Turn the toggle off and on again.' };
+    return { sent };
+  } catch (e) {
+    return { error: e?.message || 'Could not reach the server.' };
+  }
+}
