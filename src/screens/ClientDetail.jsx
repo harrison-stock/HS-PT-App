@@ -19,7 +19,7 @@ import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { ImportHistory } from './ImportHistory'
 import { FormArchive } from './FormArchive'
 import { toast } from '../lib/toast'
-import { setTaskComplete, catchUpRecurring, RECURRENCE_OPTIONS } from '../lib/tasks'
+import { setTaskComplete, catchUpRecurring, RECURRENCE_OPTIONS, REMIND_OPTIONS } from '../lib/tasks'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
 import { Skel } from '../components/Loading'
@@ -1646,6 +1646,8 @@ function TasksTab({ c, trainerId }) {
   const [icon, setIcon]     = React.useState('');
   const [due, setDue]       = React.useState('');
   const [recur, setRecur]   = React.useState('none');
+  const [notifyOnAssign, setNotifyOnAssign] = React.useState(true);
+  const [remind, setRemind] = React.useState('chase');
   const [saving, setSaving] = React.useState(false);
   const [templates, setTemplates] = React.useState([]);
 
@@ -1679,10 +1681,20 @@ function TasksTab({ c, trainerId }) {
     };
     if (t.icon) trow.icon = t.icon;
     if (t.recurrence && t.recurrence !== 'none') trow.recurrence = t.recurrence;
+    // A template that predates migration 059 has neither column; the defaults
+    // are what the app did before, so falling back to them changes nothing.
+    const tNotify = t.notify_on_assign !== false;
+    trow.notify_on_assign = tNotify;
+    trow.remind = t.remind || 'chase';
     let { error } = await supabase.from('client_tasks').insert(trow);
-    if (error) { const { icon: _i, recurrence: _r, ...bare } = trow; await supabase.from('client_tasks').insert(bare); }
-    notify({ recipientId: c.id, actorId: trainerId, kind: t.kind === 'form' ? 'form' : 'task',
-      title: t.kind === 'form' ? 'New form to complete' : 'New task assigned', body: t.title, link: { screen: 'dashboard' } });
+    if (error) {
+      const { icon: _i, recurrence: _r, notify_on_assign: _n, remind: _m, ...bare } = trow;
+      await supabase.from('client_tasks').insert(bare);
+    }
+    if (tNotify) {
+      notify({ recipientId: c.id, actorId: trainerId, kind: t.kind === 'form' ? 'form' : 'task',
+        title: t.kind === 'form' ? 'New form to complete' : 'New task assigned', body: t.title, link: { screen: 'dashboard' } });
+    }
     reload();
   };
 
@@ -1700,12 +1712,24 @@ function TasksTab({ c, trainerId }) {
     };
     if (icon) row.icon = icon;
     if (recur !== 'none') row.recurrence = recur;
+    row.notify_on_assign = notifyOnAssign;
+    row.remind = remind;
     let { error } = await supabase.from('client_tasks').insert(row);
-    // Fallback if the icon (042) or recurrence (050) columns aren't applied yet.
-    if (error) { const { icon: _i, recurrence: _r, ...bare } = row; ({ error } = await supabase.from('client_tasks').insert(bare)); }
-    notify({ recipientId: c.id, actorId: trainerId, kind: kind === 'form' ? 'form' : 'task',
-      title: kind === 'form' ? 'New form to complete' : 'New task assigned', body: effTitle, link: { screen: 'dashboard' } });
-    setSaving(false); setAdding(false); setTitle(''); setDue(''); setFormId(''); setKind('check'); setIcon(''); setRecur('none'); reload();
+    // Fallback if the icon (042), recurrence (050) or reminder (059) columns
+    // aren't applied yet.
+    if (error) {
+      const { icon: _i, recurrence: _r, notify_on_assign: _n, remind: _m, ...bare } = row;
+      ({ error } = await supabase.from('client_tasks').insert(bare));
+    }
+    // Silence here means silence - the coach ticked it off deliberately, and
+    // that covers the push as well as the in-app notification, since notify()
+    // raises both.
+    if (notifyOnAssign) {
+      notify({ recipientId: c.id, actorId: trainerId, kind: kind === 'form' ? 'form' : 'task',
+        title: kind === 'form' ? 'New form to complete' : 'New task assigned', body: effTitle, link: { screen: 'dashboard' } });
+    }
+    setSaving(false); setAdding(false); setTitle(''); setDue(''); setFormId(''); setKind('check'); setIcon('');
+    setRecur('none'); setNotifyOnAssign(true); setRemind('chase'); reload();
   };
 
   const toggle = async (task) => {
@@ -1789,6 +1813,24 @@ function TasksTab({ c, trainerId }) {
                 }}>{o.label}</button>
               ))}
             </div>
+          </FieldLabel>
+          <FieldLabel label="TELL THEM WHEN IT'S SET">
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[{ v: true, label: 'NOTIFY' }, { v: false, label: 'SILENT' }].map(o => (
+                <button key={String(o.v)} onClick={() => setNotifyOnAssign(o.v)} style={segSt(notifyOnAssign === o.v)}>{o.label}</button>
+              ))}
+            </div>
+          </FieldLabel>
+          <FieldLabel label="REMIND THEM">
+            <div style={{ display: 'flex', gap: 4 }}>
+              {REMIND_OPTIONS.map(o => (
+                <button key={o.id} onClick={() => setRemind(o.id)} style={segSt(remind === o.id)}>{o.label}</button>
+              ))}
+            </div>
+            <Mono style={{ marginTop: 6 }}>
+              {REMIND_OPTIONS.find(o => o.id === remind)?.hint}
+              {remind !== 'off' && !due ? ' Needs a due date to fire.' : ''}
+            </Mono>
           </FieldLabel>
           {kind === 'form' && (
             <FieldLabel label="FORM">
@@ -3013,6 +3055,15 @@ function Mono({ children, style }) {
 function Dot({ color }) {
   return <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }}/>;
 }
+
+// The segmented row shared by the composer's REPEAT / NOTIFY / REMIND controls.
+const segSt = (active) => ({
+  all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
+  padding: '7px 0', borderRadius: 7, fontSize: 8.5, fontFamily: 'JetBrains Mono', fontWeight: 700,
+  background: active ? 'var(--accent-soft)' : 'var(--bg-3)',
+  border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+  color: active ? 'var(--accent)' : 'var(--text-3)',
+});
 
 const fieldSt = {
   width: '100%', boxSizing: 'border-box',

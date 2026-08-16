@@ -1,5 +1,14 @@
 import { supabase } from './supabase'
 
+// Two separate decisions: telling someone a task exists, and nagging them about
+// it. A weekly check-in wants both; "bring your trainers on Thursday" wants the
+// first and not the second.
+export const REMIND_OPTIONS = [
+  { id: 'chase', label: 'UNTIL DONE', hint: 'On the due date, then daily while it stays overdue.' },
+  { id: 'due',   label: 'ON THE DAY', hint: 'One reminder on the due date, then leave it.' },
+  { id: 'off',   label: 'NEVER',      hint: 'No reminders. It just sits in their list.' },
+];
+
 export const RECURRENCE_OPTIONS = [
   { id: 'none',    label: 'ONCE' },
   { id: 'daily',   label: 'DAILY' },
@@ -37,10 +46,17 @@ export async function setTaskComplete(taskId, complete) {
     client_id: t.client_id, trainer_id: t.trainer_id,
     title: t.title, kind: t.kind, form_id: t.form_id || null,
     due_date: nextDue, recurrence: t.recurrence,
+    // The reminder choice belongs to the series, not to one occurrence - a
+    // check-in set never to nag mustn't start nagging next week.
+    notify_on_assign: t.notify_on_assign !== false,
+    remind: t.remind || 'chase',
   };
   if (t.icon) row.icon = t.icon;
   let { error } = await supabase.from('client_tasks').insert(row);
-  if (error && row.icon) { delete row.icon; ({ error } = await supabase.from('client_tasks').insert(row)); }
+  if (error) {
+    const { icon: _i, notify_on_assign: _n, remind: _m, ...bare } = row;
+    ({ error } = await supabase.from('client_tasks').insert(bare));
+  }
   if (!error) await supabase.from('client_tasks').update({ recur_spawned: true }).eq('id', taskId);
 }
 
@@ -84,6 +100,8 @@ export async function catchUpRecurring(tasks) {
       client_id: t.client_id, trainer_id: t.trainer_id,
       title: t.title, kind: t.kind, form_id: t.form_id || null,
       due_date, recurrence: t.recurrence,
+      notify_on_assign: t.notify_on_assign !== false,
+      remind: t.remind || 'chase',
     };
     if (t.icon) row.icon = t.icon;
 
@@ -100,7 +118,10 @@ export async function catchUpRecurring(tasks) {
     if (!claimed || !claimed.length) continue;
 
     let { error } = await supabase.from('client_tasks').insert(row);
-    if (error && row.icon) { delete row.icon; ({ error } = await supabase.from('client_tasks').insert(row)); }
+    if (error) {
+      const { icon: _i, notify_on_assign: _n, remind: _m, ...bare } = row;
+      ({ error } = await supabase.from('client_tasks').insert(bare));
+    }
     if (error) await supabase.from('client_tasks').update({ recur_spawned: false }).eq('id', t.id);
     else wrote = true;
   }
