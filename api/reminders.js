@@ -30,16 +30,21 @@ export default async function handler(req, res) {
   const today = new Date().toISOString().slice(0, 10);
   const db = admin();
 
-  const { data: due, error } = await db.from('client_tasks')
-    .select('id, client_id, title, kind, due_date, reminded_on')
+  // remind='off' is excluded outright. 'due' is a single nudge on the day, so
+  // anything already overdue has had its one chance; 'chase' keeps going for as
+  // long as the task does.
+  const { data: rows, error } = await db.from('client_tasks')
+    .select('id, client_id, title, kind, due_date, reminded_on, remind')
     .is('completed_at', null)
     .not('due_date', 'is', null)
     .lte('due_date', today)
+    .neq('remind', 'off')
     .or(`reminded_on.is.null,reminded_on.lt.${today}`)
     .limit(500);
 
   if (error) return res.status(500).json({ error: error.message });
-  if (!due?.length) return res.status(200).json({ clients: 0, tasks: 0, sent: 0 });
+  const due = (rows || []).filter(t => t.remind === 'chase' || t.due_date === today);
+  if (!due.length) return res.status(200).json({ clients: 0, tasks: 0, sent: 0 });
 
   // One push per client, however much they owe. Four separate buzzes for four
   // overdue tasks is how an app gets its notifications turned off.
