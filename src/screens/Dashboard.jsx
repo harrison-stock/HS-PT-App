@@ -280,7 +280,16 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       {/* Programme roadmap - tap through to the progress report */}
       <ProgrammeRoadmap userId={userId} onOpen={() => setShowReport(true)} />
       {showReport && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
+        // Absolute, not fixed. A fixed overlay's containing block is whatever
+        // ancestor happens to establish one, and this sits inside two nested
+        // overflow:hidden panes - so where it actually lands is engine
+        // dependent. Chromium gave it the whole viewport; on iOS it came out
+        // bounded above the bottom nav while its scroller stayed sized for the
+        // full height, which put the last ~46px of the report permanently out
+        // of reach. Anchoring it to .screen-enter (position: relative) makes
+        // the box the same everywhere: the pane above the nav, scrolling to
+        // its real end, with the nav still there to navigate away with.
+        <div style={{ position: 'absolute', inset: 0, zIndex: 210, background: 'var(--bg-0)', display: 'flex', flexDirection: 'column' }}>
           {/* Embedded mode has no chrome of its own, so the way back out lives
               here - without it the report covered the screen with no exit. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
@@ -292,7 +301,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
               <div className="h-bold" style={{ fontSize: 15, marginTop: 2 }}>YOUR PROGRESS</div>
             </div>
           </div>
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px 40px' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '14px 16px calc(env(safe-area-inset-bottom, 0px) + 40px)' }}>
             <React.Suspense fallback={<SkeletonCard rows={4} />}>
               <ProgrammeReport clientId={userId} clientName={user?.name || ''} embedded onClose={() => setShowReport(false)} />
             </React.Suspense>
