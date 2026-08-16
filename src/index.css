@@ -181,16 +181,20 @@ body:has([data-role="trainer"]) {
   .ov-2col     { grid-template-columns: 1fr 1fr; align-items: start; }
   .grid-2-wide { grid-template-columns: 1fr 1fr; align-items: start; }
 }
-/* The app column is exactly one viewport tall, with the bottom nav as its last
-   row. In an installed PWA there is no collapsing browser chrome, so lvh and
-   dvh describe the same box - except iOS reports dvh short of the
-   home-indicator inset, which leaves a band of page background sitting under
-   the nav until the page is flicked and the measurement is redone. lvh is the
-   whole screen either way. Scoped to standalone: in Safari the two units
-   genuinely differ, and dvh is what keeps the nav on screen with the toolbar
-   showing. */
 @media (display-mode: standalone) {
-  .app-shell { height: 100lvh; }
+  /* Installed, there is no browser chrome, so lvh/dvh/svh all report the same
+     number - which is why swapping units changed nothing. The app column still
+     stops short of the screen, leaving a strip of the page behind it showing
+     under the nav. Rather than keep guessing at which unit iOS gets right,
+     paint that page the colour the nav ends on, so anything showing through
+     reads as the bar reaching the edge. The decorative gradients underneath
+     are never visible on a phone anyway - the app covers the full width. */
+  html, body {
+    /* --nav-to is semi-transparent and the nav sits on --bg-1, so paint the
+       same two layers in the same order to land on the identical colour. */
+    background-color: var(--bg-1);
+    background-image: linear-gradient(var(--nav-to), var(--nav-to));
+  }
 }
 
 #root {
@@ -328,7 +332,10 @@ body:has([data-role="trainer"]) {
   /* Column count follows the item count - a coach viewing a client's app gets
      a sixth "exit" tab, and a fixed 5-column grid pushed it onto its own row. */
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-  padding: 8px 8px calc(env(safe-area-inset-bottom, 0px) + 6px);
+  /* Clearance for the home indicator, but not the full inset: 34px of it under
+     the labels reads as a dead grey block rather than as part of the bar.
+     Apple's own tab bars sit closer than that. */
+  padding: 8px 8px calc(env(safe-area-inset-bottom, 0px) * 0.55 + 4px);
   background: linear-gradient(180deg, var(--nav-from), var(--nav-to) 60%);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--line);
