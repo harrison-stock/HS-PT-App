@@ -671,6 +671,14 @@ function NoteCard({ label, placeholder, initial, onSave, loading, accent, childr
 
 // ── TRAINING - Everfit-style week calendar ───────────────────────
 const SECTION_LABEL = { MAIN: 'WORKOUT', PULSE_RAISER: 'PULSE RAISER', BANDED: 'ACTIVATION', COOLDOWN: 'COOLDOWN' };
+const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7'];
+
+// What to call one workout. The coach names days in the builder; where they
+// haven't, fall back to the phase and the day number so there's still
+// something to tell two of them apart. Same rule the client sees in
+// Workouts.jsx, so a session is called one thing on both sides.
+const workoutName = (day, phase) =>
+  (day?.title || '').trim() || `${phase?.name || 'Workout'} · ${DAY_LABELS[day?.day_of_week] || 'Day'}`;
 
 function mondayOf(d) {
   const x = new Date(d);
@@ -702,6 +710,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
   const [workouts, setWorkouts] = React.useState([]);
   const [showAssign, setShowAssign] = React.useState(false);
   const [showSync, setShowSync]     = React.useState(false);
+  const [showProgress, setShowProgress] = React.useState(false);
   const [showImport, setShowImport] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
   const [builderProg, setBuilderProg] = React.useState(null);
@@ -711,7 +720,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
     const start = new Date(anchor);
     const end = new Date(anchor); end.setDate(end.getDate() + shownWeeks * 7);
     supabase.from('client_workouts')
-      .select('id, scheduled_date, status, programme_days(id, day_of_week, week_index, programme_phases(id, name, phase_index, programme_id, programmes(id, name)), workout_sections(title, kind, sort_order, section_exercises(id)))')
+      .select('id, scheduled_date, status, programme_days(id, title, day_of_week, week_index, programme_phases(id, name, phase_index, programme_id, programmes(id, name)), workout_sections(title, kind, sort_order, section_exercises(id)))')
       .eq('client_id', c.id).gte('scheduled_date', ymd(start)).lt('scheduled_date', ymd(end))
       .then(({ data }) => setWorkouts(data || []));
   }, [c.id, anchor, shownWeeks]);
@@ -770,6 +779,14 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
     />
   );
 
+  if (showProgress) return (
+    <ProgrammePosition
+      clientId={c.id} clientName={c.name} trainerId={trainerId} programmes={programmes}
+      onClose={() => { setShowProgress(false); loadWorkouts(); }}
+      onChanged={() => { loadWorkouts(); onChanged?.(); }}
+    />
+  );
+
   if (editing) return (
     <EditWorkout
       w={editing} clientId={c.id} programmes={programmes} trainerId={trainerId}
@@ -808,6 +825,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '9px 12px', color: 'var(--heading-deep)' }}>
           <IconPlus size={13}/> ASSIGN
         </button>
+        <button onClick={() => setShowProgress(true)} style={navBtnSt}>PROGRESS</button>
         <button onClick={() => setShowSync(true)} style={navBtnSt}>SYNC</button>
         <button onClick={() => setShowImport(true)} style={navBtnSt}>IMPORT</button>
         <button onClick={() => setAnchor(mondayOf(new Date()))} style={navBtnSt}>TODAY</button>
@@ -968,6 +986,8 @@ function WorkoutCell({ w, onClick, onDelete, onDragStart, onDragEnd }) {
   const day = w.programme_days;
   const phase = day?.programme_phases;
   const done = w.status === 'completed';
+  const named = !!(day?.title || '').trim();
+  const name = workoutName(day, phase);
   const sections = [...(day?.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
   const totalEx = sections.reduce((n, s) => n + (s.section_exercises?.length || 0), 0);
   const shown = sections.slice(0, 2);
@@ -984,10 +1004,15 @@ function WorkoutCell({ w, onClick, onDelete, onDragStart, onDragEnd }) {
       border: `1px solid ${done ? 'color-mix(in srgb, var(--accent) 45%, var(--line))' : 'var(--line-strong)'}`,
       borderLeft: `2px solid ${done ? 'var(--accent)' : 'var(--c-amber)'}`,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+      {/* The workout's own name leads - two "FOUNDATION" cards in a week say
+          nothing about which is which. The phase drops to a caption below,
+          and only when the name isn't already carrying it. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: done ? 'var(--accent)' : 'var(--c-amber)', flexShrink: 0 }}/>
-        <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-          {(phase?.name || 'WORKOUT').toUpperCase()}
+        {/* minWidth 0 or the flex item refuses to shrink under its own text and
+            the name shoves the ✕ out of a 100px calendar column. */}
+        <span title={name} style={{ fontSize: 10.5, fontWeight: 700, lineHeight: 1.25, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+          {name}
         </span>
         {done && <span style={{ color: 'var(--accent)', fontSize: 9 }}>✓</span>}
         {onDelete && (
@@ -995,6 +1020,9 @@ function WorkoutCell({ w, onClick, onDelete, onDragStart, onDragEnd }) {
             aria-label="Remove workout" title={confirmDel ? 'Tap again to remove' : 'Remove'}
             style={{ all: 'unset', cursor: 'pointer', fontSize: 10, lineHeight: 1, padding: '1px 3px', borderRadius: 4, color: confirmDel ? 'var(--c-coral)' : 'var(--text-3)', background: confirmDel ? 'color-mix(in srgb, var(--c-coral) 14%, transparent)' : 'transparent' }}>✕</button>
         )}
+      </div>
+      <div className="mono" style={{ fontSize: 7.5, letterSpacing: '0.06em', color: 'var(--text-3)', marginTop: 2, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {named ? (phase?.name || '').toUpperCase() : ' '}
       </div>
       {shown.map((s, i) => (
         <div key={i} style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6, padding: '5px 6px', marginBottom: 4 }}>
@@ -1064,7 +1092,8 @@ function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
       </div>
 
       <div style={{ borderRadius: 8, padding: 10, background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
-        <div className="mono" style={{ fontSize: 9, color: done ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 4 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{workoutName(day, phase)}</div>
+        <div className="mono" style={{ fontSize: 9, color: done ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 6 }}>
           {(phase?.name || 'WORKOUT').toUpperCase()}{done ? ' · ✓ COMPLETED' : ''}
         </div>
         {sections.length === 0 && <Mono>No exercises</Mono>}
@@ -2124,9 +2153,365 @@ function VaultTab({ c, trainerId }) {
   );
 }
 
-// ── ASSIGN WORKOUT (duplicate from Coach.jsx for self-contained use) ───────
-const DAY_LABELS = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7'];
+// ── PROGRESS & SCHEDULING ───────────────────────────────────────────
+// Where a client has actually got to, and the two things a coach needs to do
+// about it: put them on a different week, or push everything back while
+// they're away.
+//
+// Nothing stores a "current week". Assigning a programme materialises it into
+// dated client_workouts rows, so position has to be derived - the earliest
+// week that still has an unfinished workout in it. That same fact makes
+// repositioning a rewrite of the upcoming dates rather than a pointer change,
+// so both actions say what they'll touch before they touch it.
+//
+// Both only ever rewrite from today forward. What has already happened,
+// finished or missed, is the client's training record and stays where it is.
+function ProgrammePosition({ clientId, clientName, trainerId, programmes, onClose, onChanged }) {
+  const [loading, setLoading]   = React.useState(true);
+  const [rows, setRows]         = React.useState([]);
+  const [dayRows, setDayRows]   = React.useState([]);
+  const [progId, setProgId]     = React.useState(null);
+  const [action, setAction]     = React.useState(null); // null | 'move' | 'shift'
+  const [targetWeek, setTargetWeek] = React.useState(null);
+  const [moveDate, setMoveDate] = React.useState('');
+  const [shiftWeeks, setShiftWeeks] = React.useState(1);
+  const [shiftDir, setShiftDir] = React.useState(1); // +1 push back, -1 bring forward
+  const [busy, setBusy]         = React.useState(false);
+  const [flash, setFlash]       = React.useState('');
 
+  const today = ymd(new Date());
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    supabase.from('client_workouts')
+      .select('id, scheduled_date, status, day_id, programme_days(id, title, week_index, day_of_week, phase_id, programme_phases(id, name, programme_id))')
+      .eq('client_id', clientId)
+      .order('scheduled_date')
+      .then(({ data }) => { setRows(data || []); setLoading(false); });
+  }, [clientId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  // Every programme this client has any assignment to.
+  const progIds = React.useMemo(() => {
+    const seen = [];
+    rows.forEach(r => {
+      const pid = r.programme_days?.programme_phases?.programme_id;
+      if (pid && !seen.includes(pid) && programmes.some(p => p.id === pid)) seen.push(pid);
+    });
+    return seen;
+  }, [rows, programmes]);
+
+  React.useEffect(() => {
+    setProgId(cur => (cur && progIds.includes(cur)) ? cur : (progIds[0] || null));
+  }, [progIds]);
+
+  const prog = programmes.find(p => p.id === progId);
+
+  // Every day in the programme, so a reposition can re-create the schedule
+  // from any week onward rather than only shuffling what's already there.
+  React.useEffect(() => {
+    if (!prog) { setDayRows([]); return; }
+    supabase.from('programme_days').select('id, title, phase_id, week_index, day_of_week')
+      .in('phase_id', (prog.phaseList || []).map(ph => ph.id))
+      .then(({ data }) => setDayRows(data || []));
+  }, [prog?.id]);
+
+  // How many weeks precede each phase, so every week in the programme gets one
+  // number to order and compare by. Same accumulation the assign and sync
+  // paths use, so a schedule rebuilt here lands on the dates they'd have given.
+  const phaseStart = React.useMemo(() => {
+    const map = {}; let total = 0;
+    (prog?.phaseList || []).forEach(ph => { map[ph.id] = total; total += ph.weeks || 0; });
+    return { map, total };
+  }, [prog]);
+
+  // One entry per week of the programme, carrying whatever is assigned to it.
+  const weeks = React.useMemo(() => {
+    if (!prog) return [];
+    const list = [];
+    (prog.phaseList || []).forEach(ph => {
+      for (let w = 0; w < (ph.weeks || 0); w++) {
+        list.push({ key: `${ph.id}:${w}`, phase: ph, weekInPhase: w, globalWeek: phaseStart.map[ph.id] + w, items: [] });
+      }
+    });
+    const byKey = new Map(list.map(x => [x.key, x]));
+    rows.forEach(r => {
+      const d = r.programme_days;
+      if (!d || d.programme_phases?.programme_id !== progId) return;
+      byKey.get(`${d.phase_id}:${d.week_index}`)?.items.push(r);
+    });
+    list.forEach(x => x.items.sort((a, b) => a.scheduled_date < b.scheduled_date ? -1 : 1));
+    return list;
+  }, [prog, rows, progId, phaseStart]);
+
+  const mine       = React.useMemo(() => rows.filter(r => r.programme_days?.programme_phases?.programme_id === progId), [rows, progId]);
+  const doneCount  = mine.filter(r => r.status === 'completed').length;
+  const upcoming   = React.useMemo(() => mine.filter(r => r.status !== 'completed' && r.scheduled_date >= today), [mine, today]);
+  const missed     = mine.filter(r => r.status !== 'completed' && r.scheduled_date < today).length;
+  // A phase's declared week count can end up shorter than the weeks actually
+  // assigned from it - shrink a phase in the builder and the days already on a
+  // client's calendar stay put. Those have no rung on the ladder, so say so
+  // rather than let the dots quietly disagree with the count above them.
+  const offLadder  = mine.length - weeks.reduce((n, w) => n + w.items.length, 0);
+  // Position is the earliest week still holding something unfinished.
+  const currentIdx = weeks.findIndex(w => w.items.some(i => i.status !== 'completed'));
+  const weekLabel  = (w) => `${w.phase?.name || 'Phase'} · Week ${w.weekInPhase + 1}`;
+
+  // Default the move date to the Monday of the coming week - the usual intent
+  // is "start them here from next week", not mid-week.
+  React.useEffect(() => {
+    if (action !== 'move') return;
+    const m = mondayOf(new Date()); m.setDate(m.getDate() + 7);
+    setMoveDate(ymd(m));
+    setTargetWeek(cur => cur == null ? (currentIdx >= 0 ? currentIdx : 0) : cur);
+  }, [action]);
+
+  const movePlan = React.useMemo(() => {
+    if (action !== 'move' || !prog || targetWeek == null || !moveDate) return null;
+    const target = weeks[targetWeek];
+    if (!target) return null;
+    const monday = mondayOf(new Date(`${moveDate}T00:00:00`));
+    const create = dayRows
+      .map(d => ({ d, gw: (phaseStart.map[d.phase_id] ?? 0) + d.week_index }))
+      .filter(x => x.gw >= target.globalWeek)
+      .map(x => {
+        const dt = new Date(monday);
+        dt.setDate(dt.getDate() + (x.gw - target.globalWeek) * 7 + x.d.day_of_week);
+        return { day_id: x.d.id, scheduled_date: ymd(dt) };
+      })
+      .sort((a, b) => a.scheduled_date < b.scheduled_date ? -1 : 1);
+    return { create, remove: upcoming, target };
+  }, [action, prog, targetWeek, moveDate, dayRows, upcoming, weeks, phaseStart]);
+
+  const shiftPlan = React.useMemo(() => {
+    if (action !== 'shift' || !prog) return null;
+    const days = shiftWeeks * 7 * shiftDir;
+    const moved = upcoming.map(r => {
+      const dt = new Date(`${r.scheduled_date}T00:00:00`);
+      dt.setDate(dt.getDate() + days);
+      return { ...r, next: ymd(dt) };
+    }).sort((a, b) => a.next < b.next ? -1 : 1);
+    return { days, moved };
+  }, [action, prog, shiftWeeks, shiftDir, upcoming]);
+
+  const applyMove = async () => {
+    if (!movePlan || busy) return;
+    setBusy(true);
+    if (movePlan.remove.length) await supabase.from('client_workouts').delete().in('id', movePlan.remove.map(r => r.id));
+    if (movePlan.create.length) {
+      await supabase.from('client_workouts').insert(movePlan.create.map(r => ({
+        client_id: clientId, trainer_id: trainerId, day_id: r.day_id, scheduled_date: r.scheduled_date,
+      })));
+    }
+    setBusy(false); setAction(null);
+    setFlash(`Moved to ${weekLabel(movePlan.target)} — ${movePlan.create.length} workout${movePlan.create.length === 1 ? '' : 's'} scheduled`);
+    load(); onChanged?.();
+  };
+
+  const applyShift = async () => {
+    if (!shiftPlan?.moved.length || busy) return;
+    setBusy(true);
+    // One upsert rather than a request per row; the primary key carries the
+    // match, so every not-null column has to come along for the ride.
+    await supabase.from('client_workouts').upsert(shiftPlan.moved.map(r => ({
+      id: r.id, client_id: clientId, trainer_id: trainerId,
+      day_id: r.day_id, scheduled_date: r.next, status: r.status,
+    })));
+    setBusy(false); setAction(null);
+    const n = shiftPlan.moved.length;
+    setFlash(`${n} workout${n === 1 ? '' : 's'} moved ${Math.abs(shiftPlan.days) / 7} week${Math.abs(shiftPlan.days) === 7 ? '' : 's'} ${shiftPlan.days > 0 ? 'later' : 'earlier'}`);
+    load(); onChanged?.();
+  };
+
+  const fmt = (s) => new Date(`${s}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+  return (
+    <div className="card" style={{ padding: 14, display: 'grid', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="label">// PROGRESS &amp; SCHEDULING - {clientName.toUpperCase()}</div>
+        <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
+      </div>
+
+      {loading && <Mono>READING THEIR SCHEDULE…</Mono>}
+      {!loading && !progIds.length && <Mono>This client has no programme assigned yet.</Mono>}
+
+      {!loading && progIds.length > 1 && (
+        <FieldLabel label="PROGRAMME">
+          <select value={progId || ''} onChange={e => { setProgId(e.target.value); setAction(null); setTargetWeek(null); }} style={{ ...fieldSt, appearance: 'auto' }}>
+            {progIds.map(pid => <option key={pid} value={pid}>{programmes.find(p => p.id === pid)?.name}</option>)}
+          </select>
+        </FieldLabel>
+      )}
+
+      {flash && (
+        <div className="mono" style={{ fontSize: 10, letterSpacing: '0.06em', color: 'var(--accent)', background: 'var(--accent-soft)', border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)', borderRadius: 8, padding: '8px 10px' }}>
+          ✓ {flash.toUpperCase()}
+        </div>
+      )}
+
+      {!loading && prog && (
+        <>
+          {/* Headline: how far through, and which week they're sitting on. */}
+          <div style={{ borderRadius: 10, padding: 12, background: 'var(--bg-2)', border: '1px solid var(--line)', display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 20, fontWeight: 800 }}>{doneCount}</span>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em' }}>
+                OF {mine.length} ASSIGNED WORKOUTS DONE
+              </span>
+            </div>
+            <div style={{ height: 6, borderRadius: 999, background: 'var(--bg-3)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${mine.length ? (doneCount / mine.length) * 100 : 0}%`, background: 'var(--accent)' }}/>
+            </div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--text-2)', letterSpacing: '0.04em' }}>
+              {currentIdx >= 0
+                ? <>CURRENTLY ON <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{weekLabel(weeks[currentIdx]).toUpperCase()}</span></>
+                : 'PROGRAMME COMPLETE — NOTHING OUTSTANDING'}
+            </div>
+            {missed > 0 && (
+              <Mono>{missed} workout{missed === 1 ? '' : 's'} in the past {missed === 1 ? 'was' : 'were'} never completed.</Mono>
+            )}
+            {offLadder > 0 && (
+              <Mono>{offLadder} assigned workout{offLadder === 1 ? '' : 's'} fall{offLadder === 1 ? 's' : ''} outside the weeks this programme currently declares, so {offLadder === 1 ? 'it is' : 'they are'} not shown below.</Mono>
+            )}
+          </div>
+
+          {/* Week ladder. Doubles as the picker while moving them. */}
+          <div style={{ display: 'grid', gap: 4, maxHeight: 300, overflowY: 'auto' }}>
+            {weeks.map((w, i) => {
+              const wDone = w.items.filter(x => x.status === 'completed').length;
+              const isNow = i === currentIdx;
+              const isTarget = action === 'move' && targetWeek === i;
+              const newPhase = i === 0 || weeks[i - 1].phase?.id !== w.phase?.id;
+              return (
+                <React.Fragment key={w.key}>
+                  {newPhase && (
+                    <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--text-3)', marginTop: i ? 8 : 0 }}>
+                      {(w.phase?.name || 'PHASE').toUpperCase()}
+                    </div>
+                  )}
+                  <button
+                    onClick={action === 'move' ? () => setTargetWeek(i) : undefined}
+                    style={{
+                      all: 'unset', cursor: action === 'move' ? 'pointer' : 'default',
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8,
+                      background: isTarget ? 'var(--accent-soft)' : isNow ? 'color-mix(in srgb, var(--c-amber) 12%, var(--bg-2))' : 'var(--bg-2)',
+                      border: `1px solid ${isTarget ? 'var(--accent)' : isNow ? 'var(--c-amber)' : 'var(--line)'}`,
+                    }}>
+                    <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', width: 44, flexShrink: 0 }}>
+                      WK {w.weekInPhase + 1}
+                    </span>
+                    <span style={{ display: 'flex', gap: 3, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
+                      {w.items.length === 0
+                        ? <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>not assigned</span>
+                        : w.items.map(x => (
+                            <span key={x.id} title={`${workoutName(x.programme_days, w.phase)} · ${fmt(x.scheduled_date)}`}
+                              style={{
+                                width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                                background: x.status === 'completed' ? 'var(--accent)'
+                                  : x.scheduled_date < today ? 'var(--c-coral)' : 'var(--bg-3)',
+                                border: `1px solid ${x.status === 'completed' ? 'var(--accent)' : x.scheduled_date < today ? 'var(--c-coral)' : 'var(--line-strong)'}`,
+                              }}/>
+                          ))}
+                    </span>
+                    {w.items.length > 0 && (
+                      <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', flexShrink: 0 }}>
+                        {wDone}/{w.items.length} · {fmt(w.items[0].scheduled_date)}
+                      </span>
+                    )}
+                    {isNow && <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--c-amber)', flexShrink: 0 }}>NOW</span>}
+                  </button>
+                </React.Fragment>
+              );
+            })}
+          </div>
+          <Mono>Filled dot = done · hollow = still to come · red = missed</Mono>
+
+          {/* Actions */}
+          {!action && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => { setFlash(''); setAction('move'); }} style={navBtnSt}>MOVE TO A WEEK</button>
+              <button onClick={() => { setFlash(''); setAction('shift'); }} style={navBtnSt}>PAUSE / SHIFT DATES</button>
+            </div>
+          )}
+
+          {action === 'move' && (
+            <div style={{ display: 'grid', gap: 10, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+              <div className="label">// MOVE TO A WEEK</div>
+              <Mono>Pick the week above, then the date it should start. Everything from that week onward is rescheduled.</Mono>
+              <FieldLabel label="RESTART FROM">
+                <input type="date" value={moveDate} onChange={e => setMoveDate(e.target.value)} style={fieldSt}/>
+                <Mono style={{ marginTop: 6 }}>Aligned to the Monday of that week</Mono>
+              </FieldLabel>
+              {movePlan && (
+                <div style={{ borderRadius: 8, padding: 10, background: 'var(--bg-2)', border: '1px solid var(--line)', display: 'grid', gap: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700 }}>{weekLabel(movePlan.target)}</div>
+                  <Mono>
+                    {movePlan.remove.length} upcoming workout{movePlan.remove.length === 1 ? '' : 's'} removed,
+                    {' '}{movePlan.create.length} scheduled from {movePlan.create[0] ? fmt(movePlan.create[0].scheduled_date) : '—'}.
+                  </Mono>
+                  <Mono>Completed and past workouts are left untouched.</Mono>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={applyMove} disabled={!movePlan?.create.length || busy} className="btn-primary"
+                  style={{ flex: 1, opacity: movePlan?.create.length && !busy ? 1 : 0.4, pointerEvents: movePlan?.create.length && !busy ? 'auto' : 'none' }}>
+                  {busy ? 'MOVING…' : 'CONFIRM MOVE →'}
+                </button>
+                <button onClick={() => setAction(null)} style={navBtnSt}>CANCEL</button>
+              </div>
+            </div>
+          )}
+
+          {action === 'shift' && (
+            <div style={{ display: 'grid', gap: 10, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+              <div className="label">// PAUSE / SHIFT DATES</div>
+              <Mono>Client away? Push their remaining workouts back by a whole number of weeks so the pattern of their training week survives.</Mono>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <ToggleBtn active={shiftDir === 1} onClick={() => setShiftDir(1)}>PUSH BACK</ToggleBtn>
+                <ToggleBtn active={shiftDir === -1} onClick={() => setShiftDir(-1)}>BRING FORWARD</ToggleBtn>
+              </div>
+              <FieldLabel label="BY">
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {[1, 2, 3, 4, 6, 8].map(n => (
+                    <button key={n} onClick={() => setShiftWeeks(n)} className="mono" style={{
+                      all: 'unset', cursor: 'pointer', padding: '7px 11px', borderRadius: 7, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em',
+                      background: shiftWeeks === n ? 'var(--accent)' : 'var(--bg-3)', color: shiftWeeks === n ? 'var(--on-accent)' : 'var(--text-3)',
+                      border: `1px solid ${shiftWeeks === n ? 'var(--accent)' : 'var(--line)'}`,
+                    }}>{n} WK</button>
+                  ))}
+                </div>
+              </FieldLabel>
+              {shiftPlan && (
+                <div style={{ borderRadius: 8, padding: 10, background: 'var(--bg-2)', border: '1px solid var(--line)', display: 'grid', gap: 4 }}>
+                  {shiftPlan.moved.length === 0
+                    ? <Mono>Nothing upcoming to move.</Mono>
+                    : <>
+                        <div style={{ fontSize: 11, fontWeight: 700 }}>
+                          {shiftPlan.moved.length} workout{shiftPlan.moved.length === 1 ? '' : 's'} move
+                        </div>
+                        <Mono>
+                          Next session {fmt(upcoming.map(r => r.scheduled_date).sort()[0])} → {fmt(shiftPlan.moved[0].next)}
+                        </Mono>
+                        <Mono>Completed and past workouts are left untouched.</Mono>
+                      </>}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={applyShift} disabled={!shiftPlan?.moved.length || busy} className="btn-primary"
+                  style={{ flex: 1, opacity: shiftPlan?.moved.length && !busy ? 1 : 0.4, pointerEvents: shiftPlan?.moved.length && !busy ? 'auto' : 'none' }}>
+                  {busy ? 'SHIFTING…' : shiftDir === 1 ? `PUSH BACK ${shiftWeeks} WEEK${shiftWeeks === 1 ? '' : 'S'} →` : `BRING FORWARD ${shiftWeeks} WEEK${shiftWeeks === 1 ? '' : 'S'} →`}
+                </button>
+                <button onClick={() => setAction(null)} style={navBtnSt}>CANCEL</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── ASSIGN WORKOUT (duplicate from Coach.jsx for self-contained use) ───────
 function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, onAssigned }) {
   const [mode, setMode]         = React.useState('all'); // 'all' = whole programme, 'day' = single day
   const [progId, setProgId]     = React.useState(null);
@@ -2149,7 +2534,7 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
   React.useEffect(() => {
     if (!phase?.id || !week) { setDays([]); return; }
     setLoading(true);
-    supabase.from('programme_days').select('id, day_of_week, notes, workout_sections(id, kind, title, section_exercises(id))')
+    supabase.from('programme_days').select('id, title, day_of_week, notes, workout_sections(id, kind, title, section_exercises(id))')
       .eq('phase_id', phase.id).eq('week_index', week - 1)
       .order('day_of_week')
       .then(({ data }) => { setDays(data || []); setLoading(false); });
@@ -2292,7 +2677,12 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
                     display: 'flex', gap: 8, alignItems: 'center',
                   }}>
                     <span className="mono" style={{ fontSize: 10, color: dayId === d.id ? 'var(--accent)' : 'var(--text-3)', fontWeight: 700 }}>{DAY_LABELS[d.day_of_week]}</span>
-                    <span style={{ flex: 1, fontSize: 11 }}>{(d.workout_sections || []).map(s => s.title).join(' · ')}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600 }}>{workoutName(d, phase)}</span>
+                      <span className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {(d.workout_sections || []).map(s => s.title).filter(Boolean).join(' · ') || 'No blocks'}
+                      </span>
+                    </span>
                     {dayId === d.id && <IconCheck size={12} style={{ color: 'var(--accent)', flexShrink: 0 }}/>}
                   </button>
                 ))}
