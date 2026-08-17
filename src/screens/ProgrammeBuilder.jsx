@@ -107,6 +107,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           .eq('id', targetId).select('id').single());
       }
       if (!r) throw new Error(e1?.message || 'Save failed');
+      await stampChanged(r.id);
       return await writeDayBody(r.id, content);
     }
     let { data: dayRow, error: dayErr } = await supabase
@@ -128,7 +129,17 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     }
     if (!dayRow) throw new Error(dayErr?.message || 'Save failed - have you run migration 3 (notes_tempo)?');
 
+    await stampChanged(dayRow.id);
     return await writeDayBody(dayRow.id, content);
+  };
+
+  // When this day's contents last changed. Read against a copy's copied_at to
+  // answer "who is running an older version of this?" - a question that only
+  // exists now that editing a programme deliberately leaves assigned clients
+  // alone. Best-effort: a database without the column simply can't be asked.
+  const stampChanged = async (id) => {
+    try { await supabase.from('programme_days').update({ content_updated_at: new Date().toISOString() }).eq('id', id); }
+    catch (e) { /* pre-migration-061 */ }
   };
 
   // Everything under a day: sections, exercises, sets. Split out so a day
