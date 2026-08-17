@@ -9,6 +9,7 @@ import { notify } from '../lib/notifications'
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
 import { SkeletonCard, EmptyState, LoadingTile } from '../components/Loading'
+import { PushPrompt } from '../components/PushPrompt'
 import { duplicateProgramme as duplicateProgrammeDeep } from '../lib/programmeCopy'
 import { toast } from '../lib/toast'
 
@@ -405,6 +406,8 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     <div className="scroller coach-wrap">
       <CoachHeader clientCount={clients.length} pendingCount={pendingCount} go={go} unread={unread}/>
       <KPIRow kpis={kpis}/>
+
+      <PushPrompt userId={trainerId} />
 
       <CoachDigest clients={clients} loading={loadingClients}
         onPick={(id) => setClientId(id)}

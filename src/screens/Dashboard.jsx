@@ -12,6 +12,7 @@ const ProgrammeReport = React.lazy(() => import('./ProgrammeReport').then(m => (
 import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { RoadmapTrack, computeRoadmap } from '../components/Roadmap'
 import { Skel, SkeletonCard } from '../components/Loading'
+import { PushPrompt } from '../components/PushPrompt'
 
 function useLiveClock() {
   const [now, setNow] = React.useState(() => new Date());
@@ -275,6 +276,11 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       </div>
 
       {/* Tasks */}
+      {/* Not while a coach is driving this client's app: userId is the client
+          here, so turning notifications on would file the coach's phone under
+          the client's account and send them the client's reminders. */}
+      {!impersonating && <PushPrompt userId={userId} />}
+
       <TasksSection tasks={tasks} onToggle={toggleTask} go={go} />
 
       {/* Programme roadmap - tap through to the progress report */}

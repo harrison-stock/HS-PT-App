@@ -181,20 +181,32 @@ body:has([data-role="trainer"]) {
   .ov-2col     { grid-template-columns: 1fr 1fr; align-items: start; }
   .grid-2-wide { grid-template-columns: 1fr 1fr; align-items: start; }
 }
-@media (display-mode: standalone) {
-  /* Installed, there is no browser chrome, so lvh/dvh/svh all report the same
-     number - which is why swapping units changed nothing. The app column still
-     stops short of the screen, leaving a strip of the page behind it showing
-     under the nav. Rather than keep guessing at which unit iOS gets right,
-     paint that page the colour the nav ends on, so anything showing through
-     reads as the bar reaching the edge. The decorative gradients underneath
-     are never visible on a phone anyway - the app covers the full width. */
+/* The app column stops short of the bottom of an installed iPhone's screen,
+   leaving a strip of the page behind it showing under the nav. Two attempts at
+   this were scoped to `@media (display-mode: standalone)` and neither changed
+   anything, while an unscoped change to the nav's padding in the same deploy
+   did - which says the media query never matched. iOS's dependable standalone
+   signal is navigator.standalone, not display-mode, so the JS in main.jsx sets
+   data-standalone and the rule below no longer depends on either.
+
+   Rather than keep guessing at which viewport unit iOS gets right, the page
+   behind the app is painted the colour the nav ends on, so whatever shows
+   through reads as the bar reaching the screen edge. --nav-to is
+   semi-transparent and the nav sits on --bg-1, so the same two layers are
+   painted in the same order to land on exactly the same colour.
+
+   Phone widths only. Above 500px the app is a centred 390px column and the
+   page background either side of it is meant to be seen. */
+@media (max-width: 499px) {
   html, body {
-    /* --nav-to is semi-transparent and the nav sits on --bg-1, so paint the
-       same two layers in the same order to land on the identical colour. */
     background-color: var(--bg-1);
     background-image: linear-gradient(var(--nav-to), var(--nav-to));
   }
+}
+/* Belt and braces for a wide phone that clears the 500px breakpoint. */
+html[data-standalone] body, html[data-standalone] {
+  background-color: var(--bg-1);
+  background-image: linear-gradient(var(--nav-to), var(--nav-to));
 }
 
 #root {
