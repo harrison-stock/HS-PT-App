@@ -25,7 +25,11 @@ const TAG_COLORS = {
 
 // `startAt` ({ phaseIdx, weekIdx, dayIdx }) deep-links straight to one day -
 // used by the coach's client calendar to jump to the exact assigned workout.
-export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trainerId, startAt }) {
+// `dayId` opens one specific day rather than a (phase, week, weekday) slot -
+// which is how a client's own copy has to be addressed, since it belongs to a
+// person and has no slot. Everything else about the builder is unchanged; only
+// the two ends that talk to the database learn a second way to find a day.
+export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trainerId, startAt, dayId = null }) {
   const isAdhoc = !!programme.is_adhoc;
   const [prog, setProg]             = React.useState(programme);
   const [roadmapMode, setRoadmapMode] = React.useState(openRoadmap && !isAdhoc);
@@ -59,15 +63,12 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
       setExpandedExId(null);
       setExpandedSetId(null);
 
-      if (!phase?.id) { if (!cancelled) { setDay(seedDay()); setDayLoading(false); } return; }
+      if (!dayId && !phase?.id) { if (!cancelled) { setDay(seedDay()); setDayLoading(false); } return; }
 
-      const { data: dayRow } = await supabase
-        .from('programme_days')
-        .select('*')
-        .eq('phase_id', phase.id)
-        .eq('week_index', weekIdx)
-        .eq('day_of_week', dayIdx)
-        .maybeSingle();
+      const byId = supabase.from('programme_days').select('*').eq('id', dayId).maybeSingle();
+      const bySlot = supabase.from('programme_days').select('*')
+        .eq('phase_id', phase?.id).eq('week_index', weekIdx).eq('day_of_week', dayIdx).maybeSingle();
+      const { data: dayRow } = await (dayId ? byId : bySlot);
 
       if (cancelled) return;
       if (!dayRow) { setDay(null); setDirty(false); setDayLoading(false); return; }
@@ -85,7 +86,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     }
     load();
     return () => { cancelled = true; };
-  }, [phaseIdx, weekIdx, dayIdx, prog]);
+  }, [phaseIdx, weekIdx, dayIdx, prog, dayId]);
 
   // Autosave the current day before navigating away (no silent data loss).
   const flush = async () => { if (dirty && day) return await saveDay(); return true; };
@@ -93,7 +94,21 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
 
   // ── Save ─────────────────────────────────────────────────────
   // Writes a day-content object to a specific (phase, week, day) slot.
-  const writeDayContent = async (phid, week, dow, content) => {
+  const writeDayContent = async (phid, week, dow, content, targetId = null) => {
+    // A day opened by id already exists and has no slot to upsert into, so it's
+    // updated in place. The slot path is untouched.
+    if (targetId) {
+      let { data: r, error: e1 } = await supabase.from('programme_days')
+        .update({ title: content.title || null, intro: content.intro || '', notes: content.notes || '', image_url: content.img || null })
+        .eq('id', targetId).select('id').single();
+      if (!r) {
+        ({ data: r, error: e1 } = await supabase.from('programme_days')
+          .update({ intro: content.intro || '', notes: content.notes || '' })
+          .eq('id', targetId).select('id').single());
+      }
+      if (!r) throw new Error(e1?.message || 'Save failed');
+      return await writeDayBody(r.id, content);
+    }
     let { data: dayRow, error: dayErr } = await supabase
       .from('programme_days')
       .upsert(
@@ -113,19 +128,25 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
     }
     if (!dayRow) throw new Error(dayErr?.message || 'Save failed - have you run migration 3 (notes_tempo)?');
 
-    await supabase.from('workout_sections').delete().eq('day_id', dayRow.id);
+    return await writeDayBody(dayRow.id, content);
+  };
+
+  // Everything under a day: sections, exercises, sets. Split out so a day
+  // opened by id and a day upserted into a slot share one implementation.
+  const writeDayBody = async (targetDayId, content) => {
+    await supabase.from('workout_sections').delete().eq('day_id', targetDayId);
 
     for (let sOrd = 0; sOrd < content.sections.length; sOrd++) {
       const s = content.sections[sOrd];
       let { data: sec } = await supabase
         .from('workout_sections')
-        .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '', sort_order: sOrd })
+        .insert({ day_id: targetDayId, kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '', sort_order: sOrd })
         .select('id').single();
       // Fallback if migrations 036 (slide text) / 037 (icon) aren't applied yet.
       if (!sec) {
         ({ data: sec } = await supabase
           .from('workout_sections')
-          .insert({ day_id: dayRow.id, kind: s.kind, title: s.title, sort_order: sOrd })
+          .insert({ day_id: targetDayId, kind: s.kind, title: s.title, sort_order: sOrd })
           .select('id').single());
       }
       if (!sec) continue;
@@ -163,7 +184,7 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
       }
     }
   };
-  const writeDay = (phid) => writeDayContent(phid, weekIdx, dayIdx, day);
+  const writeDay = (phid) => writeDayContent(phid, weekIdx, dayIdx, day, dayId);
 
   const saveDay = async () => {
     if (!day) return true;

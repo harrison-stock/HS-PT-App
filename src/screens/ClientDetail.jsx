@@ -16,6 +16,7 @@ import { loadForms } from '../lib/forms'
 import { IconPlus, IconCheck, IconX2, IconChevronRight } from '../components/icons'
 import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
+import { materialiseDay, materialiseDays } from '../lib/programmeCopy'
 import { ImportHistory } from './ImportHistory'
 import { FormArchive } from './FormArchive'
 import { toast } from '../lib/toast'
@@ -723,7 +724,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
     const start = new Date(anchor);
     const end = new Date(anchor); end.setDate(end.getDate() + shownWeeks * 7);
     supabase.from('client_workouts')
-      .select('id, scheduled_date, status, programme_days(id, title, day_of_week, week_index, programme_phases(id, name, phase_index, programme_id, programmes(id, name)), workout_sections(title, kind, sort_order, section_exercises(id)))')
+      .select('id, scheduled_date, status, programme_days(id, title, owner_client_id, day_of_week, week_index, programme_phases(id, name, phase_index, programme_id, programmes(id, name)), workout_sections(title, kind, sort_order, section_exercises(id)))')
       .eq('client_id', c.id).gte('scheduled_date', ymd(start)).lt('scheduled_date', ymd(end))
       .then(({ data }) => setWorkouts(data || []));
   }, [c.id, anchor, shownWeeks]);
@@ -792,7 +793,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
 
   if (editing) return (
     <EditWorkout
-      w={editing} clientId={c.id} programmes={programmes} trainerId={trainerId}
+      w={editing} clientId={c.id} clientName={c.name} programmes={programmes} trainerId={trainerId}
       onClose={() => setEditing(null)}
       onSaved={() => { setEditing(null); loadWorkouts(); onChanged?.(); }}
     />
@@ -1043,9 +1044,12 @@ function WorkoutCell({ w, onClick, onDelete, onDragStart, onDragEnd }) {
 
 // Coach-side edit of a single scheduled workout - open it in the full
 // programme builder, reschedule it, or remove it, straight from the calendar.
-function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
+function EditWorkout({ w, clientId, clientName = '', programmes, trainerId, onClose, onSaved }) {
   const day = w.programme_days;
   const phase = day?.programme_phases;
+  // Assignments made before migration 060 still point at the shared template.
+  const owned = !!day?.owner_client_id;
+  const clientFirst = (clientName || '').split(' ')[0] || 'this client';
   const done = w.status === 'completed';
   const [date, setDate]           = React.useState(w.scheduled_date);
   const [saving, setSaving]       = React.useState(false);
@@ -1058,9 +1062,14 @@ function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
   const prog = (programmes || []).find(p => p.id === phase?.programme_id);
   const phaseIdx = Math.max(0, (prog?.phaseList || []).findIndex(ph => ph.id === phase?.id));
 
-  if (builderOpen && prog) return (
+  // The workout on this calendar is the client's own copy, so it's opened by id
+  // rather than by a (phase, week, weekday) slot it doesn't sit in. Editing it
+  // changes this client's workout and nobody else's - which is the whole point
+  // of the copy, and the reverse of what this screen used to warn about.
+  if (builderOpen) return (
     <ProgrammeBuilder
-      programme={prog} trainerId={trainerId}
+      programme={prog || { id: null, name: phase?.name || 'Workout', phaseList: [] }}
+      trainerId={trainerId} dayId={day?.id}
       startAt={{ phaseIdx, weekIdx: day?.week_index ?? 0, dayIdx: day?.day_of_week ?? 0 }}
       onClose={() => onSaved()}
     />
@@ -1118,14 +1127,14 @@ function EditWorkout({ w, clientId, programmes, trainerId, onClose, onSaved }) {
       )}
 
       <div>
-        <button onClick={() => setBuilderOpen(true)} disabled={!prog} className="btn-primary"
-          style={{ width: '100%', boxSizing: 'border-box', opacity: prog ? 1 : 0.4, pointerEvents: prog ? 'auto' : 'none' }}>
-          ✎ EDIT IN PROGRAMME BUILDER →
+        <button onClick={() => setBuilderOpen(true)} disabled={!day?.id} className="btn-primary"
+          style={{ width: '100%', boxSizing: 'border-box', opacity: day?.id ? 1 : 0.4, pointerEvents: day?.id ? 'auto' : 'none' }}>
+          ✎ EDIT THIS WORKOUT →
         </button>
         <Mono style={{ marginTop: 6 }}>
-          {prog
-            ? 'Edits the programme template - all clients assigned this workout see the changes.'
-            : 'Programme not found - it may have been deleted.'}
+          {owned
+            ? `Changes ${clientFirst}'s copy only. The programme it came from is untouched, and so is everyone else on it.`
+            : 'This workout still points at the shared programme - it was assigned before copies existed. Editing it changes it for every client assigned the same day.'}
         </Mono>
       </div>
 
@@ -2354,8 +2363,11 @@ function ProgrammePosition({ clientId, clientName, trainerId, programmes, onClos
     setBusy(true);
     if (movePlan.remove.length) await supabase.from('client_workouts').delete().in('id', movePlan.remove.map(r => r.id));
     if (movePlan.create.length) {
+      // Each template day becomes this client's own copy before it's scheduled.
+      const owned = await materialiseDays(movePlan.create.map(r => r.day_id), clientId);
       await supabase.from('client_workouts').insert(movePlan.create.map(r => ({
-        client_id: clientId, trainer_id: trainerId, day_id: r.day_id, scheduled_date: r.scheduled_date,
+        client_id: clientId, trainer_id: trainerId,
+        day_id: owned.get(r.day_id) || r.day_id, scheduled_date: r.scheduled_date,
       })));
     }
     setBusy(false); setAction(null);
@@ -2629,7 +2641,8 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
   const assign = async () => {
     if (!dayId || !date || saving) return;
     setSaving(true);
-    await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: dayId, scheduled_date: date });
+    const { id: ownDay } = await materialiseDay(dayId, clientId);
+    await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: ownDay, scheduled_date: date });
     setSaving(false); setSavedCount(1); setSaved(true);
     setTimeout(() => onAssigned(), 1400);
   };
@@ -2638,9 +2651,10 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
     if (!allDays.length || !date || saving) return;
     setSaving(true);
     const monday = mondayOf(new Date(`${date}T00:00:00`));
+    const owned = await materialiseDays(allDays.map(r => r.dayId), clientId);
     const rows = allDays.map(r => {
       const d = new Date(monday); d.setDate(d.getDate() + r.dayOffset);
-      return { client_id: clientId, trainer_id: trainerId, day_id: r.dayId, scheduled_date: ymd(d) };
+      return { client_id: clientId, trainer_id: trainerId, day_id: owned.get(r.dayId) || r.dayId, scheduled_date: ymd(d) };
     });
     await supabase.from('client_workouts').insert(rows);
     setSaving(false); setSavedCount(rows.length); setSaved(true);
@@ -2790,22 +2804,43 @@ function SyncProgramme({ clientId, clientName, trainerId, programmes, onClose, o
   React.useEffect(() => {
     let alive = true;
     supabase.from('client_workouts')
-      .select('day_id, scheduled_date, programme_days ( id, week_index, day_of_week, phase_id, programme_phases ( programme_id ) )')
+      .select('day_id, scheduled_date, programme_days ( id, week_index, day_of_week, phase_id, origin_day_id, owner_client_id, programme_phases ( programme_id ) )')
       .eq('client_id', clientId)
       .order('scheduled_date')
-      .then(({ data }) => {
+      .then(async ({ data }) => {
+        if (!alive) return;
+        // A copy carries no phase of its own, so which programme it belongs to
+        // has to come from the template it was made from.
+        const originIds = [...new Set((data || [])
+          .map(w => w.programme_days?.origin_day_id).filter(Boolean))];
+        const origins = new Map();
+        if (originIds.length) {
+          const { data: srcs } = await supabase.from('programme_days')
+            .select('id, phase_id, programme_phases ( programme_id )').in('id', originIds);
+          (srcs || []).forEach(d => origins.set(d.id, {
+            phase_id: d.phase_id, programme_id: d.programme_phases?.programme_id,
+          }));
+        }
         if (!alive) return;
         const byProg = new Map();
         (data || []).forEach(w => {
           const pd = w.programme_days;
-          const pid = pd?.programme_phases?.programme_id;
-          if (!pid || !pd) return;
+          if (!pd) return;
+          // An assigned day is now the client's own copy, which belongs to no
+          // phase. origin_day_id is the template it was made from, and that is
+          // what "have they already got this day?" has to be asked about -
+          // otherwise every day looks missing and Sync offers the lot again.
+          const templateId = pd.origin_day_id || pd.id;
+          const src = origins.get(templateId);
+          const pid = pd.programme_phases?.programme_id || src?.programme_id;
+          const phaseId = pd.phase_id || src?.phase_id;
+          if (!pid) return;
           let e = byProg.get(pid);
           if (!e) { e = { assignedDayIds: new Set(), startedPhaseIds: new Set(), earliest: null }; byProg.set(pid, e); }
-          e.assignedDayIds.add(w.day_id);
-          e.startedPhaseIds.add(pd.phase_id);
+          e.assignedDayIds.add(templateId);
+          if (phaseId) e.startedPhaseIds.add(phaseId);
           if (!e.earliest || w.scheduled_date < e.earliest.scheduled_date) {
-            e.earliest = { dayId: w.day_id, scheduled_date: w.scheduled_date };
+            e.earliest = { dayId: templateId, scheduled_date: w.scheduled_date };
           }
         });
         const list = [...byProg.keys()]
@@ -2890,7 +2925,11 @@ function SyncProgramme({ clientId, clientName, trainerId, programmes, onClose, o
   const sync = async () => {
     if (!preview.length || saving) return;
     setSaving(true);
-    const rows = preview.map(r => ({ client_id: clientId, trainer_id: trainerId, day_id: r.dayId, scheduled_date: r.scheduled_date }));
+    const owned = await materialiseDays(preview.map(r => r.dayId), clientId);
+    const rows = preview.map(r => ({
+      client_id: clientId, trainer_id: trainerId,
+      day_id: owned.get(r.dayId) || r.dayId, scheduled_date: r.scheduled_date,
+    }));
     await supabase.from('client_workouts').insert(rows);
     setSaving(false); setSavedCount(rows.length); setSaved(true);
     setTimeout(() => onSynced(), 1400);
