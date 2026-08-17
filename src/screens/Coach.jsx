@@ -10,7 +10,7 @@ import { BrandIcon, hasBrandIcon } from '../components/BrandIcon'
 import { BRAND_ICONS } from '../data/brandIcons'
 import { SkeletonCard, EmptyState, LoadingTile } from '../components/Loading'
 import { PushPrompt } from '../components/PushPrompt'
-import { duplicateProgramme as duplicateProgrammeDeep } from '../lib/programmeCopy'
+import { duplicateProgramme as duplicateProgrammeDeep, materialiseDay } from '../lib/programmeCopy'
 import { toast } from '../lib/toast'
 
 const CLIENT_ACCENTS = ['#46BBC0','#189CAA','#F39E1F','#EE6A6A','#3F84D9','#E0A5BB','#8086A3'];
@@ -1195,7 +1195,8 @@ function AssignAdhocSheet({ workout, clients, trainerId, onClose }) {
   const assign = async () => {
     if (!clientId || !dayId || !date || saving) return;
     setSaving(true);
-    await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: dayId, scheduled_date: date });
+    const { id: ownDay } = await materialiseDay(dayId, clientId);
+    await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: ownDay, scheduled_date: date });
     if (selected && !selected.managed) {
       notify({ recipientId: clientId, actorId: trainerId, kind: 'task', title: 'New workout assigned', body: workout.name, link: { screen: 'workouts' } });
     }

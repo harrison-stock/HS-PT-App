@@ -67,15 +67,23 @@ async function writeDayInto(src, target) {
   }
   if (!dayRow) throw new Error('Could not write the target day');
 
+  await writeContentInto(src, dayRow.id);
+}
+
+// Everything below a day: sections, their exercises, and those exercises' sets.
+// Split out of writeDayInto so a client's own copy can reuse it - the copy
+// creates its day row differently (it belongs to a person, not a phase slot)
+// but the contents underneath are copied identically.
+async function writeContentInto(src, dayId) {
   // Replace rather than merge - the target should end up identical to the source.
-  await supabase.from('workout_sections').delete().eq('day_id', dayRow.id);
+  await supabase.from('workout_sections').delete().eq('day_id', dayId);
 
   const secs = [...(src.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
   if (!secs.length) return;
 
   const { data: newSecs, error: sErr } = await insertRows('workout_sections',
     secs.map((s, i) => ({
-      day_id: dayRow.id, kind: s.kind, title: s.title, sort_order: i,
+      day_id: dayId, kind: s.kind, title: s.title, sort_order: i,
       intro: s.intro || '', icon: s.icon || '',
     })),
     ['intro', 'icon'],
@@ -265,4 +273,62 @@ export async function duplicateProgramme(trainerId, prog) {
   }
 
   return { id: newProg.id };
+}
+
+/**
+ * The client's own copy of a template day, created on first use.
+ *
+ * Assignment used to point at the programme's day row, which made the content
+ * shared: editing a programme rewrote it for everyone already on it, including
+ * sessions they had finished. A copy belongs to one client and nothing upstream
+ * can reach back through it.
+ *
+ * Idempotent per (client, template day). A programme assigned twice, or a day
+ * that lands on two dates, reuses the copy it already made - two copies would
+ * leave a logged session with no single day to belong to.
+ *
+ * On failure the caller gets the template id back rather than nothing. A client
+ * with the old shared workout on their calendar is worse than the new model;
+ * a client with no workout at all is worse than both.
+ */
+export async function materialiseDay(sourceDayId, clientId) {
+  if (!sourceDayId || !clientId) return { error: { message: 'Missing day or client' } };
+
+  const { data: existing } = await supabase.from('programme_days')
+    .select('id').eq('owner_client_id', clientId).eq('origin_day_id', sourceDayId).limit(1);
+  if (existing?.length) return { id: existing[0].id };
+
+  const { data: src } = await supabase
+    .from('programme_days').select(DAY_SELECT).eq('id', sourceDayId).maybeSingle();
+  if (!src) return { id: sourceDayId, sharedFallback: true };
+  // Already somebody's copy - schedule it as-is rather than copying a copy.
+  if (src.owner_client_id) return { id: src.id };
+
+  const { data: dayRow } = await supabase.from('programme_days').insert({
+    phase_id: null, week_index: src.week_index, day_of_week: src.day_of_week,
+    intro: src.intro || '', notes: src.notes || '',
+    title: src.title ?? null, image_url: src.image_url ?? null,
+    owner_client_id: clientId, origin_day_id: src.id,
+  }).select('id').single();
+  // Migration 060 not applied yet: with no ownership columns there is no copy
+  // to make, so carry on pointing at the template exactly as before.
+  if (!dayRow) return { id: sourceDayId, sharedFallback: true };
+
+  try {
+    await writeContentInto(src, dayRow.id);
+  } catch (e) {
+    return { id: dayRow.id, partial: e.message };
+  }
+  return { id: dayRow.id };
+}
+
+/** Materialise several days for one client, in order. */
+export async function materialiseDays(sourceDayIds, clientId) {
+  const map = new Map();
+  for (const id of sourceDayIds) {
+    if (map.has(id)) continue;
+    const r = await materialiseDay(id, clientId);
+    map.set(id, r.id || id);
+  }
+  return map;
 }
