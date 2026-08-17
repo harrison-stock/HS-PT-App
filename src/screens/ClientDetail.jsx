@@ -16,7 +16,7 @@ import { loadForms } from '../lib/forms'
 import { IconPlus, IconCheck, IconX2, IconChevronRight } from '../components/icons'
 import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
-import { materialiseDay, materialiseDays } from '../lib/programmeCopy'
+import { materialiseDay, materialiseDays, staleAssignments, refreshCopy } from '../lib/programmeCopy'
 import { ImportHistory } from './ImportHistory'
 import { FormArchive } from './FormArchive'
 import { toast } from '../lib/toast'
@@ -830,7 +830,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
           <IconPlus size={13}/> ASSIGN
         </button>
         <button onClick={() => setShowProgress(true)} style={navBtnSt}>PROGRESS</button>
-        <button onClick={() => setShowSync(true)} style={navBtnSt}>SYNC</button>
+        <button onClick={() => setShowSync(true)} style={navBtnSt}>UPDATE</button>
         <button onClick={() => setShowImport(true)} style={navBtnSt}>IMPORT</button>
         <button onClick={() => setAnchor(mondayOf(new Date()))} style={navBtnSt}>TODAY</button>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -2922,6 +2922,32 @@ function SyncProgramme({ clientId, clientName, trainerId, programmes, onClose, o
     });
   }, [missing, anchor]);
 
+  // Which of their upcoming workouts are running an older version of this
+  // programme. Only exists because editing a programme now leaves assigned
+  // clients alone - the coach decides who takes the change.
+  const [stale, setStale] = React.useState([]);
+  const [pushing, setPushing] = React.useState(false);
+  const [pushed, setPushed] = React.useState(0);
+  React.useEffect(() => {
+    let alive = true;
+    if (!progId) { setStale([]); return; }
+    staleAssignments(clientId, progId).then(r => { if (alive) setStale(r); });
+    return () => { alive = false; };
+  }, [clientId, progId, pushed]);
+
+  const pushChanges = async () => {
+    if (!stale.length || pushing) return;
+    setPushing(true);
+    let done = 0;
+    for (const w of stale) {
+      const r = await refreshCopy(w.dayId, w.originId);
+      if (!r.error) done++;
+    }
+    setPushing(false);
+    setPushed(done);
+    onSynced?.();
+  };
+
   const sync = async () => {
     if (!preview.length || saving) return;
     setSaving(true);
@@ -2944,14 +2970,43 @@ function SyncProgramme({ clientId, clientName, trainerId, programmes, onClose, o
   return (
     <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="label">// SYNC PROGRAMME - {clientName.toUpperCase()}</div>
+        <div className="label">// UPDATE FROM PROGRAMME - {clientName.toUpperCase()}</div>
         <button onClick={onClose} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}><IconX2 size={14}/></button>
       </div>
 
       {loading && <Mono>CHECKING THEIR SCHEDULE…</Mono>}
 
       {!loading && candidates.length === 0 && (
-        <Mono>Nothing to sync - assign them a programme first.</Mono>
+        <Mono>Nothing to update - assign them a programme first.</Mono>
+      )}
+
+      {!loading && stale.length > 0 && (
+        <div style={{ borderRadius: 10, padding: 12, background: 'var(--bg-2)',
+          border: '1px solid color-mix(in srgb, var(--c-amber) 55%, var(--line))', display: 'grid', gap: 8 }}>
+          <div className="label" style={{ color: 'var(--c-amber)' }}>// PROGRAMME CHANGED SINCE THEY GOT IT</div>
+          <Mono>
+            {stale.length} upcoming workout{stale.length === 1 ? '' : 's'} still {stale.length === 1 ? 'has' : 'have'} the
+            older version. Applying replaces their copy with the current one — completed sessions are never touched.
+          </Mono>
+          <div style={{ display: 'grid', gap: 3 }}>
+            {stale.slice(0, 5).map(w => (
+              <div key={w.workoutId} className="mono" style={{ fontSize: 10, color: 'var(--text-2)' }}>
+                {new Date(`${w.scheduledDate}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {w.title || 'Workout'}
+              </div>
+            ))}
+            {stale.length > 5 && <Mono>+{stale.length - 5} more</Mono>}
+          </div>
+          <button onClick={pushChanges} disabled={pushing} className="btn-primary"
+            style={{ fontSize: 11, padding: '9px 0', opacity: pushing ? 0.5 : 1 }}>
+            {pushing ? 'APPLYING…' : `APPLY TO ${stale.length} WORKOUT${stale.length === 1 ? '' : 'S'} →`}
+          </button>
+        </div>
+      )}
+
+      {!loading && !!pushed && stale.length === 0 && (
+        <div className="mono" style={{ fontSize: 10, letterSpacing: '0.06em', color: 'var(--accent)' }}>
+          ✓ {pushed} WORKOUT{pushed === 1 ? '' : 'S'} UPDATED TO THE CURRENT PROGRAMME
+        </div>
       )}
 
       {!loading && candidates.length > 0 && (

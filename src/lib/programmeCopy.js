@@ -308,7 +308,7 @@ export async function materialiseDay(sourceDayId, clientId) {
     phase_id: null, week_index: src.week_index, day_of_week: src.day_of_week,
     intro: src.intro || '', notes: src.notes || '',
     title: src.title ?? null, image_url: src.image_url ?? null,
-    owner_client_id: clientId, origin_day_id: src.id,
+    owner_client_id: clientId, origin_day_id: src.id, copied_at: new Date().toISOString(),
   }).select('id').single();
   // Migration 060 not applied yet: with no ownership columns there is no copy
   // to make, so carry on pointing at the template exactly as before.
@@ -331,4 +331,71 @@ export async function materialiseDays(sourceDayIds, clientId) {
     map.set(id, r.id || id);
   }
   return map;
+}
+
+/**
+ * Which of a client's workouts are running an older version of their template.
+ *
+ * A copy is behind if it was taken before the template last changed. Completed
+ * workouts are never included: what they did is what they did, and rewriting it
+ * is the exact behaviour this whole model change removed.
+ *
+ * Returns [{ workoutId, dayId, originId, title, scheduledDate }].
+ */
+export async function staleAssignments(clientId, programmeId = null) {
+  if (!clientId) return [];
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await supabase.from('client_workouts')
+    .select('id, scheduled_date, status, programme_days!inner ( id, title, copied_at, origin_day_id )')
+    .eq('client_id', clientId)
+    .neq('status', 'completed')
+    .gte('scheduled_date', today);
+
+  const rows = (data || []).filter(w => w.programme_days?.origin_day_id);
+  if (!rows.length) return [];
+
+  const originIds = [...new Set(rows.map(w => w.programme_days.origin_day_id))];
+  const { data: origins } = await supabase.from('programme_days')
+    .select('id, content_updated_at, phase_id, programme_phases ( programme_id )')
+    .in('id', originIds);
+  const byId = new Map((origins || []).map(d => [d.id, d]));
+
+  return rows.filter(w => {
+    const src = byId.get(w.programme_days.origin_day_id);
+    if (!src) return false;                                  // template deleted
+    if (programmeId && src.programme_phases?.programme_id !== programmeId) return false;
+    const copied = w.programme_days.copied_at;
+    // No copied_at means the copy predates the column; treat it as current
+    // rather than volunteering to overwrite something on a guess.
+    if (!copied || !src.content_updated_at) return false;
+    return new Date(src.content_updated_at) > new Date(copied);
+  }).map(w => ({
+    workoutId: w.id, dayId: w.programme_days.id,
+    originId: w.programme_days.origin_day_id,
+    title: w.programme_days.title || '',
+    scheduledDate: w.scheduled_date,
+  }));
+}
+
+/**
+ * Re-copy a template over a client's existing copy, in place.
+ *
+ * The copy keeps its id, so the calendar entry and anything else pointing at it
+ * follow along. Its contents are replaced, which is the point - this is the
+ * coach saying "take my change".
+ */
+export async function refreshCopy(dayId, originId) {
+  const { data: src } = await supabase
+    .from('programme_days').select(DAY_SELECT).eq('id', originId).maybeSingle();
+  if (!src) return { error: { message: 'The programme day no longer exists' } };
+  try {
+    await supabase.from('programme_days').update({
+      title: src.title ?? null, intro: src.intro || '', notes: src.notes || '',
+      image_url: src.image_url ?? null, copied_at: new Date().toISOString(),
+    }).eq('id', dayId);
+    await writeContentInto(src, dayId);
+    return { ok: true };
+  } catch (e) {
+    return { error: { message: e.message || 'Could not apply the update' } };
+  }
 }
