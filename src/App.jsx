@@ -3,7 +3,6 @@ import { supabase } from './lib/supabase'
 import { HexShape } from './components/hex'
 import { BrandIcon } from './components/BrandIcon'
 import { HexLoader } from './components/Loading'
-import { ComingSoon } from './components/ComingSoon'
 import { IconHome, IconCalendar, IconChart, IconBook, IconUser, IconBolt, IconActivity, IconDumbbell, IconDoc, IconPlay, IconX2 } from './components/icons'
 import { Login, SetPassword } from './screens/Login'
 import { Dashboard } from './screens/Dashboard'
@@ -369,14 +368,7 @@ export default function App() {
   else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={activeUserId} resume={logResume} edit={logEdit} onExitClientView={impersonating ? exitClientView : undefined}/>;
   else if (screen === 'progress')   ScreenEl = <Progress go={navigate} userId={activeUserId}/>;
   else if (screen === 'body')       ScreenEl = <Body go={navigate} userId={activeUserId} trainerId={impersonating ? session.user.id : profile?.trainer_id}/>;
-  // Resources is coach-only for now. Gated here rather than inside the screen
-  // so a client never loads it at all - no recipe or guide fetches on their
-  // behalf for a page they can't see. A coach viewing a client's app gets the
-  // client's version, which is the point of that mode.
-  else if (screen === 'resources')  ScreenEl = navIsTrainer
-    ? <Resources go={navigate} userId={session.user.id} isTrainer/>
-    : <ComingSoon title="Recipes & guides"
-        sub="Your coach is putting this together. It'll appear here when it's ready - nothing for you to do." />;
+  else if (screen === 'resources')  ScreenEl = <Resources go={navigate} userId={session.user.id} isTrainer={navIsTrainer}/>;
   else if (screen === 'coach')      ScreenEl = <Coach go={navigate} trainerId={session.user.id} unread={unread} openTarget={coachOpen} onOpenConsumed={() => setCoachOpen(null)}/>;
   else if (screen === 'programmes') ScreenEl = <Coach go={navigate} trainerId={session.user.id} only="programmes"/>;
   else if (screen === 'exercises')  ScreenEl = <Exercises trainerId={session.user.id}/>;
