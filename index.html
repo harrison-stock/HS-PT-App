@@ -43,6 +43,48 @@
       </clipPath>
     </defs>
   </svg>
+  <script>
+    // How tall the app column actually is.
+    //
+    // 100dvh looked like the answer and wasn't. On an installed iPhone it comes
+    // back short of the screen, leaving a strip of the page showing under the
+    // app - and opening the keyboard makes it worse, because dvh follows the
+    // shrinking viewport down and doesn't reliably come back up afterwards.
+    // That is why the strip started appearing mid-workout the moment a weight
+    // was tapped.
+    //
+    // The height is measured instead, and only ever allowed to grow. A keyboard
+    // opening shrinks the viewport; ignoring every shrink means the app keeps
+    // its full height throughout and there is nothing to restore. A real change
+    // in available height - rotating the phone - resets the measurement.
+    //
+    // Inline and ahead of the bundle on purpose: it owes nothing to the app, so
+    // the column is the right height on the first paint and stays right even if
+    // the app fails to start.
+    (function () {
+      try {
+        var root = document.documentElement;
+        var known = 0;
+        function measure(reset) {
+          if (reset) known = 0;
+          var h = window.innerHeight;
+          if (h > known) { known = h; root.style.setProperty('--app-vh', h + 'px'); }
+        }
+        measure(true);
+        window.addEventListener('resize', function () { measure(false); });
+        window.addEventListener('orientationchange', function () { setTimeout(function () { measure(true); }, 120); });
+        // Returning from the background can be when iOS finally reports the
+        // real height, so take another reading then.
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') measure(false);
+        });
+        if (window.navigator.standalone === true ||
+            (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) {
+          root.setAttribute('data-standalone', '');
+        }
+      } catch (e) { /* the CSS fallback covers a browser without any of this */ }
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>
