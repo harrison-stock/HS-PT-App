@@ -227,10 +227,15 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
           phaseList: [{ ...(p.phaseList[0] || {}), id: phid, name: 'Workout', focus: 'Ad-hoc', weeks: 1 }] }));
       }
 
-      if (!phid) { setSaving(false); setSaveError('No phase to save into - open the roadmap first.'); return false; }
+      // A day opened by id already exists and is written in place, so it needs
+      // no phase to be saved into - and a client's own copy has none by
+      // definition. Requiring one here made every workout on a client's
+      // calendar unsaveable the moment assignment became a copy.
+      if (!dayId && !phid) { setSaving(false); setSaveError('No phase to save into - open the roadmap first.'); return false; }
 
       await writeDay(phid);
-      await supabase.from('programmes').update({ updated_at: new Date().toISOString() }).eq('id', pid);
+      // Likewise there may be no programme to touch: a copy belongs to a person.
+      if (pid) await supabase.from('programmes').update({ updated_at: new Date().toISOString() }).eq('id', pid);
       setSaving(false);
       setDirty(false);
       return true;
