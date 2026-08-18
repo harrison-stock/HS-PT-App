@@ -2182,9 +2182,12 @@ function NumCell({ value, unit = 'kg', done, split = 1, splitView = false, delay
     if (kg > 999) return;
     onChange(kg);
   };
-  // At rest a bodyweight set reads "BW" rather than a bare 0; focusing swaps in
-  // an empty field so the client just types the number they used.
-  const shown = draft !== null ? draft : (value == null ? '' : value === 0 ? 'BW' : String(shownValue));
+  // No weight reads as the placeholder dash, whether that's because none was
+  // prescribed or because it's zero. "BW" was doing double duty as both "this is
+  // a bodyweight movement" and "nobody has filled this in", and the second is by
+  // far the commoner case - a dash says it plainly and matches the dash a coach
+  // types in the builder when they don't know a client's numbers yet.
+  const shown = draft !== null ? draft : (value == null || value === 0 ? '' : String(shownValue));
   // Shared by the input and the hidden twin that measures it, so the two agree
   // to the pixel.
   const type = {
@@ -2267,7 +2270,7 @@ function printWorkout(exercises, meta = {}) {
     const b = bandOf(s.band);
     const sp = b ? null : splitLoad(s.kg, split);
     const each = sp ? `${sp.n} × ${sp.each}kg` : '';
-    const load = b ? b.label : (s.kg != null ? `${s.kg} kg${each ? ` (${each} each)` : ''}` : 'BW');
+    const load = b ? b.label : (s.kg ? `${s.kg} kg${each ? ` (${each} each)` : ''}` : '-');
     const tag = SET_TYPE[s.kind] ? ` (${SET_TYPE[s.kind].label})` : '';
     return `${load} × ${s.reps}${s.perSide ? '/side' : ''}${tag}`;
   };
