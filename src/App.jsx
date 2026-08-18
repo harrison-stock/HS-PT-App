@@ -398,7 +398,7 @@ export default function App() {
 
   return (
     <div data-role={navIsTrainer ? 'trainer' : 'client'} className="app-shell" style={{
-      width: '100%', height: '100dvh',
+      width: '100%', height: 'var(--app-vh, 100dvh)',
       display: 'flex', flexDirection: 'column',
       fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', monospace",
       background: 'var(--bg-1)',

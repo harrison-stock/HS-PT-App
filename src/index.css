@@ -198,19 +198,13 @@ body:has([data-role="trainer"]) {
    Phone widths only. Above 500px the app is a centred 390px column and the
    page background either side of it is meant to be seen. */
 @media (max-width: 499px) {
-  html, body {
-    background-color: var(--bg-1);
-    background-image: linear-gradient(var(--nav-to), var(--nav-to));
-  }
+  html, body { background: var(--bg-1); }
 }
 /* Belt and braces for a wide phone that clears the 500px breakpoint. */
-html[data-standalone] body, html[data-standalone] {
-  background-color: var(--bg-1);
-  background-image: linear-gradient(var(--nav-to), var(--nav-to));
-}
+html[data-standalone] body, html[data-standalone] { background: var(--bg-1); }
 
 #root {
-  min-height: 100dvh;
+  min-height: var(--app-vh, 100dvh);
   background: var(--bg-1);
   color: var(--text);
   position: relative;
