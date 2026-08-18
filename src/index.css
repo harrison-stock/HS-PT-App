@@ -98,15 +98,25 @@
 }
 
 * { box-sizing: border-box; }
-/* The document scrolls. Pinning it to the viewport did stop the bottom nav
-   being dragged around, but it also meant that whatever the browser reported
-   as the viewport height was the whole app - and on iOS that left the bottom
-   of the screen cut off with no way to reach it. A scrollable document can be
-   flicked, which is the escape hatch. */
+/* The document does not scroll; the panes inside it do.
+
+   It used to, deliberately: when the app column's height came from a viewport
+   unit the browser might report wrongly, a scrollable page was the escape hatch
+   for reaching a bottom edge that had fallen off the screen. Now the height is
+   measured (see index.html) and matches the visible area exactly, so that
+   escape hatch has stopped being a safety net and become the bug.
+
+   Measured on the device: the column was a correct 844px tall while its bottom
+   edge sat at 803 - the page itself had been scrolled down 41px, by iOS
+   bringing a keyboard up, and never scrolled back. That 41px of page showing
+   underneath is the strip. With nothing to scroll, there is nothing to leave
+   parked in the wrong place. */
 html, body {
   margin: 0; padding: 0;
   color: var(--text);
-  min-height: 100dvh;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 body {
   background:
@@ -115,7 +125,6 @@ body {
     var(--app-bg-0);
   position: relative;
   overflow-x: hidden;
-  min-height: 100dvh;
   /* No cap on a phone: the app fills the screen edge to edge. The 390px cap
      exists to keep the client app phone-shaped on a laptop, but it was applied
      at every width - so any phone wider than 390 (a 15/16 at 393, a 16 Pro at

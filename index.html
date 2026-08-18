@@ -78,6 +78,20 @@
         document.addEventListener('visibilitychange', function () {
           if (document.visibilityState === 'visible') measure(false);
         });
+
+        // Belt and braces for the same thing the CSS now prevents. If anything
+        // still manages to scroll the page - a stray anchor, an iOS build that
+        // scrolls a focused field into view regardless - put it back, because a
+        // scrolled page is a column sitting above the bottom of the screen with
+        // the page showing underneath.
+        function unscroll() { if (window.scrollY !== 0) window.scrollTo(0, 0); }
+        window.addEventListener('resize', unscroll);
+        window.addEventListener('orientationchange', function () { setTimeout(unscroll, 150); });
+        // focusout is the keyboard going away, which is when it happened.
+        document.addEventListener('focusout', function () { setTimeout(unscroll, 50); });
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') unscroll();
+        });
         if (window.navigator.standalone === true ||
             (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) {
           root.setAttribute('data-standalone', '');
