@@ -191,7 +191,105 @@ function ProfileTab({ user, userId, onSave, theme, onThemeChange }) {
       <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.08em', textAlign: 'center', padding: '18px 0 4px' }}>
         BUILD {typeof __BUILD__ === 'string' ? __BUILD__ : 'unknown'}
       </div>
+
+      <LayoutReadout />
     </>
+  );
+}
+
+// Every number the layout depends on, on screen.
+//
+// The strip along the bottom of the app has now survived four fixes, each aimed
+// at a different suspect, because the only evidence available was a screenshot
+// of the symptom. This shows which layer is actually short - the viewport units,
+// the safe-area inset, the app column, or the nav - so the next change is aimed
+// at something measured instead of something guessed.
+function LayoutReadout() {
+  const [open, setOpen] = React.useState(false);
+  const [m, setM] = React.useState(null);
+
+  const read = React.useCallback(() => {
+    const px = (v) => Math.round(parseFloat(v) || 0);
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;top:0;left:0';
+    document.body.appendChild(probe);
+    const unit = (u) => { probe.style.height = u; return px(getComputedStyle(probe).height); };
+    const dvh = unit('100dvh'), svh = unit('100svh'), lvh = unit('100lvh');
+    probe.style.height = 'env(safe-area-inset-bottom, 0px)';
+    const safeBottom = px(getComputedStyle(probe).height);
+    probe.remove();
+
+    const shell = document.querySelector('.app-shell');
+    const nav = document.querySelector('.bnav');
+    const root = document.getElementById('root');
+    const sr = shell?.getBoundingClientRect();
+    const nr = nav?.getBoundingClientRect();
+
+    setM({
+      innerHeight: window.innerHeight,
+      visual: Math.round(window.visualViewport?.height || 0),
+      dvh, svh, lvh, safeBottom,
+      appVh: px(getComputedStyle(document.documentElement).getPropertyValue('--app-vh')),
+      rootH: root ? Math.round(root.getBoundingClientRect().height) : 0,
+      shellH: sr ? Math.round(sr.height) : 0,
+      shellBottom: sr ? Math.round(sr.bottom) : 0,
+      navBottom: nr ? Math.round(nr.bottom) : 0,
+      navH: nr ? Math.round(nr.height) : 0,
+      standalone: document.documentElement.hasAttribute('data-standalone'),
+      docScroll: Math.round(document.documentElement.scrollHeight - window.innerHeight),
+    });
+  }, []);
+
+  React.useEffect(() => { if (open) read(); }, [open, read]);
+
+  const Row = ({ k, v, flag }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+      <span style={{ color: 'var(--text-3)' }}>{k}</span>
+      <span style={{ color: flag ? 'var(--c-coral)' : 'var(--text)', fontWeight: flag ? 700 : 400 }}>{String(v)}</span>
+    </div>
+  );
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="mono"
+        style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center',
+          fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--text-3)', padding: '2px 0 10px' }}>
+        LAYOUT DIAGNOSTICS
+      </button>
+    );
+  }
+
+  // The gap the strip actually is: how far the bottom of the app sits above the
+  // bottom of the screen.
+  const gap = m ? m.innerHeight - m.shellBottom : 0;
+
+  return (
+    <div className="card mono" style={{ padding: 12, margin: '0 0 12px', fontSize: 10, display: 'grid', gap: 4 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+        <span className="label">// LAYOUT DIAGNOSTICS</span>
+        <button onClick={() => setOpen(false)} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}>✕</button>
+      </div>
+      {m && <>
+        <Row k="gap under the app" v={gap + 'px'} flag={gap > 1} />
+        <Row k="innerHeight" v={m.innerHeight} />
+        <Row k="visualViewport" v={m.visual} />
+        <Row k="100dvh / svh / lvh" v={`${m.dvh} / ${m.svh} / ${m.lvh}`} />
+        <Row k="--app-vh" v={m.appVh} flag={m.appVh !== m.innerHeight} />
+        <Row k="safe-area-bottom" v={m.safeBottom} />
+        <Row k="app column height" v={m.shellH} />
+        <Row k="app column bottom" v={m.shellBottom} />
+        <Row k="#root height" v={m.rootH} />
+        <Row k="nav height / bottom" v={`${m.navH} / ${m.navBottom}`} />
+        <Row k="page scrolls by" v={m.docScroll} />
+        <Row k="standalone" v={m.standalone ? 'yes' : 'no'} flag={!m.standalone} />
+      </>}
+      <button onClick={read} className="btn-ghost" style={{ fontSize: 9, padding: '7px 0', marginTop: 4 }}>
+        RE-MEASURE
+      </button>
+      <div style={{ color: 'var(--text-3)', fontSize: 8.5, lineHeight: 1.5, marginTop: 2 }}>
+        Tap a weight field to bring the keyboard up, dismiss it, then RE-MEASURE.
+      </div>
+    </div>
   );
 }
 

@@ -860,18 +860,20 @@ function ClientRow({ c, onPick, onRemovePending }) {
   return (
     <div onClick={onPick} style={{ cursor: 'pointer', display: 'block' }}>
       <div className="card tappable" style={{
-        padding: 12, display: 'grid', gridTemplateColumns: '44px 1fr auto', gap: 12,
-        alignItems: 'center', borderLeft: `2px solid ${statusColor}`,
+        padding: 12, display: 'grid', gridTemplateColumns: '52px 1fr auto', gap: 12,
+        alignItems: 'center', borderLeft: `3px solid ${statusColor}`,
         opacity: c.pending ? 0.85 : 1,
       }}>
-        <Hex size={40} style={{
+        {/* The face of the card. A roster is scanned for a person, so the thing
+            that identifies them should be the thing that carries. */}
+        <Hex size={48} style={{
           background: c.accent, color: 'var(--on-accent)',
-          fontFamily: 'Orbitron', fontSize: 12, fontWeight: 800,
+          fontFamily: 'Orbitron', fontSize: 15, fontWeight: 800,
         }}>{c.initials}</Hex>
 
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 15.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {c.name}
             </span>
             {c.pending && (

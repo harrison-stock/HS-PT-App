@@ -179,7 +179,15 @@ body:has([data-role="trainer"]) {
 
 @media (min-width: 980px) {
   .ov-2col     { grid-template-columns: 1fr 1fr; align-items: start; }
-  .grid-2-wide { grid-template-columns: 1fr 1fr; align-items: start; }
+}
+/* The client and programme lists went two-up only past 980px, so a laptop
+   showed one tall column with half the roster below the fold. They fit from
+   760px, and a third column once there is genuinely room for one. */
+@media (min-width: 760px) {
+  .grid-2-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+@media (min-width: 1280px) {
+  .grid-2-wide { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 /* The app column stops short of the bottom of an installed iPhone's screen,
    leaving a strip of the page behind it showing under the nav. Two attempts at
