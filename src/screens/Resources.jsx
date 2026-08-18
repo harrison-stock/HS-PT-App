@@ -12,12 +12,18 @@ import { exerciseMatches } from '../lib/exerciseSearch'
 import { HEX_RATIO, HEX_PATH, HexShape, Hex, HexBackButton } from '../components/hex'
 import { IconHeart, IconFlame, IconBolt, IconClock, IconChevronRight, IconPlus, IconCamera2, IconPlay, IconCheck, IconDumbbell } from '../components/icons'
 import { SkeletonCard, EmptyState } from '../components/Loading'
+import { ComingSoon } from '../components/ComingSoon'
 
 const MUSCLE_LABEL = Object.fromEntries(ALL_MUSCLES.map(m => [m.key, m.label]));
 
 // Resources - recipes & guides. Coaches build/edit both here.
 export function Resources({ go, userId, isTrainer }) {
   const [tab, setTab] = React.useState('recipes');
+  // Recipes and guides aren't ready for clients yet. Their own documents are,
+  // and those are the reason a client opens this screen at all, so only the two
+  // unfinished sections are covered - the tabs stay put so the shape of the
+  // screen doesn't change under them when the content lands.
+  const locked = !isTrainer && (tab === 'recipes' || tab === 'favourites' || tab === 'guides');
   const [recipes, setRecipes] = React.useState(null);   // null = loading
   const [guides, setGuides] = React.useState(null);
   const [builderRecipe, setBuilderRecipe] = React.useState(undefined); // undefined=closed, null=new, obj=edit
@@ -61,7 +67,9 @@ export function Resources({ go, userId, isTrainer }) {
   const sourceList = tab === 'guides' ? guideList :
   tab === 'favourites' ? filterByCourse(recipeList.filter((r) => favs.has(r.id)), course) :
   filterByCourse(recipeList, course);
-  const filtered = sourceList.filter((x) => x.title.toLowerCase().includes(query.toLowerCase()));
+  const filtered = locked
+    ? []
+    : sourceList.filter((x) => x.title.toLowerCase().includes(query.toLowerCase()));
   const recipesLoading = recipes === null;
   const guidesLoading  = guides === null;
 
@@ -116,7 +124,7 @@ export function Resources({ go, userId, isTrainer }) {
 
       {/* Search */}
       <div style={{
-        display: tab === 'vault' ? 'none' : 'flex', alignItems: 'center', gap: 8,
+        display: (tab === 'vault' || locked) ? 'none' : 'flex', alignItems: 'center', gap: 8,
         background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 10,
         padding: '8px 12px', marginBottom: 14
       }}>
@@ -133,8 +141,8 @@ export function Resources({ go, userId, isTrainer }) {
           so their library is just recipes + guides; clients get the full 2×2
           (recipes/guides on top, exercises/documents below). */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-        <ResTab big active={tab === 'recipes' || tab === 'favourites'} onClick={() => setTab('recipes')} icon={<IconFork size={18} />} label={`RECIPES · ${recipesLoading ? '…' : recipeList.length}`} />
-        <ResTab big active={tab === 'guides'} onClick={() => setTab('guides')} icon={<IconBolt size={18} />} label={`GUIDES · ${guidesLoading ? '…' : guideList.length}`} />
+        <ResTab big active={tab === 'recipes' || tab === 'favourites'} onClick={() => setTab('recipes')} icon={<IconFork size={18} />} label={isTrainer ? `RECIPES · ${recipesLoading ? '…' : recipeList.length}` : 'RECIPES'} />
+        <ResTab big active={tab === 'guides'} onClick={() => setTab('guides')} icon={<IconBolt size={18} />} label={isTrainer ? `GUIDES · ${guidesLoading ? '…' : guideList.length}` : 'GUIDES'} />
         {!isTrainer && (
           <ResTab big active={tab === 'exercises'} onClick={() => setTab('exercises')} icon={<IconDumbbell size={18} />} label={`EXERCISES · ${exercises === null ? '…' : exercises.length}`} />
         )}
@@ -142,6 +150,12 @@ export function Resources({ go, userId, isTrainer }) {
           <ResTab big active={tab === 'vault'} onClick={() => setTab('vault')} icon={<IconVaultDoc size={18} />} label={`DOCUMENTS · ${vaultDocs === null ? '…' : vaultDocs.length}`} />
         )}
       </div>
+
+      {locked && (
+        <ComingSoon inline title={tab === 'guides' ? 'Guides' : 'Recipes'}
+          icon={tab === 'guides' ? 'Bolt' : 'Recipe'}
+          sub="Your coach is putting these together. They'll show up here when they're ready — nothing for you to do." />
+      )}
 
       {/* Coach: new recipe / guide */}
       {isTrainer && (tab === 'recipes' || tab === 'favourites') &&
@@ -168,8 +182,8 @@ export function Resources({ go, userId, isTrainer }) {
       }
 
       {/* List */}
-      {tab === 'recipes' && recipesLoading && <SkeletonCard rows={4} />}
-      {tab === 'recipes' && !recipesLoading &&
+      {tab === 'recipes' && !locked && recipesLoading && <SkeletonCard rows={4} />}
+      {tab === 'recipes' && !locked && !recipesLoading &&
       <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {filtered.map((r) => <RecipeCard key={r.id} r={r} onOpen={() => setOpenRecipe(r)} isFav={favs.has(r.id)} onToggleFav={() => toggleFav(r.id, 'recipe')} onEdit={isTrainer ? () => setBuilderRecipe(r) : null} />)}
           {recipeList.length > 0 && filtered.length === 0 && !query &&
@@ -183,8 +197,8 @@ export function Resources({ go, userId, isTrainer }) {
             actionLabel={isTrainer ? '+ NEW RECIPE' : undefined} onAction={isTrainer ? () => setBuilderRecipe(null) : undefined} />}
         </div>
       }
-      {tab === 'guides' && guidesLoading && <SkeletonCard rows={4} />}
-      {tab === 'guides' && !guidesLoading &&
+      {tab === 'guides' && !locked && guidesLoading && <SkeletonCard rows={4} />}
+      {tab === 'guides' && !locked && !guidesLoading &&
       <div className="stagger-in" style={{ display: 'grid', gap: 10 }}>
           {filtered.map((g) => <GuideCard key={g.id} g={g} isFav={favs.has(g.id)} onToggleFav={() => toggleFav(g.id, 'guide')} onEdit={isTrainer ? () => setBuilderGuide(g) : null} onOpen={() => openGuide(g)} />)}
           {guideList.length === 0 &&
