@@ -2,6 +2,7 @@ import React from 'react'
 import { Hex, HexBackButton } from '../components/hex'
 import { IconPlus, IconX2, IconCheck, IconPlay } from '../components/icons'
 import { guessSplit } from '../lib/loadSplit'
+import { expandGroups } from '../lib/muscleVolume'
 import {
   MODALITIES, MUSCLE_GROUPS, ALL_MUSCLES, MOVEMENT_PATTERNS, CATEGORIES, TRACKING_OPTIONS,
   saveExercise, deleteExercise, uploadExerciseImage, videoThumb,
@@ -348,7 +349,10 @@ function hydrate(e) {
     muscle_group: e.muscle_group || '', movement_pattern: e.movement_pattern || '',
     category: e.category || 'Strength',
     tracking_fields: e.tracking_fields?.length ? [...e.tracking_fields] : ['Weight', 'Reps'],
-    muscles_worked: e.muscles_worked ? [...e.muscles_worked] : [],
+    // Opening an exercise saved before the chest/deltoid split promotes its
+    // coarse tags to the heads the picker now offers, so a save doesn't
+    // quietly drop them.
+    muscles_worked: expandGroups(e.muscles_worked || []),
     instructions: e.instructions || '', link_url: e.link_url || '',
     video_url: e.video_url || '', thumbnail_url: e.thumbnail_url || '', photos: e.photos ? [...e.photos] : [],
     banded: !!e.banded, unilateral: !!e.unilateral, load_split: parseInt(e.load_split) || 1,

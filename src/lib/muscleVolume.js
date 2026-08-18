@@ -2,25 +2,50 @@ import { loggedSetName } from './loggedSets'
 import { supabase } from './supabase'
 
 // Maps a free-text exercise name to muscle-map group keys.
-// Rules are ordered specific → generic; the first match wins.
+// Rules are ordered specific -> generic; the first match wins, so anything that
+// can name the head it loads (incline, decline, lateral, rear) has to sit above
+// the general press/row rule that would otherwise swallow it.
 const RULES = [
   [/deadlift|good morning|back extension|hyperextension/i, ['lowerBack', 'hamstrings', 'glutes']],
   [/romanian|rdl|hamstring|leg curl|nordic/i,              ['hamstrings', 'glutes']],
   [/squat|leg press|leg extension|lunge|step[- ]?up|pistol|hack/i, ['quads', 'glutes']],
   [/hip thrust|glute|bridge|kickback/i,                    ['glutes', 'hamstrings']],
   [/calf|calves/i,                                         ['calves']],
-  [/bench|chest press|push[- ]?up|press[- ]?up|fly|flye|pec/i, ['chest', 'triceps', 'shoulders']],
-  [/\bdip/i,                                               ['triceps', 'chest']],
-  [/overhead press|shoulder press|military|arnold|lateral raise|front raise|delt|landmine/i, ['shoulders', 'triceps']],
+  [/rear[- ]?delt|reverse (fly|flye|pec)|face pull|bent[- ]?over (lateral|raise)/i, ['deltsRear', 'upperBack']],
+  [/lateral raise|lat raise|side raise|upright row/i,       ['deltsSide']],
+  [/front raise/i,                                          ['deltsFront']],
+  // An incline press is the clavicular chest's exercise and a decline the
+  // sternal one's; a flat press is credited to both because it is.
+  [/incline.*(bench|press|fly|flye|push[- ]?up)|(bench|press|fly|flye|push[- ]?up).*incline/i, ['chestUpper', 'deltsFront', 'triceps']],
+  [/decline.*(bench|press|fly|flye|push[- ]?up)|(bench|press|fly|flye).*decline/i, ['chestMid', 'triceps']],
+  [/bench|chest press|push[- ]?up|press[- ]?up|fly|flye|pec/i, ['chestUpper', 'chestMid', 'triceps', 'deltsFront']],
+  [/\bdip/i,                                               ['triceps', 'chestMid']],
+  [/overhead press|shoulder press|military|arnold|landmine|\bdelt/i, ['deltsFront', 'deltsSide', 'triceps']],
   [/pull[- ]?up|chin[- ]?up|pulldown|\blat\b|lats/i,       ['lats', 'biceps']],
-  [/row|face pull|reverse fly|shrug|trap/i,                ['upperBack', 'biceps']],
+  [/row|shrug|trap/i,                                      ['upperBack', 'biceps']],
   [/curl/i,                                                ['biceps', 'forearms']],
   [/tricep|pushdown|skull|close[- ]?grip/i,                ['triceps']],
   [/plank|crunch|sit[- ]?up|\babs?\b|hollow|dead bug|leg raise|rollout/i, ['abs']],
   [/twist|woodchop|side bend|oblique|pallof/i,             ['obliques']],
   [/forearm|wrist|grip|farmer/i,                           ['forearms']],
-  [/clean|snatch|thruster|swing/i,                         ['glutes', 'hamstrings', 'shoulders']],
+  [/clean|snatch|thruster|swing/i,                         ['glutes', 'hamstrings', 'deltsFront', 'deltsSide']],
 ];
+
+// The map splits the chest and the deltoid into heads; the tags a coach saved
+// before that split did not. A library exercise still marked 'chest' or
+// 'shoulders' lights the whole muscle rather than nothing at all.
+const GROUP_PARTS = {
+  chest:     ['chestUpper', 'chestMid'],
+  shoulders: ['deltsFront', 'deltsSide', 'deltsRear'],
+};
+
+export function expandGroups(groups) {
+  const out = [];
+  for (const g of (groups || [])) {
+    for (const k of (GROUP_PARTS[g] || [g])) if (!out.includes(k)) out.push(k);
+  }
+  return out;
+}
 
 export function muscleGroupsFor(name) {
   for (const [re, groups] of RULES) {
@@ -54,7 +79,7 @@ export async function loadMuscleVolume(clientId, rangeDays, nameMuscleMap) {
       const name = loggedSetName(ls);
       const nm = name.toLowerCase();
       // Prefer the coach's library "muscles worked"; fall back to name heuristics.
-      const groups = (nameMuscleMap && nameMuscleMap[nm]) || muscleGroupsFor(name);
+      const groups = expandGroups((nameMuscleMap && nameMuscleMap[nm]) || muscleGroupsFor(name));
       const w = parseFloat(ls.actual_weight_kg) || 0;
       const r = ls.actual_reps || 0;
       for (const g of groups) {

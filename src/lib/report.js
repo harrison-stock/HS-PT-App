@@ -1,6 +1,6 @@
 import { loggedSetName } from './loggedSets'
 import { supabase } from './supabase'
-import { muscleGroupsFor } from './muscleVolume'
+import { muscleGroupsFor, expandGroups } from './muscleVolume'
 
 // ── Programme performance reports ─────────────────────────────────────────────
 // Sessions tie to a programme via day_id → programme_days → programme_phases →
@@ -120,7 +120,7 @@ export async function buildProgrammeReport(clientId, programmeId, nameMuscleMap)
       for (const ls of (s.logged_sets || [])) {
         const nm = loggedSetName(ls);
         const lower = nm.toLowerCase();
-        const groups = (nameMuscleMap && nameMuscleMap[lower]) || muscleGroupsFor(nm);
+        const groups = expandGroups((nameMuscleMap && nameMuscleMap[lower]) || muscleGroupsFor(nm));
         const w = parseFloat(ls.actual_weight_kg) || 0;
         const r = ls.actual_reps || 0;
         const kg = Math.round(w * r) || r; // bodyweight/timed → count reps as work

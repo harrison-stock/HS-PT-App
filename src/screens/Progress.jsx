@@ -30,10 +30,10 @@ const CAT_ICON = (id, sz) => {
 
 // Fine muscle key → coarse body-region bucket, so weights group by muscle.
 const MUSCLE_BUCKET = {
-  chest: 'chest',
+  chest: 'chest', chestUpper: 'chest', chestMid: 'chest',
   lats: 'back', upperBack: 'back', lowerBack: 'back', traps: 'back',
   quads: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs', adductors: 'legs',
-  shoulders: 'shoulders',
+  shoulders: 'shoulders', deltsFront: 'shoulders', deltsSide: 'shoulders', deltsRear: 'shoulders',
   biceps: 'arms', triceps: 'arms', forearms: 'arms',
   abs: 'core', obliques: 'core',
 };
@@ -1062,12 +1062,12 @@ function SubTab({ active, onClick, label, icon }) {
 // Per-category muscle zone: which side, which muscle slugs to highlight,
 // and a cropped viewBox that "zooms in" on that region of the body.
 const MUSCLE_ZONES = {
-  chest: { side: 'front', focus: ['chest'], crop: '230 287 267 202' },
-  back: { side: 'back', focus: ['upperBack', 'trapezius'], crop: '932 239 320 434' },
-  legs: { side: 'front', focus: ['quadriceps', 'calves'], crop: '225 614 287 396' },
-  shoulders: { side: 'front', focus: ['deltoids'], crop: '322 245 270 278' },
-  arms: { side: 'front', focus: ['biceps', 'triceps', 'forearm'], crop: '85 357 228 302' },
-  core: { side: 'front', focus: ['abs', 'obliques'], crop: '239 386 253 366' }
+  chest: { side: 'front', focus: ['chestUpper', 'chestMid'], crop: '230 192 267 202' },
+  back: { side: 'back', focus: ['upperBack', 'trapezius'], crop: '1031 144 320 434' },
+  legs: { side: 'front', focus: ['quadriceps', 'calves'], crop: '225 519 287 396' },
+  shoulders: { side: 'front', focus: ['deltsFront', 'deltsSide'], crop: '322 150 270 278' },
+  arms: { side: 'front', focus: ['biceps', 'triceps', 'forearm'], crop: '85 262 228 302' },
+  core: { side: 'front', focus: ['abs', 'obliques'], crop: '239 291 253 366' }
 };
 
 // Each zone its own faded colour.
@@ -1083,9 +1083,9 @@ const ZONE_COLOR = {
 // Per-individual-muscle colour, grouped by body region, so heatmap +
 // leaderboard graphs match the category card colours.
 const MUSCLE_COLOR = {
-  chest: '#3F84D9',
+  chest: '#3F84D9', chestUpper: '#5FA0EA', chestMid: '#3F84D9',
   upperBack: '#F39E1F', lats: '#F39E1F', lowerBack: '#F39E1F', traps: '#F39E1F', neck: '#F39E1F',
-  shoulders: '#EE6A6A',
+  shoulders: '#EE6A6A', deltsFront: '#F08A8A', deltsSide: '#EE6A6A', deltsRear: '#D45454',
   biceps: '#9D7CE0', triceps: '#9D7CE0', forearms: '#9D7CE0', hands: '#9D7CE0',
   abs: '#8086A3', obliques: '#8086A3',
   quads: '#E0A5B8', hamstrings: '#E0A5B8', glutes: '#E0A5B8', calves: '#E0A5B8',
