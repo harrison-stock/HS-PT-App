@@ -446,10 +446,13 @@ export const MUSCLE_VOLUME = {
 };
 
 export const MUSCLE_LABELS = {
-  chest: 'Chest', upperBack: 'Upper Back', lats: 'Lats', lowerBack: 'Lower Back',
-  shoulders: 'Shoulders', biceps: 'Biceps', triceps: 'Triceps',
+  chestUpper: 'Upper Chest', chestMid: 'Mid Chest',
+  deltsFront: 'Front Delts', deltsSide: 'Side Delts', deltsRear: 'Rear Delts',
+  upperBack: 'Upper Back', lats: 'Lats', lowerBack: 'Lower Back', biceps: 'Biceps', triceps: 'Triceps',
   abs: 'Abs', obliques: 'Obliques', quads: 'Quads',
   hamstrings: 'Hamstrings', glutes: 'Glutes', calves: 'Calves', forearms: 'Forearms',
+  // Pre-split keys, still attached to older exercises and injuries.
+  chest: 'Chest', shoulders: 'Shoulders',
 };
 
 export const RECIPES_SEED = [

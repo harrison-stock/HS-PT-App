@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { compressImage } from './imageCompress'
+import { expandGroups } from './muscleVolume'
 
 export const MODALITIES = ['Strength', 'Cardio', 'Mobility', 'Plyometric', 'Olympic', 'Bodyweight'];
 // Primary muscle group - the six groupings used across the app.
@@ -7,11 +8,14 @@ export const MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Cor
 // Detailed muscles for the multi-select "muscles worked" - keys match the
 // muscle-map / volume groups so logged work lights up the right regions.
 export const ALL_MUSCLES = [
-  { key: 'chest', label: 'Chest' },
+  { key: 'chestUpper', label: 'Upper Chest' },
+  { key: 'chestMid', label: 'Mid Chest' },
   { key: 'upperBack', label: 'Upper Back' },
   { key: 'lats', label: 'Lats' },
   { key: 'lowerBack', label: 'Lower Back' },
-  { key: 'shoulders', label: 'Shoulders' },
+  { key: 'deltsFront', label: 'Front Delts' },
+  { key: 'deltsSide', label: 'Side Delts' },
+  { key: 'deltsRear', label: 'Rear Delts' },
   { key: 'biceps', label: 'Biceps' },
   { key: 'triceps', label: 'Triceps' },
   { key: 'forearms', label: 'Forearms' },
@@ -134,14 +138,23 @@ export function splitList(value) {
   return String(value || '').split(/[,;/|]/).map(s => s.trim()).filter(Boolean);
 }
 
+// Muscles the picker no longer offers, because the map now splits them into
+// heads. Kept so a saved exercise - or an import that just says "Chest" - still
+// resolves, to both heads rather than to nothing.
+export const LEGACY_MUSCLES = [
+  { key: 'chest', label: 'Chest' },
+  { key: 'shoulders', label: 'Shoulders' },
+];
+
 // Map free-text muscle names onto the detailed muscle keys used for volume
 // mapping - accepts either the key ("upperBack") or the label ("Upper Back").
 export function matchMuscles(value) {
   const out = [];
   for (const part of splitList(value)) {
     const p = loose(part);
-    const hit = ALL_MUSCLES.find(m => loose(m.key) === p || loose(m.label) === p);
-    if (hit && !out.includes(hit.key)) out.push(hit.key);
+    const hit = [...ALL_MUSCLES, ...LEGACY_MUSCLES].find(m => loose(m.key) === p || loose(m.label) === p);
+    if (!hit) continue;
+    for (const k of expandGroups([hit.key])) if (!out.includes(k)) out.push(k);
   }
   return out;
 }

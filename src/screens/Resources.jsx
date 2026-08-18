@@ -7,14 +7,14 @@ import { loadGuides } from '../lib/guides'
 import { loadFavourites, setFavourite } from '../lib/favourites'
 import { RecipeBuilder } from './RecipeBuilder'
 import { GuideBuilder } from './GuideBuilder'
-import { loadExercises, videoThumb, ALL_MUSCLES } from '../lib/exercises'
+import { loadExercises, videoThumb, ALL_MUSCLES, LEGACY_MUSCLES } from '../lib/exercises'
 import { exerciseMatches } from '../lib/exerciseSearch'
 import { HEX_RATIO, HEX_PATH, HexShape, Hex, HexBackButton } from '../components/hex'
 import { IconHeart, IconFlame, IconBolt, IconClock, IconChevronRight, IconPlus, IconCamera2, IconPlay, IconCheck, IconDumbbell } from '../components/icons'
 import { SkeletonCard, EmptyState } from '../components/Loading'
 import { ComingSoon } from '../components/ComingSoon'
 
-const MUSCLE_LABEL = Object.fromEntries(ALL_MUSCLES.map(m => [m.key, m.label]));
+const MUSCLE_LABEL = Object.fromEntries([...ALL_MUSCLES, ...LEGACY_MUSCLES].map(m => [m.key, m.label]));
 
 // Resources - recipes & guides. Coaches build/edit both here.
 export function Resources({ go, userId, isTrainer }) {

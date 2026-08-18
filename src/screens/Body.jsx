@@ -15,6 +15,8 @@ const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 };
 // Distinct brand colour per muscle - only used to highlight a *clicked* muscle;
 // the heatmap itself stays a single accent hue.
 const MUSCLE_TINT = {
+  chestUpper: '#5FA0EA', chestMid: '#3F84D9',
+  deltsFront: '#F08A8A', deltsSide: '#EE6A6A', deltsRear: '#D45454',
   chest: '#3F84D9', upperBack: '#F39E1F', lats: '#F39E1F', lowerBack: '#F39E1F', traps: '#F39E1F', neck: '#F39E1F',
   shoulders: '#EE6A6A', biceps: '#9D7CE0', triceps: '#9D7CE0', forearms: '#9D7CE0', hands: '#9D7CE0',
   abs: '#8086A3', obliques: '#8086A3',
