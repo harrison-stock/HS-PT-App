@@ -284,7 +284,8 @@ function PasswordField({ value, onChange, placeholder = '•••••••�
 }
 
 const wrapStyle = {
-  minHeight: '100dvh',
+  // Inside the fixed app box, so the viewport's height is already this box's.
+  height: '100%', overflowY: 'auto',
   display: 'flex', flexDirection: 'column',
   alignItems: 'center', justifyContent: 'center',
   padding: '24px 24px 56px',

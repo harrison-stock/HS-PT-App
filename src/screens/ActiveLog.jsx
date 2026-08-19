@@ -2653,13 +2653,13 @@ export function SessionResults({ dayId, userId, go, onClose }) {
   }, [dayId, userId]);
 
   if (state === null) return (
-    <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', background: 'var(--bg-1)' }}>
+    <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--bg-1)' }}>
       <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.2em' }}>LOADING RESULTS…</div>
     </div>
   );
 
   if (state === 'none' || state.exercises.length === 0) return (
-    <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', background: 'var(--bg-1)', padding: 24 }}>
+    <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--bg-1)', padding: 24 }}>
       <div style={{ textAlign: 'center' }}>
         <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.12em', lineHeight: 1.8, marginBottom: 18 }}>
           NO LOGGED RESULTS FOUND<br/>
