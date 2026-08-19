@@ -98,19 +98,9 @@
 }
 
 * { box-sizing: border-box; }
-/* The document does not scroll; the panes inside it do.
-
-   It used to, deliberately: when the app column's height came from a viewport
-   unit the browser might report wrongly, a scrollable page was the escape hatch
-   for reaching a bottom edge that had fallen off the screen. Now the height is
-   measured (see index.html) and matches the visible area exactly, so that
-   escape hatch has stopped being a safety net and become the bug.
-
-   Measured on the device: the column was a correct 844px tall while its bottom
-   edge sat at 803 - the page itself had been scrolled down 41px, by iOS
-   bringing a keyboard up, and never scrolled back. That 41px of page showing
-   underneath is the strip. With nothing to scroll, there is nothing to leave
-   parked in the wrong place. */
+/* The document does not scroll; the panes inside it do. The app column below
+   spans the viewport exactly, so a scrollable page could only ever park that
+   column somewhere other than where it belongs. */
 html, body {
   margin: 0; padding: 0;
   color: var(--text);
@@ -220,12 +210,46 @@ body:has([data-role="trainer"]) {
 /* Belt and braces for a wide phone that clears the 500px breakpoint. */
 html[data-standalone] body, html[data-standalone] { background: var(--bg-1); }
 
+/* The app is the viewport, not a box measured to match it.
+   //
+   This strip along the bottom took six goes because every fix before this one
+   set a height: 100dvh, then 100lvh, then a height measured in JS and only
+   allowed to grow. Measuring cannot win. The browser resizes and repaints
+   before it delivers the resize event, so a measured height always describes
+   the viewport as it was a moment ago - and on a phone the viewport changes
+   size constantly, every time the address bar collapses or returns.
+
+   Reproduced in a browser, growing 803 -> 844 -> 803 the way an address bar
+   does, the measured column was wrong in both directions and by exactly the
+   41px the device reported:
+
+     grew to 844   column still 803  ->  41px of page showing underneath
+     back to 803   column now 844    ->  the nav pushed 41px off the bottom
+
+   which is both halves of the complaint: a strip along the bottom, and a nav
+   you could flick up into view.
+
+   inset:0 on a fixed element takes both edges from the viewport itself, so
+   there is no height to compute, nothing to arrive late, and nothing that can
+   be underneath the app - the app IS the box. */
 #root {
-  min-height: var(--app-vh, 100dvh);
+  position: fixed;
+  inset: 0;
   background: var(--bg-1);
   color: var(--text);
-  position: relative;
   overflow: hidden;
+}
+
+/* Out of flow, so the column can no longer be centred by body's max-width.
+   On a laptop the client app stays phone-shaped with the page either side;
+   the coach surfaces use the whole screen. Offset rather than translate:
+   a transform here would become the containing block for every fixed-position
+   overlay in the app. */
+@media (min-width: 500px) {
+  #root { left: calc(50% - 195px); right: auto; width: 390px; }
+}
+@media (min-width: 500px) {
+  #root:has([data-role="trainer"]) { left: 0; right: 0; width: auto; }
 }
 
 /* Typography */

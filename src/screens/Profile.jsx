@@ -199,11 +199,10 @@ function ProfileTab({ user, userId, onSave, theme, onThemeChange }) {
 
 // Every number the layout depends on, on screen.
 //
-// The strip along the bottom of the app has now survived four fixes, each aimed
-// at a different suspect, because the only evidence available was a screenshot
-// of the symptom. This shows which layer is actually short - the viewport units,
-// the safe-area inset, the app column, or the nav - so the next change is aimed
-// at something measured instead of something guessed.
+// This is what finally caught the bottom strip: five fixes had been aimed at
+// five different suspects on the strength of a screenshot, and the numbers
+// pointed straight at the sixth. Worth keeping - it is the only way to tell,
+// from a phone that is not in front of me, which layer is actually short.
 function LayoutReadout() {
   const [open, setOpen] = React.useState(false);
   const [m, setM] = React.useState(null);
@@ -229,8 +228,8 @@ function LayoutReadout() {
       innerHeight: window.innerHeight,
       visual: Math.round(window.visualViewport?.height || 0),
       dvh, svh, lvh, safeBottom,
-      appVh: px(getComputedStyle(document.documentElement).getPropertyValue('--app-vh')),
       rootH: root ? Math.round(root.getBoundingClientRect().height) : 0,
+      rootBottom: root ? Math.round(root.getBoundingClientRect().bottom) : 0,
       shellH: sr ? Math.round(sr.height) : 0,
       shellBottom: sr ? Math.round(sr.bottom) : 0,
       navBottom: nr ? Math.round(nr.bottom) : 0,
@@ -274,11 +273,10 @@ function LayoutReadout() {
         <Row k="innerHeight" v={m.innerHeight} />
         <Row k="visualViewport" v={m.visual} />
         <Row k="100dvh / svh / lvh" v={`${m.dvh} / ${m.svh} / ${m.lvh}`} />
-        <Row k="--app-vh" v={m.appVh} flag={m.appVh !== m.innerHeight} />
         <Row k="safe-area-bottom" v={m.safeBottom} />
         <Row k="app column height" v={m.shellH} />
-        <Row k="app column bottom" v={m.shellBottom} />
-        <Row k="#root height" v={m.rootH} />
+        <Row k="app column bottom" v={m.shellBottom} flag={m.shellBottom !== m.innerHeight} />
+        <Row k="#root height / bottom" v={`${m.rootH} / ${m.rootBottom}`} flag={m.rootBottom !== m.innerHeight} />
         <Row k="nav height / bottom" v={`${m.navH} / ${m.navBottom}`} />
         <Row k="page scrolls by" v={m.docScroll} />
         <Row k="standalone" v={m.standalone ? 'yes' : 'no'} flag={!m.standalone} />

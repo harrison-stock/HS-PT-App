@@ -44,59 +44,22 @@
     </defs>
   </svg>
   <script>
-    // How tall the app column actually is.
+    // Marks an installed app, so the CSS can drop the page background it would
+    // otherwise show around a browser's window chrome.
     //
-    // 100dvh looked like the answer and wasn't. On an installed iPhone it comes
-    // back short of the screen, leaving a strip of the page showing under the
-    // app - and opening the keyboard makes it worse, because dvh follows the
-    // shrinking viewport down and doesn't reliably come back up afterwards.
-    // That is why the strip started appearing mid-workout the moment a weight
-    // was tapped.
-    //
-    // The height is measured instead, and only ever allowed to grow. A keyboard
-    // opening shrinks the viewport; ignoring every shrink means the app keeps
-    // its full height throughout and there is nothing to restore. A real change
-    // in available height - rotating the phone - resets the measurement.
-    //
-    // Inline and ahead of the bundle on purpose: it owes nothing to the app, so
-    // the column is the right height on the first paint and stays right even if
-    // the app fails to start.
+    // Nothing here measures the viewport any more. It used to, and that was the
+    // bottom strip: a height read in JS is always one repaint behind the
+    // address bar that changed it. The app column now takes both its edges
+    // straight from the viewport (see #root in index.css), so there is no
+    // number to keep up to date and nothing to go stale while the app is
+    // backgrounded, rotated, or has a keyboard thrown over it.
     (function () {
       try {
-        var root = document.documentElement;
-        var known = 0;
-        function measure(reset) {
-          if (reset) known = 0;
-          var h = window.innerHeight;
-          if (h > known) { known = h; root.style.setProperty('--app-vh', h + 'px'); }
-        }
-        measure(true);
-        window.addEventListener('resize', function () { measure(false); });
-        window.addEventListener('orientationchange', function () { setTimeout(function () { measure(true); }, 120); });
-        // Returning from the background can be when iOS finally reports the
-        // real height, so take another reading then.
-        document.addEventListener('visibilitychange', function () {
-          if (document.visibilityState === 'visible') measure(false);
-        });
-
-        // Belt and braces for the same thing the CSS now prevents. If anything
-        // still manages to scroll the page - a stray anchor, an iOS build that
-        // scrolls a focused field into view regardless - put it back, because a
-        // scrolled page is a column sitting above the bottom of the screen with
-        // the page showing underneath.
-        function unscroll() { if (window.scrollY !== 0) window.scrollTo(0, 0); }
-        window.addEventListener('resize', unscroll);
-        window.addEventListener('orientationchange', function () { setTimeout(unscroll, 150); });
-        // focusout is the keyboard going away, which is when it happened.
-        document.addEventListener('focusout', function () { setTimeout(unscroll, 50); });
-        document.addEventListener('visibilitychange', function () {
-          if (document.visibilityState === 'visible') unscroll();
-        });
         if (window.navigator.standalone === true ||
             (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) {
-          root.setAttribute('data-standalone', '');
+          document.documentElement.setAttribute('data-standalone', '');
         }
-      } catch (e) { /* the CSS fallback covers a browser without any of this */ }
+      } catch (e) { /* the CSS covers a browser without any of this */ }
     })();
   </script>
 </head>
