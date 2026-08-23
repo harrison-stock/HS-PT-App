@@ -1486,6 +1486,42 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
               onClose={() => setHistoryOpen(false)} />
           )}
 
+          {/* Sets first. What a coach opens an exercise to change is almost always the
+              prescription - add a set, take the reps down, move the weight up.
+              The toggles below it are decisions made once when the exercise is
+              first written and rarely touched again, so they were six rows of
+              scrolling in front of the one thing being reached for. */}
+          <div style={{ marginTop: 12, paddingBottom: 14, borderBottom: '1px dashed var(--line)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr 30px 18px', gap: 6, padding: '0 2px 6px' }} className="mono">
+              <span style={thSt}>SET</span>
+              <span style={thSt}>{e.timed ? 'TIME' : e.banded ? 'BAND' : 'KG'}</span>
+              <span style={thSt}>{e.timed ? 'KG' : 'REPS'}</span>
+              <span style={thSt}>REST</span>
+              <span style={thSt}>INT</span>
+              <span/>
+            </div>
+            <div style={{ display: 'grid', gap: 4 }}>
+              {e.setsList.map((st, i) => (
+                <SetRow key={st.id} st={st} setIdx={i} total={e.setsList.length} timed={e.timed} banded={e.banded} color={color}
+                  expanded={expandedSetId === st.id}
+                  onExpand={() => onExpandSet(st.id)}
+                  onUpdate={patch => onUpdateSet(i, patch)}
+                  onDelete={() => onDelSet(i)}
+                  onDuplicate={() => onDupSet(i)}
+                  onApplyToAll={() => onApplyToAll(i)}
+                />
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 4, marginTop: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
+              <button onClick={() => onAddSet('WORK')}    style={addSetBtn(color)}>+ SET</button>
+              <button onClick={() => onAddSet('WARMUP')}  style={addSetBtn('var(--c-amber)')}>+ WARM-UP</button>
+              <button onClick={() => onAddSet('DROPSET')} style={addSetBtn('var(--c-blue)')}>+ DROP</button>
+              <button onClick={() => onAddSet('FAILURE')} style={addSetBtn('var(--c-coral)')}>+ FAILURE</button>
+              <button onClick={() => onAddSet('PARTIAL')} style={addSetBtn('var(--c-pink)')}>+ PARTIAL</button>
+            </div>
+          </div>
+
+
           {/* Timed mode */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 6px', borderBottom: '1px dashed var(--line)' }}>
             <div>
@@ -1553,37 +1589,6 @@ function ExerciseEditor({ e, color, expanded, expandedSetId, ssLabel, canSuperse
                 padding: '10px 12px', outline: 'none', resize: 'vertical',
               }}
             />
-          </div>
-
-          {/* Per-set table */}
-          <div style={{ marginTop: 8 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 1fr 1fr 30px 18px', gap: 6, padding: '0 2px 6px' }} className="mono">
-              <span style={thSt}>SET</span>
-              <span style={thSt}>{e.timed ? 'TIME' : e.banded ? 'BAND' : 'KG'}</span>
-              <span style={thSt}>{e.timed ? 'KG' : 'REPS'}</span>
-              <span style={thSt}>REST</span>
-              <span style={thSt}>INT</span>
-              <span/>
-            </div>
-            <div style={{ display: 'grid', gap: 4 }}>
-              {e.setsList.map((st, i) => (
-                <SetRow key={st.id} st={st} setIdx={i} total={e.setsList.length} timed={e.timed} banded={e.banded} color={color}
-                  expanded={expandedSetId === st.id}
-                  onExpand={() => onExpandSet(st.id)}
-                  onUpdate={patch => onUpdateSet(i, patch)}
-                  onDelete={() => onDelSet(i)}
-                  onDuplicate={() => onDupSet(i)}
-                  onApplyToAll={() => onApplyToAll(i)}
-                />
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 4, marginTop: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
-              <button onClick={() => onAddSet('WORK')}    style={addSetBtn(color)}>+ SET</button>
-              <button onClick={() => onAddSet('WARMUP')}  style={addSetBtn('var(--c-amber)')}>+ WARM-UP</button>
-              <button onClick={() => onAddSet('DROPSET')} style={addSetBtn('var(--c-blue)')}>+ DROP</button>
-              <button onClick={() => onAddSet('FAILURE')} style={addSetBtn('var(--c-coral)')}>+ FAILURE</button>
-              <button onClick={() => onAddSet('PARTIAL')} style={addSetBtn('var(--c-pink)')}>+ PARTIAL</button>
-            </div>
           </div>
 
           {/* Alternates - swap options the client can switch to */}
