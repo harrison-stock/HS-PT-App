@@ -257,6 +257,11 @@ function LayoutReadout() {
       // the app itself coming up short.
       bgHtml: bg(document.documentElement), bgBody: bg(document.body), bgRoot: bg('#root'),
       standalone: document.documentElement.hasAttribute('data-standalone'),
+      // Which build this is, and how #root is actually positioned in it. Two
+      // rounds have been spent on "is this deployed yet?" - the panel should
+      // answer that itself rather than sending someone off to compare hashes.
+      build: typeof __BUILD__ === 'string' ? __BUILD__ : 'unknown',
+      rootPos: (() => { const el = document.getElementById('root'); return el ? getComputedStyle(el).position : '-'; })(),
       scrollY: Math.round(window.scrollY),
       docScroll: Math.round(document.documentElement.scrollHeight - window.innerHeight),
       ua: (navigator.userAgent || '').slice(0, 110),
@@ -288,7 +293,21 @@ function LayoutReadout() {
   const bottomEdge = m ? (m.nav?.b ?? m.shell?.b ?? m.root?.b ?? 0) : 0;
   const gap = m ? m.innerHeight - bottomEdge : 0;
 
+  // The two numbers that settle it, stated rather than left to be read off a
+  // list: does the app's box reach the bottom of the screen, and does body?
+  // If body does and #root doesn't, #root is in the wrong kind of box. If
+  // neither does, the window itself is reporting a height it isn't given.
+  const rootShort = m && m.root ? m.innerHeight - m.root.b : 0;
+  const bodyShort = m && m.body ? m.innerHeight - m.body.b : 0;
+  const verdict = !m ? null
+    : rootShort === 0 && bodyShort === 0 ? { ok: true, msg: 'The app reaches the bottom of the screen. No gap.' }
+    : rootShort > 0 && bodyShort === 0 ? { ok: false, msg: `The app box stops ${rootShort}px short of the bottom; body reaches it. #root is position:${m.rootPos} - it needs to be absolute.` }
+    : rootShort === 0 && bodyShort > 0 ? { ok: false, msg: `body stops ${bodyShort}px short but the app reaches the bottom - the gap is not the app's.` }
+    : { ok: false, msg: `Both stop ${rootShort}px / ${bodyShort}px short - the window is reporting more height than it is drawing.` };
+
   const text = m ? [
+    `build ${m.build}  #root position:${m.rootPos}`,
+    `VERDICT ${verdict?.msg || ''}`,
     `gap ${gap}  inner ${m.innerWidth}x${m.innerHeight}  client ${m.clientH}  screen ${m.screenH}/${m.availH} dpr ${m.dpr}`,
     `visual ${m.visual} offTop ${m.vvTop} pageTop ${m.vvPageTop} scale ${m.vvScale}`,
     `dvh/svh/lvh ${m.dvh}/${m.svh}/${m.lvh}  safe ${m.safeTop}/${m.safeBottom}`,
@@ -319,7 +338,17 @@ function LayoutReadout() {
         <span className="label">// LAYOUT DIAGNOSTICS</span>
         <button onClick={() => setOpen(false)} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}>✕</button>
       </div>
+      {m && verdict && (
+        <div style={{
+          padding: '9px 10px', borderRadius: 8, marginBottom: 4, lineHeight: 1.5,
+          background: `color-mix(in srgb, ${verdict.ok ? 'var(--accent)' : 'var(--c-coral)'} 12%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${verdict.ok ? 'var(--accent)' : 'var(--c-coral)'} 45%, transparent)`,
+          color: verdict.ok ? 'var(--accent)' : 'var(--c-coral)',
+        }}>{verdict.msg}</div>
+      )}
       {m && <>
+        <Row k="build" v={m.build} />
+        <Row k="#root position" v={m.rootPos} flag={m.rootPos !== 'absolute'} />
         <Row k="gap under the app" v={gap + 'px'} flag={gap > 1 || gap < -1} />
         <Row k="innerHeight / client" v={`${m.innerHeight} / ${m.clientH}`} />
         <Row k="visualViewport / offset" v={`${m.visual} / ${m.vvTop}`} />
@@ -328,6 +357,7 @@ function LayoutReadout() {
         <Row k="safe-area top / bottom" v={`${m.safeTop} / ${m.safeBottom}`} />
         <Row k="#root" v={m.root ? `${m.root.t}..${m.root.b}` : '-'} flag={!!m.root && m.root.b !== m.innerHeight} />
         <Row k="app column" v={m.shell ? `${m.shell.t}..${m.shell.b}` : '-'} flag={!!m.shell && m.shell.b !== m.innerHeight} />
+        <Row k="body" v={m.body ? `${m.body.t}..${m.body.b}` : '-'} flag={!!m.body && m.body.b !== m.innerHeight} />
         <Row k="nav" v={m.nav ? `${m.nav.t}..${m.nav.b}` : 'not on this screen'} flag={!!m.nav && m.nav.b !== m.innerHeight} />
         <Row k="page scroll / overflow" v={`${m.scrollY} / ${m.docScroll}`} flag={m.scrollY !== 0 || m.docScroll > 0} />
         <Row k="standalone" v={m.standalone ? 'yes' : 'no'} />
