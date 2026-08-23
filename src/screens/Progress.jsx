@@ -1471,7 +1471,7 @@ function DetailStat({ label, value, color }) {
 // ── BODY MAP SVG ─────────────────────────────────────────────────
 // Stylized anterior/posterior figure. Each region is a path that's
 // filled with accent color at intensity-based opacity.
-export function BodyMap({ side, intensity, picked, onPick, data, labels, heatColor, slugMap, perSide, zoomable, neutralBase, tintFor, monochrome }) {
+export function BodyMap({ side, intensity, picked, onPick, data, labels, heatColor, slugMap, perSide, zoomable, neutralBase, tintFor, monochrome, pulseTop }) {
   const body = MUSCLE_BODY[side];
   if (!body) return null;
   const vb = body.viewBox.split(' ').map(Number);
@@ -1519,7 +1519,9 @@ export function BodyMap({ side, intensity, picked, onPick, data, labels, heatCol
     const lit = v > 0 && !!lc;
     if (lit) {
       const alpha = 0.18 + v * 0.72;
-      return { fill: `color-mix(in srgb, ${lc} ${Math.round(alpha * 100)}%, var(--bg-3))`, stroke: lc, sw: isPicked ? 2.6 : 1.6, glow: lc };
+      // The regions that took the most work breathe rather than sit still. Only
+      // the top of the range, or a body where everything glows says nothing.
+      return { fill: `color-mix(in srgb, ${lc} ${Math.round(alpha * 100)}%, var(--bg-3))`, stroke: lc, sw: isPicked ? 2.6 : 1.6, glow: lc, pulse: !!pulseTop && v >= 0.85 };
     }
     if (isPicked) {
       const c = lc || PICK;
@@ -1570,9 +1572,12 @@ export function BodyMap({ side, intensity, picked, onPick, data, labels, heatCol
             return (
               <path key={slug + i} d={d}
                 onClick={() => onPick(group, anat)}
+                className={p.pulse ? 'bm-pulse' : undefined}
                 fill={p.fill} stroke={p.stroke}
                 strokeWidth={p.sw} strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-                style={{ cursor: 'pointer', filter: p.glow ? `drop-shadow(0 0 7px ${p.glow})` : 'none', transition: 'all .15s ease' }} />
+                style={{ cursor: 'pointer', '--bm-glow': p.glow || 'transparent',
+                  filter: p.pulse ? undefined : p.glow ? `drop-shadow(0 0 7px ${p.glow})` : 'none',
+                  transition: 'all .15s ease' }} />
             );
           });
         }
@@ -1587,7 +1592,10 @@ export function BodyMap({ side, intensity, picked, onPick, data, labels, heatCol
         return (
           <g key={slug}
           onClick={() => central ? onPick(group, 'both') : onPick(picked === group ? null : group)}
-          style={{ cursor: 'pointer', filter: p.glow ? `drop-shadow(0 0 7px ${p.glow})` : 'none', transition: 'all .2s ease' }}>
+          className={p.pulse ? 'bm-pulse' : undefined}
+          style={{ cursor: 'pointer', '--bm-glow': p.glow || 'transparent',
+            filter: p.pulse ? undefined : p.glow ? `drop-shadow(0 0 7px ${p.glow})` : 'none',
+            transition: 'all .2s ease' }}>
             {paths.map((d, i) => <path key={i} d={d} fill={p.fill} stroke={p.stroke} strokeWidth={p.sw} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />)}
           </g>);
       })}

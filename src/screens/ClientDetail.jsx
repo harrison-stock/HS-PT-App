@@ -724,7 +724,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
     const start = new Date(anchor);
     const end = new Date(anchor); end.setDate(end.getDate() + shownWeeks * 7);
     supabase.from('client_workouts')
-      .select('id, scheduled_date, status, programme_days(id, title, owner_client_id, day_of_week, week_index, programme_phases(id, name, phase_index, programme_id, programmes(id, name)), workout_sections(title, kind, sort_order, section_exercises(id)))')
+      .select('id, scheduled_date, status, programme_days(id, title, owner_client_id, day_of_week, week_index, programme_phases(id, name, phase_index, programme_id, programmes(id, name)), workout_sections(title, kind, sort_order, section_exercises(id, name, sort_order)))')
       .eq('client_id', c.id).gte('scheduled_date', ymd(start)).lt('scheduled_date', ymd(end))
       .then(({ data }) => setWorkouts(data || []));
   }, [c.id, anchor, shownWeeks]);
@@ -994,9 +994,25 @@ function WorkoutCell({ w, onClick, onDelete, onDragStart, onDragEnd }) {
   const name = workoutName(day, phase);
   const sections = [...(day?.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
   const totalEx = sections.reduce((n, s) => n + (s.section_exercises?.length || 0), 0);
-  const shown = sections.slice(0, 2);
-  const shownEx = shown.reduce((n, s) => n + (s.section_exercises?.length || 0), 0);
-  const more = totalEx - shownEx;
+  // Which exercises are on this day - the thing the card was never able to
+  // answer, and the reason opening the builder was the only way to find out.
+  // A calendar column is narrow, so it's a budget: sections in order until the
+  // names run out, then a count of what didn't fit.
+  const BUDGET = 6;
+  const preview = [];
+  let used = 0;
+  for (const sec of sections) {
+    const exs = [...(sec.section_exercises || [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    if (!exs.length || used >= BUDGET) continue;
+    const take = exs.slice(0, Math.min(3, BUDGET - used)).map(x => (x.name || '').trim()).filter(Boolean);
+    if (!take.length) continue;
+    preview.push({ label: (sec.title || SECTION_LABEL[sec.kind] || 'Block'), names: take });
+    used += take.length;
+  }
+  const more = totalEx - used;
+  // A workout that has exercises but no names to show them by is still worth
+  // describing, so the block headings stand in rather than an empty card.
+  const blocks = used === 0 ? sections.filter(sec => (sec.section_exercises?.length || 0) > 0) : [];
   const [confirmDel, setConfirmDel] = React.useState(false);
 
   return (
@@ -1028,16 +1044,97 @@ function WorkoutCell({ w, onClick, onDelete, onDragStart, onDragEnd }) {
       <div className="mono" style={{ fontSize: 7.5, letterSpacing: '0.06em', color: 'var(--text-3)', marginTop: 2, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {named ? (phase?.name || '').toUpperCase() : ' '}
       </div>
-      {shown.map((s, i) => (
+      {preview.map((sec, i) => (
         <div key={i} style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6, padding: '5px 6px', marginBottom: 4 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || SECTION_LABEL[s.kind] || 'Block'}</div>
-          <div className="mono" style={{ fontSize: 7.5, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 2 }}>
-            {(SECTION_LABEL[s.kind] || s.kind || '').toString()} · {(s.section_exercises?.length || 0)} EX
+          <div className="mono" style={{ fontSize: 7.5, color: 'var(--text-3)', letterSpacing: '0.06em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {sec.label.toUpperCase()}
+          </div>
+          {sec.names.map((n, j) => (
+            <div key={j} title={n} style={{ fontSize: 9.5, fontWeight: 600, lineHeight: 1.35, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n}</div>
+          ))}
+        </div>
+      ))}
+      {blocks.map((sec, i) => (
+        <div key={`b${i}`} style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6, padding: '5px 6px', marginBottom: 4 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sec.title || SECTION_LABEL[sec.kind] || 'Block'}</div>
+          <div className="mono" style={{ fontSize: 7.5, color: 'var(--text-3)', letterSpacing: '0.06em', marginTop: 2 }}>{sec.section_exercises.length} EX</div>
+        </div>
+      ))}
+      {more > 0 && used > 0 && <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.04em' }}>+{more} more exercise{more === 1 ? '' : 's'}</div>}
+      {totalEx === 0 && <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)' }}>No exercises</div>}
+    </div>
+  );
+}
+
+// What one prescribed exercise says in a line: "4 × 8 · 25kg".
+// Reads the stored rows directly rather than the builder's shaped draft, so the
+// preview costs one query and no editor state.
+function setLine(ex) {
+  const all = ex.exercise_sets || [];
+  const work = all.filter(st => st.kind !== 'WARMUP');
+  if (!work.length) return all.length ? `${all.length} warm-up` : 'no sets';
+  const reps = work[0]?.reps_text || (work[0]?.reps != null ? String(work[0].reps) : null);
+  const side = ex.unilateral ? '/side' : '';
+  const warm = all.length - work.length;
+  const tail = warm ? ` (+${warm} warm-up)` : '';
+
+  if (ex.timed) {
+    const t = work.map(st => st.time_secs).filter(v => v > 0);
+    const range = t.length ? (Math.min(...t) === Math.max(...t) ? `${Math.min(...t)}s` : `${Math.min(...t)}–${Math.max(...t)}s`) : '–';
+    return `${work.length} × ${range}${side}${tail}`;
+  }
+  const kg = work.map(st => parseFloat(st.weight_kg)).filter(v => !isNaN(v));
+  const load = ex.banded ? 'band'
+    : !kg.length ? null
+    : Math.max(...kg) === 0 ? 'BW'
+    : Math.min(...kg) === Math.max(...kg) ? `${Math.min(...kg)}kg` : `${Math.min(...kg)}–${Math.max(...kg)}kg`;
+  return `${work.length} × ${reps || '–'}${side}${load ? ` · ${load}` : ''}${tail}`;
+}
+
+// The workout, in full, without opening the builder.
+//
+// The calendar only ever knew how many exercises a day held, which is no help
+// at all when the question is which ones - so checking a client's Thursday
+// meant loading the whole builder and backing out again. The sets are fetched
+// here rather than carried by the calendar query, which would otherwise haul
+// every set of every workout in a four-week view to show two lines of text.
+function WorkoutPreview({ dayId }) {
+  const [secs, setSecs] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!dayId) { setSecs([]); return; }
+    let off = false;
+    supabase.from('workout_sections')
+      .select('id, title, kind, sort_order, section_exercises(id, name, sort_order, timed, banded, unilateral, tempo, coach_notes, exercise_sets(kind, reps, reps_text, weight_kg, time_secs))')
+      .eq('day_id', dayId).order('sort_order')
+      .then(({ data }) => { if (!off) setSecs(data || []); });
+    return () => { off = true; };
+  }, [dayId]);
+
+  if (secs === null) return <Mono style={{ padding: '4px 0' }}>Loading exercises…</Mono>;
+
+  const withEx = secs
+    .map(sec => ({ ...sec, exs: [...(sec.section_exercises || [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) }))
+    .filter(sec => sec.exs.length);
+  if (!withEx.length) return <Mono style={{ padding: '4px 0' }}>No exercises in this workout.</Mono>;
+
+  return (
+    <div style={{ display: 'grid', gap: 10, maxHeight: 320, overflowY: 'auto' }}>
+      {withEx.map(sec => (
+        <div key={sec.id}>
+          <div className="mono" style={{ fontSize: 8.5, letterSpacing: '0.12em', color: 'var(--text-3)', marginBottom: 5 }}>
+            {(sec.title || SECTION_LABEL[sec.kind] || 'BLOCK').toUpperCase()}
+          </div>
+          <div style={{ display: 'grid', gap: 4 }}>
+            {sec.exs.map(ex => (
+              <div key={ex.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 8px', background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 7 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</span>
+                <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.04em', flexShrink: 0 }}>{setLine(ex)}</span>
+              </div>
+            ))}
           </div>
         </div>
       ))}
-      {more > 0 && <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)', letterSpacing: '0.04em' }}>+{more} more exercise{more === 1 ? '' : 's'}</div>}
-      {totalEx === 0 && <div className="mono" style={{ fontSize: 8, color: 'var(--text-3)' }}>No exercises</div>}
     </div>
   );
 }
@@ -1056,7 +1153,6 @@ function EditWorkout({ w, clientId, clientName = '', programmes, trainerId, onCl
   const [removeConfirm, setRemoveConfirm] = React.useState(false);
   const [builderOpen, setBuilderOpen] = React.useState(false);
   const [logOpen, setLogOpen]     = React.useState(false);
-  const sections = [...(day?.workout_sections || [])].sort((a, b) => a.sort_order - b.sort_order);
 
   // The full shaped programme (with phaseList) this workout came from.
   const prog = (programmes || []).find(p => p.id === phase?.programme_id);
@@ -1108,12 +1204,7 @@ function EditWorkout({ w, clientId, clientName = '', programmes, trainerId, onCl
         <div className="mono" style={{ fontSize: 9, color: done ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 6 }}>
           {(phase?.name || 'WORKOUT').toUpperCase()}{done ? ' · ✓ COMPLETED' : ''}
         </div>
-        {sections.length === 0 && <Mono>No exercises</Mono>}
-        {sections.map((s, i) => (
-          <div key={i} style={{ fontSize: 11, marginTop: 2 }}>
-            {s.title || SECTION_LABEL[s.kind] || 'Block'} · {(s.section_exercises?.length || 0)} ex
-          </div>
-        ))}
+        <WorkoutPreview dayId={day?.id} />
       </div>
 
       {done && (

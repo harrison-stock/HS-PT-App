@@ -635,6 +635,31 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
     firstRailIdx: 0
   }));
 
+  // Ticking the last set of a block is the one moment in a session worth
+  // marking, so its node in the strip pulses - once, on the transition. A node
+  // that pulses for the rest of the workout is decoration, not feedback.
+  //
+  // The first pass only records what is already complete: resuming a session
+  // half-finished should not fire off a celebration for work done yesterday.
+  const [justDone, setJustDone] = React.useState(null);
+  const doneSeen = React.useRef(null);
+  const doneKey = phaseCounts.map((p) => `${p.id}:${p.done}/${p.count}`).join(',');
+  React.useEffect(() => {
+    // Nothing to compare against until the workout has actually loaded, or the
+    // first render with data reads as every finished block completing at once.
+    if (!exercises.length) return;
+    const complete = new Set(phaseCounts.filter((p) => p.count > 0 && p.done === p.count).map((p) => p.id));
+    if (doneSeen.current === null) { doneSeen.current = complete; return; }
+    const fresh = [...complete].find((id) => !doneSeen.current.has(id));
+    doneSeen.current = complete;
+    if (fresh) setJustDone({ id: fresh, at: Date.now() });
+  }, [doneKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (!justDone) return;
+    const t = setTimeout(() => setJustDone(null), 900);
+    return () => clearTimeout(t);
+  }, [justDone]);
+
   // Build the rail: exercises (consecutive supersets merged into one card),
   // flowing straight from one phase into the next with no interim slide.
   const railItems = [];
@@ -743,11 +768,12 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
               const isCurrent = currentPhaseId === p.id;
               const allDone = p.done === p.count;
               return (
-                <button key={p.id} className="phase-btn" onClick={() => setActiveIdx(p.firstRailIdx)}
+                <button key={p.id} className={`phase-btn${justDone?.id === p.id ? ' just-done' : ''}`} onClick={() => setActiveIdx(p.firstRailIdx)}
                 aria-label={`Go to ${p.label} - ${p.done} of ${p.count} done`}
                 style={{
                   all: 'unset', cursor: 'pointer', boxSizing: 'border-box',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+                  position: 'relative', '--phase-accent': p.accent,
                   padding: '3px 2px', borderRadius: 10,
                   background: isCurrent ? `color-mix(in srgb, ${p.accent} 12%, transparent)` : 'transparent',
                   border: isCurrent ? `1.5px solid ${p.accent}` : '1.5px solid transparent',
@@ -1708,7 +1734,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
         <div className="card" style={{ padding: 8, marginBottom: 12 }}>
           {BodyMap &&
           <BodyMap side={side} intensity={intensity} picked={null} onPick={() => {}}
-            data={data} labels={MUSCLE_LABELS || {}} heatColor="var(--accent)" monochrome />}
+            data={data} labels={MUSCLE_LABELS || {}} heatColor="var(--accent)" monochrome pulseTop />}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 22 }}>
           {trainedLabels.map((l) =>

@@ -781,3 +781,45 @@ pre { max-width: 100%; overflow-x: auto; }
 @media (pointer: coarse) and (max-width: 820px) {
   html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 }
+
+/* ── Two moments worth marking ────────────────────────────────────────────
+   Both are feedback, not decoration, so both are quiet and both stop: the
+   block node fires once on the transition and settles; the muscle map only
+   breathes on the regions at the very top of the session's range. */
+
+/* A block's node in the workout strip, the moment its last set is ticked. */
+@keyframes phase-complete {
+  0%   { transform: scale(1);    }
+  35%  { transform: scale(1.16); }
+  62%  { transform: scale(0.97); }
+  100% { transform: scale(1);    }
+}
+@keyframes phase-complete-ring {
+  0%   { opacity: 0.9; transform: scale(0.92); }
+  100% { opacity: 0;   transform: scale(1.75); }
+}
+/* !important beats the button's own `all: unset`, which resets animation to
+   its initial value and would otherwise swallow this outright. */
+.phase-btn.just-done { animation: phase-complete 620ms cubic-bezier(0.34, 1.56, 0.64, 1) !important; }
+.phase-btn.just-done::after {
+  content: '';
+  position: absolute; inset: -2px;
+  border-radius: 12px;
+  border: 1.5px solid var(--phase-accent, var(--accent));
+  animation: phase-complete-ring 780ms ease-out forwards;
+  pointer-events: none;
+}
+
+/* The hardest-worked muscles on the end-of-workout map. The glow is animated
+   rather than the fill, so the heat scale still reads as a scale. */
+@keyframes bm-pulse {
+  0%, 100% { filter: drop-shadow(0 0 calc(4px * var(--glow)) var(--bm-glow)); }
+  50%      { filter: drop-shadow(0 0 calc(15px * var(--glow)) var(--bm-glow)); }
+}
+.bm-pulse { animation: bm-pulse 2.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .phase-btn.just-done,
+  .phase-btn.just-done::after,
+  .bm-pulse { animation: none !important; }
+}
