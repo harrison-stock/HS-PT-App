@@ -4,6 +4,7 @@ import { IconSun, IconMoon, IconCheck } from '../components/icons'
 import { InstallPrompt } from './InstallPrompt'
 import { loadConnections, startWearableConnect } from '../lib/health'
 import { enablePush, disablePush, isPushEnabled, pushBlockedReason, sendTestPush } from '../lib/push'
+import { probeOn, setProbe } from '../lib/layerProbe'
 
 // Half-filled circle = "auto / follow system" appearance.
 const IconAuto = ({ size = 22, sw = 1.6 }) => (
@@ -208,17 +209,11 @@ function LayoutReadout() {
   const [m, setM] = React.useState(null);
 
   const [copied, setCopied] = React.useState(false);
-  const [probe, setProbe] = React.useState(false);
-
-  // Paint each layer of the app's frame a different colour. A screenshot of
-  // the strip then says which box is short, which is the one thing six rounds
-  // of screenshots have never been able to tell me.
-  React.useEffect(() => {
-    const root = document.documentElement;
-    if (probe) root.setAttribute('data-layerprobe', '');
-    else root.removeAttribute('data-layerprobe');
-    return () => root.removeAttribute('data-layerprobe');
-  }, [probe]);
+  // Paint each layer of the app's frame a different colour. Held in
+  // localStorage rather than in this component, so it stays on when you leave
+  // Settings to go and photograph the strip somewhere else.
+  const [probe, setProbeState] = React.useState(probeOn);
+  const toggleProbe = () => { const next = !probe; setProbe(next); setProbeState(next); };
 
   const read = React.useCallback(() => {
     const px = (v) => Math.round(parseFloat(v) || 0);
@@ -280,9 +275,8 @@ function LayoutReadout() {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="mono"
-        style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center',
-          fontSize: 8.5, letterSpacing: '0.1em', color: 'var(--text-3)', padding: '2px 0 10px' }}>
+      <button onClick={() => setOpen(true)} className="btn-ghost"
+        style={{ width: '100%', boxSizing: 'border-box', marginBottom: 12, fontSize: 10, padding: '10px 0' }}>
         LAYOUT DIAGNOSTICS
       </button>
     );
@@ -344,7 +338,7 @@ function LayoutReadout() {
           {copied ? 'COPIED ✓' : 'COPY'}
         </button>
       </div>
-      <button onClick={() => setProbe(v => !v)} className="btn-ghost"
+      <button onClick={toggleProbe} className="btn-ghost"
         style={{ fontSize: 9, padding: '7px 0', color: probe ? 'var(--c-coral)' : undefined,
           borderColor: probe ? 'var(--c-coral)' : undefined }}>
         {probe ? 'HIDE LAYER COLOURS' : 'SHOW LAYER COLOURS'}

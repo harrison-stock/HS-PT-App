@@ -2,6 +2,11 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import App from './App'
+import { apply as applyLayerProbe } from './lib/layerProbe'
+
+// Before the app mounts, so a probe left switched on is on from the first
+// paint - and its off switch is present even if the app never gets that far.
+applyLayerProbe();
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)
 
