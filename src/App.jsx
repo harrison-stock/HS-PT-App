@@ -1,4 +1,5 @@
 import React from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import { supabase } from './lib/supabase'
 import { HexShape } from './components/hex'
 import { BrandIcon } from './components/BrandIcon'
@@ -434,6 +435,7 @@ export default function App() {
       {showSplash && <SignInSplash onDone={() => setShowSplash(false)} />}
 
       <ToastHost />
+      <Analytics />
     </div>
   );
 }
