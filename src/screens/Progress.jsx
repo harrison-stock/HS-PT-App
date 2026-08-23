@@ -46,7 +46,7 @@ const fmtDuration = (s) => s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).pad
 async function loadWeightData(userId) {
   const { data: sessions } = await supabase
     .from('workout_sessions')
-    .select(`id, completed_at, logged_sets ( session_id, exercise_id, set_index, actual_weight_kg, actual_reps, actual_time_secs, exercise_name, section_exercises ( id, name, workout_sections ( kind ) ) )`)
+    .select(`id, completed_at, logged_sets ( id, session_id, exercise_id, set_index, actual_weight_kg, actual_reps, actual_time_secs, exercise_name, section_exercises ( id, name, workout_sections ( kind ) ) )`)
     .eq('client_id', userId)
     .not('completed_at', 'is', null)
     .order('completed_at', { ascending: false });
@@ -66,14 +66,21 @@ async function loadWeightData(userId) {
       // Group by muscle region derived from the exercise name (not the section).
       if (!exMap.has(key)) exMap.set(key, { id: key, name, category: bucketFor(name), sessMap: new Map() });
       const ex = exMap.get(key);
-      if (!ex.sessMap.has(sess.id)) ex.sessMap.set(sess.id, { d, completedAt: sess.completed_at, sets: [] });
-      ex.sessMap.get(sess.id).sets.push({ w: parseFloat(ls.actual_weight_kg) || 0, r: ls.actual_reps || 0, t: parseInt(ls.actual_time_secs) || 0 });
+      if (!ex.sessMap.has(sess.id)) ex.sessMap.set(sess.id, { id: sess.id, d, completedAt: sess.completed_at, sets: [] });
+      // The row id travels with the set. Without it this screen can show a
+      // mis-logged 107kg but not do anything about it.
+      ex.sessMap.get(sess.id).sets.push({
+        id: ls.id, idx: ls.set_index ?? 0,
+        w: parseFloat(ls.actual_weight_kg) || 0, r: ls.actual_reps || 0, t: parseInt(ls.actual_time_secs) || 0,
+      });
     }
   }
 
   const exs = [];
   for (const ex of exMap.values()) {
     const sessArr = [...ex.sessMap.values()].sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt));
+    // Nested rows come back in no guaranteed order; set 1 should be set 1.
+    sessArr.forEach(sg => sg.sets.sort((x, y) => (x.idx ?? 0) - (y.idx ?? 0)));
     const allSets = sessArr.flatMap(sg => sg.sets);
     // A timed/cardio exercise has clocked work and no load - chart time, not kg.
     const timed = allSets.some(s => s.t > 0) && !allSets.some(s => s.w > 0);
@@ -84,7 +91,7 @@ async function loadWeightData(userId) {
       const setSummary = timed
         ? sg.sets.map(s => fmtDuration(s.t)).join(', ')
         : sg.sets.map(s => `${s.w || 'BW'}${s.w ? 'kg' : ''}×${s.r}`).join(', ');
-      return { d: sg.d, date: sg.completedAt, w: maxW, r: atMax?.r || 0, t: maxT, sets: sg.sets,
+      return { d: sg.d, date: sg.completedAt, w: maxW, r: atMax?.r || 0, t: maxT, sets: sg.sets, sessionId: sg.id,
         label: `${ex.name} - ${sg.sets.length} set${sg.sets.length === 1 ? '' : 's'} · ${setSummary}` };
     });
     const best = history.reduce((b, h) => h.w > b.w ? h : b, history[0] || { w: 0, r: 0 });
@@ -1009,21 +1016,28 @@ function WeightTab({ range, userId }) {
   const [liveCats, setLiveCats] = React.useState(null);
   const [liveExs, setLiveExs] = React.useState(null);
 
-  React.useEffect(() => {
+  // Kept as a callback so an edit to a logged set can pull the numbers again
+  // without dropping the coach back out to the category list.
+  const reload = React.useCallback(() => {
     if (!userId) return;
-    setDbLoading(true);
-    loadWeightData(userId).then(({ cats, exs }) => {
+    return loadWeightData(userId).then(({ cats, exs }) => {
       setLiveCats(cats);
       setLiveExs(exs);
       setDbLoading(false);
     });
   }, [userId]);
 
+  React.useEffect(() => {
+    if (!userId) return;
+    setDbLoading(true);
+    reload();
+  }, [userId, reload]);
+
   const cats = liveCats || [];
   const exs = liveExs || [];
 
   const drilledEx = exs.find(e => e.id === exId);
-  if (drilledEx) return <ExerciseDrill ex={drilledEx} onBack={() => setExId(null)} />;
+  if (drilledEx) return <ExerciseDrill ex={drilledEx} onBack={() => setExId(null)} onChanged={reload} />;
 
   if (catId) {
     const cat = cats.find(c => c.id === catId);
@@ -1694,7 +1708,7 @@ function FrontSilhouette() {
 function BackSilhouette() {return <FrontSilhouette />;}
 
 // ── EXERCISE DRILL ────────────────────────────────────────────────
-function ExerciseDrill({ ex, onBack }) {
+function ExerciseDrill({ ex, onBack, onChanged }) {
   const [view, setView] = React.useState('weight');
   const [range, setRange] = React.useState('12m');
   const cat = null;
@@ -1765,44 +1779,9 @@ function ExerciseDrill({ ex, onBack }) {
 
       <div className="label" style={{ margin: '4px 4px 8px' }}>// SESSION HISTORY · ALL SETS</div>
       <div style={{ display: 'grid', gap: 8 }}>
-        {[...ex.history].reverse().map((h, i) => {
-          let workingN = 0;
-          const sets = expandSets(h).map(s => ({ ...s, label: s.warmup ? 'W' : String(++workingN) }));
-          const isLatest = i === 0;
-          return (
-            <div key={i} className="card" style={{
-              padding: 12,
-              borderColor: isLatest ? `color-mix(in srgb, ${zc} 45%, var(--line))` : 'var(--line)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span className="mono" style={{ fontSize: 11, color: 'var(--text)', letterSpacing: '0.06em', fontWeight: 700 }}>
-                  {h.d.toUpperCase()}
-                  {isLatest && <span style={{ marginLeft: 8, color: zc, fontSize: 9, letterSpacing: '0.1em' }}>LATEST</span>}
-                </span>
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em' }}>
-                  {sets.length} SETS
-                </span>
-              </div>
-              <div style={{ display: 'grid', gap: 3 }}>
-                {sets.map((s, si) =>
-                <div key={si} style={{
-                  display: 'grid', gridTemplateColumns: '26px 1fr auto', gap: 10, alignItems: 'center',
-                  padding: '5px 8px', borderRadius: 6,
-                  background: s.warmup ? 'transparent' : 'color-mix(in srgb, var(--text-3) 6%, transparent)'
-                }}>
-                    <span className="mono" style={{
-                    fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textAlign: 'center',
-                    color: s.warmup ? 'var(--text-3)' : zc
-                  }}>{s.label}</span>
-                    <span className="mono" style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>
-                      {s.w > 0 ? `${s.w}kg` : 'BW'}
-                    </span>
-                    <span className="mono" style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>×{s.r}</span>
-                  </div>
-                )}
-              </div>
-            </div>);
-        })}
+        {[...ex.history].reverse().map((h, i) => (
+          <SessionSets key={h.sessionId || i} h={h} zc={zc} timed={ex.timed} isLatest={i === 0} onChanged={onChanged} />
+        ))}
       </div>
     </>);
 
@@ -1810,8 +1789,149 @@ function ExerciseDrill({ ex, onBack }) {
 
 // Returns the real logged sets for a session when present; otherwise expands
 // a top-set {d,w,r} into a representative set list (demo data only).
+// One session's sets for one exercise, and the means to correct them.
+//
+// This screen has always been able to show that a set was logged wrong - a 66kg
+// bench that should have been 6.6, a 107 that was never lifted - and never able
+// to do anything about it, which left the chart and every PR on it built on a
+// number known to be false. The edit happens here rather than sending the coach
+// off to find the session on a calendar, because here is where the wrong number
+// is being looked at.
+//
+// Only real logged rows are editable. A history with no ids behind it is the
+// synthesised shape expandSets() invents for demo data, and there is nothing to
+// write back to.
+function SessionSets({ h, zc, timed, isLatest, onChanged }) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+
+  let workingN = 0;
+  const sets = expandSets(h).map(s => ({ ...s, label: s.warmup ? 'W' : String(++workingN) }));
+  const editable = !!onChanged && sets.length > 0 && sets.every(s => s.id);
+
+  const begin = () => {
+    setDraft(sets.map(s => ({ id: s.id, label: s.label, warmup: s.warmup,
+      w: s.w ? String(s.w) : '', r: s.r ? String(s.r) : '', t: s.t ? String(s.t) : '', del: false })));
+    setEditing(true);
+  };
+  const cancel = () => { setEditing(false); setDraft(null); };
+  const patch = (i, k, v) => setDraft(d => d.map((row, j) => j === i ? { ...row, [k]: v } : row));
+
+  const save = async () => {
+    setSaving(true);
+    for (const row of draft) {
+      if (row.del) { await supabase.from('logged_sets').delete().eq('id', row.id); continue; }
+      const payload = timed
+        ? { actual_time_secs: row.t === '' ? null : Math.max(0, parseInt(row.t) || 0) }
+        : { actual_weight_kg: row.w === '' ? null : Math.max(0, parseFloat(row.w) || 0),
+            actual_reps: row.r === '' ? null : Math.max(0, parseInt(row.r) || 0) };
+      await supabase.from('logged_sets').update(payload).eq('id', row.id);
+    }
+    await onChanged?.();
+    setSaving(false);
+    setEditing(false);
+    setDraft(null);
+    toast('History updated');
+  };
+
+  const cellSt = {
+    width: '100%', boxSizing: 'border-box', minWidth: 0,
+    background: 'var(--bg-1)', border: '1px solid var(--line-strong)', borderRadius: 6,
+    color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 600,
+    padding: '6px 8px', outline: 'none',
+  };
+
+  const rows = editing ? draft : sets;
+
+  return (
+    <div className="card" style={{
+      padding: 12,
+      borderColor: editing ? zc : isLatest ? `color-mix(in srgb, ${zc} 45%, var(--line))` : 'var(--line)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+        <span className="mono" style={{ fontSize: 11, color: 'var(--text)', letterSpacing: '0.06em', fontWeight: 700 }}>
+          {h.d.toUpperCase()}
+          {isLatest && !editing && <span style={{ marginLeft: 8, color: zc, fontSize: 9, letterSpacing: '0.1em' }}>LATEST</span>}
+        </span>
+        {editing ? (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={cancel} disabled={saving} className="mono" style={{
+              all: 'unset', cursor: 'pointer', padding: '5px 10px', borderRadius: 6,
+              border: '1px solid var(--line-strong)', color: 'var(--text-3)',
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+            }}>CANCEL</button>
+            <button onClick={save} disabled={saving} className="mono" style={{
+              all: 'unset', cursor: 'pointer', padding: '5px 10px', borderRadius: 6,
+              background: zc, color: 'var(--on-accent)',
+              fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', opacity: saving ? 0.5 : 1,
+            }}>{saving ? 'SAVING…' : 'SAVE'}</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.06em' }}>{sets.length} SETS</span>
+            {editable && (
+              <button onClick={begin} className="mono" style={{
+                all: 'unset', cursor: 'pointer', padding: '5px 10px', borderRadius: 6,
+                border: `1px solid color-mix(in srgb, ${zc} 45%, var(--line-strong))`,
+                color: zc, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+              }}>EDIT</button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gap: 3 }}>
+        {rows.map((s, si) => (
+          <div key={s.id || si} style={{
+            display: 'grid',
+            gridTemplateColumns: editing ? '22px 1fr 1fr 24px' : '26px 1fr auto',
+            gap: 8, alignItems: 'center',
+            padding: '5px 8px', borderRadius: 6,
+            opacity: editing && s.del ? 0.35 : 1,
+            background: s.warmup ? 'transparent' : 'color-mix(in srgb, var(--text-3) 6%, transparent)',
+          }}>
+            <span className="mono" style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textAlign: 'center',
+              color: s.warmup ? 'var(--text-3)' : zc,
+            }}>{s.label}</span>
+
+            {editing ? (<>
+              <input inputMode="decimal" value={timed ? s.t : s.w} disabled={s.del}
+                onChange={e => patch(si, timed ? 't' : 'w', e.target.value)}
+                placeholder={timed ? 'secs' : 'kg'} style={cellSt} />
+              {!timed && (
+                <input inputMode="numeric" value={s.r} disabled={s.del}
+                  onChange={e => patch(si, 'r', e.target.value)}
+                  placeholder="reps" style={cellSt} />
+              )}
+              {timed && <span />}
+              <button onClick={() => patch(si, 'del', !s.del)} aria-label={s.del ? 'Keep set' : 'Remove set'}
+                title={s.del ? 'Keep this set' : 'Remove this set'} style={{
+                  all: 'unset', cursor: 'pointer', textAlign: 'center',
+                  color: s.del ? zc : 'var(--c-coral)', fontSize: 12, fontWeight: 700,
+                }}>{s.del ? '↺' : '✕'}</button>
+            </>) : (<>
+              <span className="mono" style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>
+                {s.w > 0 ? `${s.w}kg` : 'BW'}
+              </span>
+              <span className="mono" style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>×{s.r}</span>
+            </>)}
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', lineHeight: 1.5, marginTop: 8 }}>
+          Blank clears the value. ✕ removes the set on save; ↺ puts it back.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function expandSets(h) {
-  if (h.sets?.length) return h.sets.map(s => ({ w: s.w, r: s.r }));
+  if (h.sets?.length) return h.sets.map(s => ({ id: s.id, w: s.w, r: s.r, t: s.t }));
   const r = h.r;
   const round = (x) => Math.round(x / 2.5) * 2.5;
   if (!h.w || h.w <= 0) {
