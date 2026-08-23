@@ -207,6 +207,19 @@ function LayoutReadout() {
   const [open, setOpen] = React.useState(false);
   const [m, setM] = React.useState(null);
 
+  const [copied, setCopied] = React.useState(false);
+  const [probe, setProbe] = React.useState(false);
+
+  // Paint each layer of the app's frame a different colour. A screenshot of
+  // the strip then says which box is short, which is the one thing six rounds
+  // of screenshots have never been able to tell me.
+  React.useEffect(() => {
+    const root = document.documentElement;
+    if (probe) root.setAttribute('data-layerprobe', '');
+    else root.removeAttribute('data-layerprobe');
+    return () => root.removeAttribute('data-layerprobe');
+  }, [probe]);
+
   const read = React.useCallback(() => {
     const px = (v) => Math.round(parseFloat(v) || 0);
     const probe = document.createElement('div');
@@ -216,27 +229,44 @@ function LayoutReadout() {
     const dvh = unit('100dvh'), svh = unit('100svh'), lvh = unit('100lvh');
     probe.style.height = 'env(safe-area-inset-bottom, 0px)';
     const safeBottom = px(getComputedStyle(probe).height);
+    probe.style.height = 'env(safe-area-inset-top, 0px)';
+    const safeTop = px(getComputedStyle(probe).height);
     probe.remove();
 
-    const shell = document.querySelector('.app-shell');
-    const nav = document.querySelector('.bnav');
-    const root = document.getElementById('root');
-    const sr = shell?.getBoundingClientRect();
-    const nr = nav?.getBoundingClientRect();
+    const rect = (sel) => {
+      const el = typeof sel === 'string' ? document.querySelector(sel) : sel;
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { t: Math.round(r.top), b: Math.round(r.bottom), l: Math.round(r.left), r: Math.round(r.right), h: Math.round(r.height) };
+    };
+    const bg = (sel) => {
+      const el = typeof sel === 'string' ? document.querySelector(sel) : sel;
+      return el ? getComputedStyle(el).backgroundColor : '-';
+    };
+    const vv = window.visualViewport;
 
     setM({
       innerHeight: window.innerHeight,
-      visual: Math.round(window.visualViewport?.height || 0),
-      dvh, svh, lvh, safeBottom,
-      rootH: root ? Math.round(root.getBoundingClientRect().height) : 0,
-      rootBottom: root ? Math.round(root.getBoundingClientRect().bottom) : 0,
-      shellH: sr ? Math.round(sr.height) : 0,
-      shellBottom: sr ? Math.round(sr.bottom) : 0,
-      navBottom: nr ? Math.round(nr.bottom) : 0,
-      navH: nr ? Math.round(nr.height) : 0,
+      innerWidth: window.innerWidth,
+      clientH: document.documentElement.clientHeight,
+      screenH: window.screen?.height || 0,
+      availH: window.screen?.availHeight || 0,
+      dpr: window.devicePixelRatio,
+      visual: Math.round(vv?.height || 0),
+      vvTop: Math.round(vv?.offsetTop || 0),
+      vvPageTop: Math.round(vv?.pageTop || 0),
+      vvScale: vv ? Math.round(vv.scale * 100) / 100 : 0,
+      dvh, svh, lvh, safeTop, safeBottom,
+      root: rect('#root'), shell: rect('.app-shell'), nav: rect('.bnav'), body: rect(document.body),
+      // What colour the gap is, if there is one: the page behind the app, or
+      // the app itself coming up short.
+      bgHtml: bg(document.documentElement), bgBody: bg(document.body), bgRoot: bg('#root'),
       standalone: document.documentElement.hasAttribute('data-standalone'),
+      scrollY: Math.round(window.scrollY),
       docScroll: Math.round(document.documentElement.scrollHeight - window.innerHeight),
+      ua: (navigator.userAgent || '').slice(0, 110),
     });
+    setCopied(false);
   }, []);
 
   React.useEffect(() => { if (open) read(); }, [open, read]);
@@ -258,9 +288,36 @@ function LayoutReadout() {
     );
   }
 
-  // The gap the strip actually is: how far the bottom of the app sits above the
-  // bottom of the screen.
-  const gap = m ? m.innerHeight - m.shellBottom : 0;
+  // The strip, as a number: how far the bottom of the app sits above the bottom
+  // of the window. Measured against the nav, because the nav is the last thing
+  // drawn and therefore the actual bottom edge of what anyone can see.
+  const bottomEdge = m ? (m.nav?.b ?? m.shell?.b ?? m.root?.b ?? 0) : 0;
+  const gap = m ? m.innerHeight - bottomEdge : 0;
+
+  const text = m ? [
+    `gap ${gap}  inner ${m.innerWidth}x${m.innerHeight}  client ${m.clientH}  screen ${m.screenH}/${m.availH} dpr ${m.dpr}`,
+    `visual ${m.visual} offTop ${m.vvTop} pageTop ${m.vvPageTop} scale ${m.vvScale}`,
+    `dvh/svh/lvh ${m.dvh}/${m.svh}/${m.lvh}  safe ${m.safeTop}/${m.safeBottom}`,
+    `root  ${m.root ? `${m.root.t}..${m.root.b} x ${m.root.l}..${m.root.r}` : '-'}`,
+    `shell ${m.shell ? `${m.shell.t}..${m.shell.b} x ${m.shell.l}..${m.shell.r}` : '-'}`,
+    `nav   ${m.nav ? `${m.nav.t}..${m.nav.b} h${m.nav.h}` : '-'}`,
+    `body  ${m.body ? `${m.body.t}..${m.body.b} x ${m.body.l}..${m.body.r}` : '-'}`,
+    `bg html ${m.bgHtml} | body ${m.bgBody} | root ${m.bgRoot}`,
+    `standalone ${m.standalone} scrollY ${m.scrollY} docScroll ${m.docScroll}`,
+    m.ua,
+  ].join('\n') : '';
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); }
+    catch (e) {
+      // Clipboard is blocked in plenty of contexts; select the text instead so
+      // it can still be copied by hand.
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); setCopied(true); } catch (e2) { /* ignore */ }
+      ta.remove();
+    }
+  };
 
   return (
     <div className="card mono" style={{ padding: 12, margin: '0 0 12px', fontSize: 10, display: 'grid', gap: 4 }}>
@@ -269,23 +326,34 @@ function LayoutReadout() {
         <button onClick={() => setOpen(false)} style={{ all: 'unset', cursor: 'pointer', color: 'var(--text-3)' }}>✕</button>
       </div>
       {m && <>
-        <Row k="gap under the app" v={gap + 'px'} flag={gap > 1} />
-        <Row k="innerHeight" v={m.innerHeight} />
-        <Row k="visualViewport" v={m.visual} />
+        <Row k="gap under the app" v={gap + 'px'} flag={gap > 1 || gap < -1} />
+        <Row k="innerHeight / client" v={`${m.innerHeight} / ${m.clientH}`} />
+        <Row k="visualViewport / offset" v={`${m.visual} / ${m.vvTop}`} />
+        <Row k="screen h / avail" v={`${m.screenH} / ${m.availH}`} />
         <Row k="100dvh / svh / lvh" v={`${m.dvh} / ${m.svh} / ${m.lvh}`} />
-        <Row k="safe-area-bottom" v={m.safeBottom} />
-        <Row k="app column height" v={m.shellH} />
-        <Row k="app column bottom" v={m.shellBottom} flag={m.shellBottom !== m.innerHeight} />
-        <Row k="#root height / bottom" v={`${m.rootH} / ${m.rootBottom}`} flag={m.rootBottom !== m.innerHeight} />
-        <Row k="nav height / bottom" v={`${m.navH} / ${m.navBottom}`} />
-        <Row k="page scrolls by" v={m.docScroll} />
-        <Row k="standalone" v={m.standalone ? 'yes' : 'no'} flag={!m.standalone} />
+        <Row k="safe-area top / bottom" v={`${m.safeTop} / ${m.safeBottom}`} />
+        <Row k="#root" v={m.root ? `${m.root.t}..${m.root.b}` : '-'} flag={!!m.root && m.root.b !== m.innerHeight} />
+        <Row k="app column" v={m.shell ? `${m.shell.t}..${m.shell.b}` : '-'} flag={!!m.shell && m.shell.b !== m.innerHeight} />
+        <Row k="nav" v={m.nav ? `${m.nav.t}..${m.nav.b}` : 'not on this screen'} flag={!!m.nav && m.nav.b !== m.innerHeight} />
+        <Row k="page scroll / overflow" v={`${m.scrollY} / ${m.docScroll}`} flag={m.scrollY !== 0 || m.docScroll > 0} />
+        <Row k="standalone" v={m.standalone ? 'yes' : 'no'} />
       </>}
-      <button onClick={read} className="btn-ghost" style={{ fontSize: 9, padding: '7px 0', marginTop: 4 }}>
-        RE-MEASURE
+      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+        <button onClick={read} className="btn-ghost" style={{ flex: 1, fontSize: 9, padding: '7px 0' }}>RE-MEASURE</button>
+        <button onClick={copy} className="btn-ghost" style={{ flex: 1, fontSize: 9, padding: '7px 0', color: copied ? 'var(--accent)' : undefined }}>
+          {copied ? 'COPIED ✓' : 'COPY'}
+        </button>
+      </div>
+      <button onClick={() => setProbe(v => !v)} className="btn-ghost"
+        style={{ fontSize: 9, padding: '7px 0', color: probe ? 'var(--c-coral)' : undefined,
+          borderColor: probe ? 'var(--c-coral)' : undefined }}>
+        {probe ? 'HIDE LAYER COLOURS' : 'SHOW LAYER COLOURS'}
       </button>
       <div style={{ color: 'var(--text-3)', fontSize: 8.5, lineHeight: 1.5, marginTop: 2 }}>
-        Tap a weight field to bring the keyboard up, dismiss it, then RE-MEASURE.
+        COPY sends the numbers. SHOW LAYER COLOURS paints each layer of the app
+        a different colour - screenshot the strip with it on and its colour says
+        which one is short: magenta = the page, orange = the document,
+        green = the app box, blue = the column inside it, red outline = the nav.
       </div>
     </div>
   );
