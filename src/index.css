@@ -210,46 +210,38 @@ body:has([data-role="trainer"]) {
 /* Belt and braces for a wide phone that clears the 500px breakpoint. */
 html[data-standalone] body, html[data-standalone] { background: var(--bg-1); }
 
-/* The app is the viewport, not a box measured to match it.
+/* The app is the viewport - measured against body, not against `fixed`.
    //
-   This strip along the bottom took six goes because every fix before this one
-   set a height: 100dvh, then 100lvh, then a height measured in JS and only
-   allowed to grow. Measuring cannot win. The browser resizes and repaints
-   before it delivers the resize event, so a measured height always describes
-   the viewport as it was a moment ago - and on a phone the viewport changes
-   size constantly, every time the address bar collapses or returns.
+   Seven attempts, and the layer probe settled it in one screenshot. On an
+   installed iPhone the band below the nav came back ORANGE, which in the probe
+   is body. Not magenta (the page), not green (#root), not blue (the column) -
+   body. So body's box reaches the bottom of the screen and the fixed #root
+   sitting inside it does not: iOS standalone hands `position: fixed` a
+   viewport that stops short of the home-indicator strip, while a percentage
+   height off the initial containing block covers the whole screen.
 
-   Reproduced in a browser, growing 803 -> 844 -> 803 the way an address bar
-   does, the measured column was wrong in both directions and by exactly the
-   41px the device reported:
+   Which also explains why colouring the page to match never hid it. The strip
+   was never a colour difference - html, body and #root are all var(--bg-1) on
+   a phone already. It is empty space: the nav parked ~28px above the bottom
+   edge with app-coloured background beneath it, which reads as spacing, which
+   is exactly the word that kept coming back.
 
-     grew to 844   column still 803  ->  41px of page showing underneath
-     back to 803   column now 844    ->  the nav pushed 41px off the bottom
+   So the box is anchored to the thing the screenshot proves is the right size.
+   body is height:100%, position:relative and cannot scroll, so absolute
+   inset:0 against it is as fixed as `fixed` was, and correct where `fixed`
+   wasn't. No transform is used, so overlays that position themselves against
+   the viewport still do.
 
-   which is both halves of the complaint: a strip along the bottom, and a nav
-   you could flick up into view.
-
-   inset:0 on a fixed element takes both edges from the viewport itself, so
-   there is no height to compute, nothing to arrive late, and nothing that can
-   be underneath the app - the app IS the box. */
+   The earlier finding stands and is why this isn't a measured height again:
+   growing 803 -> 844 -> 803 the way an address bar does, a height measured in
+   JS was wrong in both directions by exactly the 41px first reported, because
+   the browser repaints before it delivers the resize event. */
 #root {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: var(--bg-1);
   color: var(--text);
   overflow: hidden;
-}
-
-/* Out of flow, so the column can no longer be centred by body's max-width.
-   On a laptop the client app stays phone-shaped with the page either side;
-   the coach surfaces use the whole screen. Offset rather than translate:
-   a transform here would become the containing block for every fixed-position
-   overlay in the app. */
-@media (min-width: 500px) {
-  #root { left: calc(50% - 195px); right: auto; width: 390px; }
-}
-@media (min-width: 500px) {
-  #root:has([data-role="trainer"]) { left: 0; right: 0; width: auto; }
 }
 
 /* Typography */
