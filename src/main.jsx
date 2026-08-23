@@ -4,16 +4,17 @@ import './index.css'
 import App from './App'
 import { apply as applyLayerProbe } from './lib/layerProbe'
 
+// Which commit is this? Set before anything reads it - the probe's own gap
+// report prints it, and printing "?" is how a deploy question goes unanswered.
+window.__BUILD__ = __BUILD__;
+
 // Before the app mounts, so a probe left switched on is on from the first
 // paint - and its off switch is present even if the app never gets that far.
 applyLayerProbe();
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)
 
-// Which commit is this? Readable from the console as __BUILD__, and shown at
-// the foot of the profile screen, so a "did my fix deploy?" question has an
-// answer that doesn't depend on guessing.
-window.__BUILD__ = __BUILD__;
+// Readable from the console too.
 console.info('%cHS PT', 'color:#46BBC0;font-weight:700', 'build', __BUILD__);
 
 
