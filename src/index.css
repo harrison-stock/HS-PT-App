@@ -823,3 +823,24 @@ pre { max-width: 100%; overflow-x: auto; }
   .phase-btn.just-done::after,
   .bm-pulse { animation: none !important; }
 }
+
+/* ── Layer probe ──────────────────────────────────────────────────────────
+   The strip along the bottom has survived six fixes, and the reason is always
+   the same: a screenshot shows that it is there, never which box it belongs
+   to. This paints every layer of the app's frame a different colour, so one
+   screenshot names the culprit instead of leaving it to be guessed.
+
+     magenta  the page (html)          - the app column is short
+     orange   the document (body)      - same, one layer in
+     lime     #root                    - the fixed box isn't reaching the edge
+     blue     .app-shell               - the flex column is short of #root
+     red rule the nav's own outline    - where the last drawn thing ends
+
+   Toggled from Profile > LAYOUT DIAGNOSTICS. Nothing switches it on by
+   itself, and it survives no reload. */
+html[data-layerprobe] { background: #ff00ff !important; }
+html[data-layerprobe] body { background: #ff8800 !important; }
+html[data-layerprobe] #root { background: #00e000 !important; }
+html[data-layerprobe] .app-shell { background: #0066ff !important; }
+html[data-layerprobe] .bnav { outline: 2px solid #ff0000; outline-offset: -2px; }
+html[data-layerprobe] .screen-enter { background: transparent !important; }

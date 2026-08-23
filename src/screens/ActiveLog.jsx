@@ -1223,14 +1223,8 @@ function ExerciseCard({ ex, idx, total, media, onComplete, onUpdate, onTitle, on
                 {ex.rest > 0 ? `REST ${ex.rest}S` : 'NO REST'}
               </span>
               {onCompleteAll && !ex.sets.every((s) => s.done) && (
-                <button onClick={onCompleteAll} className="mono" style={{
-                  all: 'unset', cursor: 'pointer', padding: '4px 8px', borderRadius: 6,
-                  background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-                  color: 'var(--accent)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em',
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                }}>
-                  <IconCheck size={9} sw={3} /> ALL SETS
+                <button onClick={onCompleteAll} className="mono tappable" style={markAllBtn}>
+                  <IconCheck size={11} sw={3} /> MARK ALL
                 </button>
               )}
             </div>
@@ -1455,13 +1449,9 @@ function SupersetCard({ group, onComplete, onUpdate, onAddSet, onDelSet, onTitle
             ⛓ SUPERSET · {group.length} EXERCISES
           </div>
           {onCompleteAll && !group.every((e) => e.sets.every((s) => s.done)) && (
-            <button onClick={onCompleteAll} className="mono" style={{
-              all: 'unset', cursor: 'pointer', padding: '5px 9px', borderRadius: 6,
-              background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-              color: 'var(--accent)', fontSize: 8.5, fontWeight: 700, letterSpacing: '0.08em',
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-            }}><IconCheck size={9} sw={3} /> ALL SETS</button>
+            <button onClick={onCompleteAll} className="mono tappable" style={markAllBtn}>
+              <IconCheck size={11} sw={3} /> MARK ALL
+            </button>
           )}
         </div>
 
@@ -2037,6 +2027,19 @@ function SetTypeBadge({ set, setNum, onKind }) {
 // The load column carries a second value when per-hand loading is on
 // ("25  2×12.5"), which crowded reps right up against it. Give that column the
 // extra room when it's actually in use, and reps shift right out of the way.
+// Ticking eight sets one by one, mid-set, with a phone in one hand is the
+// tap-count this button exists to remove - and it was an 8.5px outline chip
+// sitting next to the rest timer, reading as a caption rather than an action.
+// Filled, and the same in both places it appears.
+const markAllBtn = {
+  all: 'unset', cursor: 'pointer', padding: '7px 12px', borderRadius: 8,
+  background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
+  color: 'var(--on-accent)', whiteSpace: 'nowrap',
+  fontSize: 10, fontWeight: 800, letterSpacing: '0.1em',
+  display: 'inline-flex', alignItems: 'center', gap: 5,
+  boxShadow: '0 0 calc(12px * var(--glow)) var(--accent-glow)',
+};
+
 const setCols = (wideLoad) => wideLoad
   ? '30px 1.45fr 0.75fr 62px 34px'
   : '30px 1fr 1fr 62px 34px';
