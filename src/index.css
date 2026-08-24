@@ -204,11 +204,34 @@ body:has([data-role="trainer"]) {
 
    Phone widths only. Above 500px the app is a centred 390px column and the
    page background either side of it is meant to be seen. */
+/* The one place the page still shows on a phone.
+   //
+   The app's box now ends exactly at the bottom of the viewport it is given -
+   measured on the device: root 0..797, body 0..797, innerHeight 797. But an
+   installed iPhone draws a strip behind the home indicator BELOW that
+   viewport, and fills it from the page's own background. Nothing in the app
+   can reach it; the page is the only thing that paints there.
+
+   So the page is painted the colour the nav ends on rather than the colour the
+   app sits on, and the strip reads as the bottom of the bar above it instead
+   of as a band of something else. Composited the same way the nav composites
+   it - --nav-to over --bg-1 - so the two cannot drift apart. In light theme
+   they are within a shade of each other anyway; in dark, --nav-to is nearly
+   black against a --bg-1 that isn't, which is a seam waiting to happen.
+
+   Phone widths and installed apps only. Above 500px the page beside the
+   centred column is meant to look like the page. */
 @media (max-width: 499px) {
-  html, body { background: var(--bg-1); }
+  html, body {
+    background-color: var(--bg-1);
+    background-image: linear-gradient(var(--nav-to), var(--nav-to));
+  }
 }
 /* Belt and braces for a wide phone that clears the 500px breakpoint. */
-html[data-standalone] body, html[data-standalone] { background: var(--bg-1); }
+html[data-standalone] body, html[data-standalone] {
+  background-color: var(--bg-1);
+  background-image: linear-gradient(var(--nav-to), var(--nav-to));
+}
 
 /* The app is the viewport - measured against body, not against `fixed`.
    //
