@@ -8,6 +8,7 @@ import { splitLabel, guessSplit } from '../lib/loadSplit'
 import { MasterPlanner } from './MasterPlanner'
 import { BandPicker, BandChip, bandOf } from '../components/bands'
 import { exerciseMatches } from '../lib/exerciseSearch'
+import { Overlay } from '../components/Overlay'
 import { ICON_LIBRARY, SectionGlyph, sanitizeSvg } from '../lib/svgIcon'
 import { uploadWorkoutPhoto } from '../lib/workoutPhotos'
 import { RoadmapTrack } from '../components/Roadmap'
@@ -748,7 +749,7 @@ function CopySheet({ weeks, curWeek, curDow, phases = [], curPhaseId, onClose, o
   });
 
   return (
-    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 210, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+    <Overlay onClick={onClose} zIndex={210} style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', justifyContent: 'flex-end' }}>
       <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '12px 18px 8px' }}>
           <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }}/>
@@ -834,7 +835,7 @@ function CopySheet({ weeks, curWeek, curDow, phases = [], curPhaseId, onClose, o
           </>
         )}
       </div>
-    </div>
+    </Overlay>
   );
 }
 
@@ -1342,7 +1343,7 @@ function IconPickerSheet({ current, kind, color, onPick, onClose }) {
   };
 
   return (
-    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 220, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+    <Overlay onClick={onClose} zIndex={220} style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', justifyContent: 'flex-end' }}>
       <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20, border: '1px solid var(--line-strong)', borderBottom: 0, maxHeight: '86vh', display: 'flex', flexDirection: 'column', animation: 'sheetUp .28s cubic-bezier(.22,.61,.36,1)' }}>
         <div style={{ padding: '12px 18px 8px' }}>
           <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
@@ -1417,7 +1418,7 @@ function IconPickerSheet({ current, kind, color, onPick, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 
@@ -1920,9 +1921,9 @@ function ClientHistorySheet({ exerciseName, libraryId, trainerId, programmeId, o
   const latest = (sessions || []).find(s => s.top != null)?.top ?? null;
 
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 260, background: 'rgba(6,10,12,0.7)',
-      backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end',
+    <Overlay onClick={onClose} zIndex={260} style={{
+      background: 'rgba(6,10,12,0.7)',
+      backdropFilter: 'blur(4px)', flexDirection: 'row', alignItems: 'flex-end',
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         width: '100%', maxHeight: '88%', background: 'var(--bg-1)',
@@ -1988,7 +1989,7 @@ function ClientHistorySheet({ exerciseName, libraryId, trainerId, programmeId, o
           <button onClick={onClose} className="btn-ghost" style={{ width: '100%' }}>CLOSE</button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 
@@ -2130,10 +2131,9 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
   const cats = [...new Set(filtered.map(e => e.cat))];
 
   return (
-    <div onClick={onClose} style={{
-      position: 'absolute', inset: 0, zIndex: 200,
+    <Overlay onClick={onClose} zIndex={200} style={{
       background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
-      display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+      justifyContent: 'flex-end',
     }}>
       <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{
         background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20,
@@ -2178,7 +2178,7 @@ export function ExercisePicker({ onClose, onPick, title = 'SWITCH EXERCISE' }) {
           ))}
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }
 
