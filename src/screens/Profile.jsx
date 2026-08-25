@@ -4,7 +4,6 @@ import { IconSun, IconMoon, IconCheck } from '../components/icons'
 import { InstallPrompt } from './InstallPrompt'
 import { loadConnections, startWearableConnect } from '../lib/health'
 import { enablePush, disablePush, isPushEnabled, pushBlockedReason, sendTestPush } from '../lib/push'
-import { probeOn, setProbe } from '../lib/layerProbe'
 
 // Half-filled circle = "auto / follow system" appearance.
 const IconAuto = ({ size = 22, sw = 1.6 }) => (
@@ -209,11 +208,7 @@ function LayoutReadout() {
   const [m, setM] = React.useState(null);
 
   const [copied, setCopied] = React.useState(false);
-  // Paint each layer of the app's frame a different colour. Held in
-  // localStorage rather than in this component, so it stays on when you leave
-  // Settings to go and photograph the strip somewhere else.
-  const [probe, setProbeState] = React.useState(probeOn);
-  const toggleProbe = () => { const next = !probe; setProbe(next); setProbeState(next); };
+
 
   const read = React.useCallback(() => {
     const px = (v) => Math.round(parseFloat(v) || 0);
@@ -368,16 +363,9 @@ function LayoutReadout() {
           {copied ? 'COPIED ✓' : 'COPY'}
         </button>
       </div>
-      <button onClick={toggleProbe} className="btn-ghost"
-        style={{ fontSize: 9, padding: '7px 0', color: probe ? 'var(--c-coral)' : undefined,
-          borderColor: probe ? 'var(--c-coral)' : undefined }}>
-        {probe ? 'HIDE LAYER COLOURS' : 'SHOW LAYER COLOURS'}
-      </button>
       <div style={{ color: 'var(--text-3)', fontSize: 8.5, lineHeight: 1.5, marginTop: 2 }}>
-        COPY sends the numbers. SHOW LAYER COLOURS paints each layer of the app
-        a different colour - screenshot the strip with it on and its colour says
-        which one is short: magenta = the page, orange = the document,
-        green = the app box, blue = the column inside it, red outline = the nav.
+        Numbers only. The verdict above says whether the app reaches the bottom
+        of the screen; COPY sends the lot.
       </div>
     </div>
   );

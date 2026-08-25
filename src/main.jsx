@@ -2,15 +2,14 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import App from './App'
-import { apply as applyLayerProbe } from './lib/layerProbe'
 
 // Which commit is this? Set before anything reads it - the probe's own gap
 // report prints it, and printing "?" is how a deploy question goes unanswered.
 window.__BUILD__ = __BUILD__;
 
-// Before the app mounts, so a probe left switched on is on from the first
-// paint - and its off switch is present even if the app never gets that far.
-applyLayerProbe();
+// The layer probe is gone; clear the flag so a device still holding it on
+// isn't left waiting for a switch that no longer exists.
+try { localStorage.removeItem('hs_layer_probe'); } catch (e) { /* ignore */ }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)
 
