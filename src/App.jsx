@@ -312,6 +312,32 @@ export default function App() {
     } else {
       ['--bg-0', '--bg-1', '--bg-2', '--bg-3'].forEach(k => root.style.removeProperty(k));
     }
+    // What iOS paints outside the web view.
+    //
+    // theme-color was a fixed #0a0e11 - near black - set once in the HTML and
+    // never touched again. An installed iPhone uses it for the areas it draws
+    // around the page, including the strip behind the home indicator, so in
+    // light theme the app finished in #ECEFF4 and the bottom of the screen
+    // carried on in near black. No element can reach that strip; nothing
+    // inside the app could ever have covered it, which is why moving the app's
+    // boxes around never made a difference to it.
+    //
+    // It follows the theme now, and takes the colour the nav ends on so the
+    // strip reads as the bottom of the bar above it.
+    //
+    // The two media-scoped tags in the HTML are only there for the first paint,
+    // before any of this runs. They go the moment the chosen theme is known -
+    // a browser uses the first theme-color whose media matches, and a system
+    // preference that disagrees with the app's own setting would win.
+    document.querySelectorAll('meta[name="theme-color"][media]').forEach(m => m.remove());
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'theme-color');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', isLight ? '#ECEFF4' : '#0a0d0e');
+
     root.style.setProperty('--type-intensity', typeIntensity);
     root.style.setProperty('--glow', glow);
     const d = DENSITY[density] || DENSITY.balanced;
