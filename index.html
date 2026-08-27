@@ -24,7 +24,12 @@
       } catch (e) {}
     })();
   </script>
-  <meta name="theme-color" content="#0a0e11" />
+  <!-- Painted by iOS around the web view, including the strip behind the home
+       indicator - so it has to follow the theme, not sit at one fixed colour.
+       These two are the first paint; App.jsx keeps it in step with the theme
+       the user actually chose. -->
+  <meta name="theme-color" content="#ECEFF4" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0a0d0e" media="(prefers-color-scheme: dark)" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
