@@ -394,10 +394,13 @@ html[data-standalone] body, html[data-standalone] {
   /* Column count follows the item count - a coach viewing a client's app gets
      a sixth "exit" tab, and a fixed 5-column grid pushed it onto its own row. */
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-  /* Clearance for the home indicator, but not the full inset: 34px of it under
-     the labels reads as a dead grey block rather than as part of the bar.
-     Apple's own tab bars sit closer than that. */
-  padding: 8px 8px calc(env(safe-area-inset-bottom, 0px) * 0.55 + 4px);
+  /* Clearance for the home indicator, but a quarter of the inset rather than
+     half of it. iOS already keeps the web view clear of the indicator - it
+     paints that strip itself, outside the page - so most of what this reserved
+     was being reserved twice, and it read as a band of dead bar under the
+     labels. This is the "spacing at the bottom": app-coloured, on every screen,
+     and unmoved by nine rounds of changing where the app's boxes end. */
+  padding: 8px 8px max(6px, calc(env(safe-area-inset-bottom, 0px) * 0.25));
   background: linear-gradient(180deg, var(--nav-from), var(--nav-to) 60%);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--line);
@@ -405,7 +408,7 @@ html[data-standalone] body, html[data-standalone] {
 .bnav button {
   background: none; border: 0;
   display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 6px 2px;
+  padding: 6px 2px 4px;
   color: var(--text-3);
   font-family: 'JetBrains Mono', monospace;
   font-size: 8px;
@@ -450,10 +453,13 @@ html[data-standalone] body, html[data-standalone] {
   [data-role="trainer"] > .bnav button > div { margin-bottom: 0 !important; }
 }
 /* Active-tab marker - an accent dot that pops in beneath the label. */
+/* The active dot is out of flow. It is invisible on four tabs out of five and
+   was still reserving its height plus the flex gap above it on all of them -
+   10px of nothing under every label, every screen. */
 .bnav button::after {
   content: '';
+  position: absolute; bottom: 0; left: 50%; margin-left: -2px;
   width: 4px; height: 4px; border-radius: 999px;
-  margin-top: 2px;
   background: var(--accent);
   box-shadow: 0 0 calc(6px * var(--glow)) var(--accent-glow);
   opacity: 0;
