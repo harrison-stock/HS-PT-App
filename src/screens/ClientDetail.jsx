@@ -1335,8 +1335,14 @@ function LoggedSetsEditor({ clientId, dayId, phaseName, onClose, onSaved }) {
     const hasNewFilled = state.exercises.some(ex => ex.exId && ex.sets.some(s =>
       s._new && !s._deleted && (s.reps !== '' || s.kg !== '' || s.band !== '' || s.timeSecs != null || s.intensity !== '')));
     if (!sessionId && hasNewFilled) {
+      // started_at as well as completed_at. Results are read back as
+      // completed_at - started_at, and a null start is not "no duration" to a
+      // date constructor - it is 1970, which came out as a session lasting
+      // twenty-eight thousand hours. Stamping both means this session reads as
+      // untimed rather than as impossible.
+      const now = new Date().toISOString();
       const { data: ns } = await supabase.from('workout_sessions')
-        .insert({ client_id: clientId, day_id: dayId, completed_at: new Date().toISOString() })
+        .insert({ client_id: clientId, day_id: dayId, started_at: now, completed_at: now })
         .select('id').single();
       sessionId = ns?.id || null;
     }

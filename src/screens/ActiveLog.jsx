@@ -1539,7 +1539,7 @@ export function SessionComplete({ exercises, sessionTime, go, onClose, onEdit })
   const setsDone = exercises.reduce((n, e) => n + e.sets.filter((s) => s.done).length, 0);
   const setsTotal = exercises.reduce((n, e) => n + e.sets.length, 0);
   const volume = exercises.reduce((n, e) => n + e.sets.filter((s) => s.done && s.kg).reduce((a, s) => a + s.kg * repsDone(s), 0), 0);
-  const fmtT = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const fmtT = (s) => Number.isFinite(s) ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : '–';
 
   // Top sets - heaviest done working set per weighted exercise.
   const prs = exercises
@@ -2676,7 +2676,15 @@ export function SessionResults({ dayId, userId, go, onClose }) {
               time: !!ls.actual_time_secs,
             });
           });
-        const sessionTime = Math.max(0, Math.round((new Date(data.completed_at) - new Date(data.started_at)) / 1000));
+        // Math.max(0, NaN) is NaN, and new Date(null) is 1970 - so a session
+        // with no start (one a coach filled in after the fact, or an older row)
+        // rendered either NaN:NaN or a duration measured from the epoch. No
+        // start means no duration, and the tile says so.
+        const startMs = data.started_at ? new Date(data.started_at).getTime() : NaN;
+        const endMs = data.completed_at ? new Date(data.completed_at).getTime() : NaN;
+        const sessionTime = (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs)
+          ? Math.round((endMs - startMs) / 1000)
+          : null;
         setState({ exercises: [...exMap.values()], sessionTime });
       });
   }, [dayId, userId]);
