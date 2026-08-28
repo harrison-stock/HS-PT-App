@@ -2,33 +2,69 @@ import { loggedSetName } from './loggedSets'
 import { supabase } from './supabase'
 
 // Maps a free-text exercise name to muscle-map group keys.
-// Rules are ordered specific -> generic; the first match wins, so anything that
-// can name the head it loads (incline, decline, lateral, rear) has to sit above
+//
+// A fallback, not the source of truth: an exercise tagged with "muscles worked"
+// in the library uses those instead. This is what catches everything else, and
+// a name that matches nothing is credited to nothing at all - it silently
+// vanishes from the heat map and from every volume total.
+//
+// Ordered specific -> generic, first match wins. Anything that can name the
+// head it loads (incline, decline, lateral, rear) therefore has to sit above
 // the general press/row rule that would otherwise swallow it.
 const RULES = [
-  [/deadlift|good morning|back extension|hyperextension/i, ['lowerBack', 'hamstrings', 'glutes']],
-  [/romanian|rdl|hamstring|leg curl|nordic/i,              ['hamstrings', 'glutes']],
+  // Triceps first, because "kickback" also means a glute exercise and the
+  // glute rule below would otherwise put arm work on someone's backside.
+  [/tricep/i,                                              ['triceps']],
+
+  [/rack pull/i,                                           ['lowerBack', 'upperBack', 'glutes']],
+  [/deadlift|good morning|back extension|hyperextension/i,  ['lowerBack', 'hamstrings', 'glutes']],
+  [/romanian|rdl|hamstring|leg curl|nordic/i,               ['hamstrings', 'glutes']],
   [/squat|leg press|leg extension|lunge|step[- ]?up|pistol|hack/i, ['quads', 'glutes']],
-  [/hip thrust|glute|bridge|kickback/i,                    ['glutes', 'hamstrings']],
-  [/calf|calves/i,                                         ['calves']],
-  [/rear[- ]?delt|reverse (fly|flye|pec)|face pull|bent[- ]?over (lateral|raise)/i, ['deltsRear', 'upperBack']],
-  [/lateral raise|lat raise|side raise|upright row/i,       ['deltsSide']],
-  [/front raise/i,                                          ['deltsFront']],
+  [/hip thrust|glute|bridge|kickback/i,                     ['glutes', 'hamstrings']],
+  // Abduction is the glute medius; adduction is the groin. Two letters apart
+  // and opposite muscles, so both are named rather than left to a partial match.
+  [/abduction|abductor/i,                                   ['glutes']],
+  [/adduction|adductor|copenhagen/i,                        ['adductors']],
+  [/calf|calves/i,                                          ['calves']],
+
+  // Shoulder rotation is the cuff. It has to beat the torso-rotation rule at
+  // the bottom, or an external rotation lands on the obliques.
+  [/external rotation|internal rotation|cuban press|rotator cuff/i, ['deltsRear', 'deltsSide']],
+  [/rear[- ]?delt|reverse (fly|flye|pec)|face pull|pull[- ]?apart|\by raise\b|bent[- ]?over (lateral|raise)/i, ['deltsRear', 'upperBack']],
+  [/lateral raise|lat raise|side raise|upright row/i,        ['deltsSide']],
+  [/front raise/i,                                           ['deltsFront']],
+  // A handstand press is a vertical press, not a push-up, and has to say so
+  // before the chest rule reads the word "push".
+  [/handstand|\bhspu\b|pike push/i,                          ['deltsFront', 'deltsSide', 'triceps']],
+
   // An incline press is the clavicular chest's exercise and a decline the
   // sternal one's; a flat press is credited to both because it is.
   [/incline.*(bench|press|fly|flye|push[- ]?up)|(bench|press|fly|flye|push[- ]?up).*incline/i, ['chestUpper', 'deltsFront', 'triceps']],
   [/decline.*(bench|press|fly|flye|push[- ]?up)|(bench|press|fly|flye).*decline/i, ['chestMid', 'triceps']],
+  [/svend/i,                                                 ['chestUpper', 'chestMid']],
   [/bench|chest press|push[- ]?up|press[- ]?up|fly|flye|pec/i, ['chestUpper', 'chestMid', 'triceps', 'deltsFront']],
-  [/\bdip/i,                                               ['triceps', 'chestMid']],
+  [/\bdip/i,                                                 ['triceps', 'chestMid']],
   [/overhead press|shoulder press|military|arnold|landmine|\bdelt/i, ['deltsFront', 'deltsSide', 'triceps']],
-  [/pull[- ]?up|chin[- ]?up|pulldown|\blat\b|lats/i,       ['lats', 'biceps']],
-  [/row|shrug|trap/i,                                      ['upperBack', 'biceps']],
-  [/curl/i,                                                ['biceps', 'forearms']],
-  [/tricep|pushdown|skull|close[- ]?grip/i,                ['triceps']],
-  [/plank|crunch|sit[- ]?up|\babs?\b|hollow|dead bug|leg raise|rollout/i, ['abs']],
-  [/twist|woodchop|side bend|oblique|pallof/i,             ['obliques']],
-  [/forearm|wrist|grip|farmer/i,                           ['forearms']],
-  [/clean|snatch|thruster|swing/i,                         ['glutes', 'hamstrings', 'deltsFront', 'deltsSide']],
+
+  [/pullover/i,                                              ['lats', 'chestMid']],
+  [/pull[- ]?up|chin[- ]?up|pulldown|\blat\b|lats/i,         ['lats', 'biceps']],
+  [/row|shrug|trap/i,                                        ['upperBack', 'biceps']],
+  [/curl/i,                                                  ['biceps', 'forearms']],
+  [/pushdown|skull|close[- ]?grip/i,                         ['triceps']],
+
+  [/plank|crunch|sit[- ]?up|\babs?\b|hollow|dead bug|bird dog|mountain climber|leg raise|rollout/i, ['abs']],
+  [/twist|woodchop|wood chop|side bend|oblique|pallof|anti[- ]?rotation|\brotation\b/i, ['obliques']],
+  [/forearm|wrist|grip|farmer/i,                             ['forearms']],
+
+  // Conditioning and full-body work, last: these names are the least specific
+  // and would otherwise catch lifts that deserve a better answer.
+  [/clean|snatch|thruster|swing/i,                           ['glutes', 'hamstrings', 'deltsFront', 'deltsSide']],
+  [/turkish|get[- ]?up/i,                                    ['abs', 'deltsFront', 'deltsSide']],
+  [/battle rope|ropes/i,                                     ['deltsFront', 'deltsSide', 'forearms']],
+  [/ski erg|skierg/i,                                        ['lats', 'triceps', 'abs']],
+  [/treadmill|\brun(ning)?\b|jog|sprint/i,                   ['quads', 'hamstrings', 'calves']],
+  [/assault bike|echo bike|air bike|\bbike\b|cycl|\bspin\b/i,  ['quads', 'calves']],
+  [/sled|box jump|wall ball|jump squat|burpee/i,             ['quads', 'glutes']],
 ];
 
 // The map splits the chest and the deltoid into heads; the tags a coach saved

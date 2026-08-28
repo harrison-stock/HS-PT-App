@@ -25,6 +25,7 @@ export const ALL_MUSCLES = [
   { key: 'hamstrings', label: 'Hamstrings' },
   { key: 'glutes', label: 'Glutes' },
   { key: 'calves', label: 'Calves' },
+  { key: 'adductors', label: 'Adductors' },
 ];
 export const MOVEMENT_PATTERNS = [
   'Upper Body Vertical Push', 'Upper Body Horizontal Push',

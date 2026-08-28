@@ -451,6 +451,7 @@ export const MUSCLE_LABELS = {
   upperBack: 'Upper Back', lats: 'Lats', lowerBack: 'Lower Back', biceps: 'Biceps', triceps: 'Triceps',
   abs: 'Abs', obliques: 'Obliques', quads: 'Quads',
   hamstrings: 'Hamstrings', glutes: 'Glutes', calves: 'Calves', forearms: 'Forearms',
+  adductors: 'Adductors',
   // Pre-split keys, still attached to older exercises and injuries.
   chest: 'Chest', shoulders: 'Shoulders',
 };

@@ -272,12 +272,14 @@ export const MUSCLE_BODY = {
       deltsFront: ['deltsFront'], deltsSide: ['deltsSide'],
       biceps: ['biceps'], triceps: ['triceps'], abs: ['abs'], obliques: ['obliques'],
       quads: ['quadriceps'], calves: ['calves'], forearms: ['forearm'],
+      adductors: ['adductors'],
     },
     back: {
       deltsRear: ['deltsRear'], deltsSide: ['deltsSide'],
       upperBack: ['trapezius'], lats: ['upperBack'],
       lowerBack: ['lowerBack'], triceps: ['triceps'], forearms: ['forearm'],
       glutes: ['gluteal'], hamstrings: ['hamstring'], calves: ['calves'],
+      adductors: ['adductors'],
     },
   },
   // Injury-selectable regions = every muscle PLUS joints/limbs (knees, ankles,
@@ -303,8 +305,8 @@ export const MUSCLE_BODY = {
   },
   // structural parts that never carry heat (drawn neutral)
   neutral: {
-    front: ['head', 'neck', 'hands', 'knees', 'tibialis', 'ankles', 'feet', 'adductors', 'trapezius'],
-    back:  ['head', 'neck', 'hands', 'ankles', 'feet', 'adductors'],
+    front: ['head', 'neck', 'hands', 'knees', 'tibialis', 'ankles', 'feet', 'trapezius'],
+    back:  ['head', 'neck', 'hands', 'ankles', 'feet'],
   },
   // draw order: neutral/structural first, heat muscles last so they sit on top.
   // Within the shoulder and the chest the heads stack the way the artwork
