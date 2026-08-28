@@ -547,11 +547,14 @@ function BottomNav({ screen, go, isTrainer, impersonating, onExitClientView }) {
         const active = screen === it.id;
         return (
           <button key={it.id} className={active ? 'active' : ''} onClick={() => go(it.id)}>
+            {/* Sized to the icon rather than around it: the wrapper carried
+                2px of slack plus a 2px margin, which is 4px of bar for
+                nothing. */}
             <div style={{
-              position: 'relative', height: 32, width: 38,
-              display: 'grid', placeItems: 'center', marginBottom: 2,
+              position: 'relative', height: 26, width: 38,
+              display: 'grid', placeItems: 'center',
             }}>
-              <BrandIcon name={it.brand} size={30} glow={active}
+              <BrandIcon name={it.brand} size={26} glow={active}
                 color={active ? 'var(--accent)' : 'var(--text-3)'} />
             </div>
             <span>{it.label}</span>
