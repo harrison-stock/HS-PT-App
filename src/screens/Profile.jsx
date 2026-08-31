@@ -4,6 +4,7 @@ import { IconSun, IconMoon, IconCheck } from '../components/icons'
 import { InstallPrompt } from './InstallPrompt'
 import { loadConnections, startWearableConnect } from '../lib/health'
 import { enablePush, disablePush, isPushEnabled, pushBlockedReason, sendTestPush } from '../lib/push'
+import { safeUrl, isStripeUrl, loadPortalUrl } from '../lib/billing'
 
 // Half-filled circle = "auto / follow system" appearance.
 const IconAuto = ({ size = 22, sw = 1.6 }) => (
@@ -61,6 +62,7 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
         <ProfileTab
           user={user}
           userId={profile?.id}
+          isTrainer={profile?.role === 'trainer'}
           onSave={onSave}
           theme={theme}
           onThemeChange={onThemeChange}
@@ -87,7 +89,7 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
   );
 }
 
-function ProfileTab({ user, userId, onSave, theme, onThemeChange }) {
+function ProfileTab({ user, userId, onSave, theme, onThemeChange, isTrainer }) {
   const [name, setName] = React.useState(user?.name || '');
   const [dob, setDob] = React.useState(user?.dob || '');
   const [showInstall, setShowInstall] = React.useState(false);
@@ -183,6 +185,8 @@ function ProfileTab({ user, userId, onSave, theme, onThemeChange }) {
       </button>
 
       {showInstall && <InstallPrompt onClose={() => setShowInstall(false)} />}
+
+      {isTrainer && <BillingSetup userId={userId} />}
 
       <ConnectedDevices userId={userId} />
 
@@ -371,6 +375,57 @@ function LayoutReadout() {
   );
 }
 
+// Where the coach pastes their Stripe customer-portal link.
+//
+// One link, shared by every client: Stripe's portal login page takes the
+// client's email and sends its own sign-in link, so the app never has to know
+// which Stripe customer is which, hold a secret key, or keep a subscription
+// table in step with reality.
+function BillingSetup({ userId }) {
+  const [url, setUrl] = React.useState('');
+  const [loaded, setLoaded] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!userId) return;
+    supabase.from('profiles').select('stripe_portal_url').eq('id', userId).maybeSingle()
+      .then(({ data }) => { setUrl(data?.stripe_portal_url || ''); setLoaded(true); });
+  }, [userId]);
+
+  const clean = safeUrl(url);
+  const dirty = loaded && (clean || '') !== (url.trim() ? (clean || '') : '');
+  const save = async () => {
+    await supabase.from('profiles').update({ stripe_portal_url: clean }).eq('id', userId);
+    setSaved(true); setTimeout(() => setSaved(false), 1800);
+  };
+
+  return (
+    <div className="card" style={{ padding: '16px 18px', marginTop: 14, display: 'grid', gap: 10 }}>
+      <div className="label">// BILLING PORTAL</div>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', lineHeight: 1.6 }}>
+        Stripe → Settings → Billing → Customer portal → copy the login link. Your
+        clients get a MANAGE BILLING button that opens it, so they can change a
+        card or cancel without going through you.
+      </div>
+      <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://billing.stripe.com/p/login/…"
+        style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-1)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: '10px 12px', color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 11, outline: 'none' }}/>
+      {url.trim() && !clean && (
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)' }}>
+          That isn\u2019t a valid https link, so no button will be shown.
+        </div>
+      )}
+      {clean && !isStripeUrl(clean) && (
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-amber)' }}>
+          Not a stripe.com address \u2014 it will still work, but check it is the link you meant.
+        </div>
+      )}
+      <button onClick={save} disabled={!loaded} className="btn-ghost" style={{ fontSize: 10, padding: '9px 0' }}>
+        {saved ? 'SAVED ✓' : clean ? 'SAVE PORTAL LINK' : 'CLEAR PORTAL LINK'}
+      </button>
+    </div>
+  );
+}
+
 // Wearable connections (steps / heart rate / weight from Garmin, Fitbit, etc.)
 function ConnectedDevices({ userId }) {
   const [conns, setConns] = React.useState(null);
@@ -421,6 +476,10 @@ function SubscriptionTab({ profile }) {
   const credits        = profile?.credits ?? 0;
   const clientStatus   = profile?.client_status || 'online';
   const subDue         = profile?.subscription_due;
+  const payUrl         = safeUrl(profile?.billing_url);
+  // The portal is the trainer's, shared by all their clients.
+  const [portalUrl, setPortalUrl] = React.useState(null);
+  React.useEffect(() => { loadPortalUrl(profile?.trainer_id).then(setPortalUrl); }, [profile?.trainer_id]);
 
   const statusLabel = {
     online:    'ONLINE CLIENT',
@@ -488,6 +547,31 @@ function SubscriptionTab({ profile }) {
           <div className="label" style={{ marginBottom: 6 }}>// SUBSCRIPTION RENEWAL</div>
           <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em' }}>
             No renewal date set
+          </div>
+        </div>
+      )}
+
+      {/* Payment. Absent entirely where no link has been set, because a button
+          that goes nowhere is worse than no button. */}
+      {(portalUrl || payUrl) && (
+        <div className="card" style={{ padding: '16px 18px', display: 'grid', gap: 10 }}>
+          <div className="label">// PAYMENT</div>
+          {payUrl && (
+            <a href={payUrl} target="_blank" rel="noopener noreferrer" className="btn-primary"
+              style={{ textDecoration: 'none', textAlign: 'center', boxSizing: 'border-box', display: 'block' }}>
+              SET UP PAYMENT
+            </a>
+          )}
+          {portalUrl && (
+            <a href={portalUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost"
+              style={{ textDecoration: 'none', textAlign: 'center', boxSizing: 'border-box', display: 'block' }}>
+              MANAGE BILLING
+            </a>
+          )}
+          <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', lineHeight: 1.6, letterSpacing: '0.04em' }}>
+            {portalUrl && isStripeUrl(portalUrl)
+              ? 'Opens Stripe. Change your card, see past invoices or cancel - Stripe will email you a sign-in link.'
+              : 'Opens your coach\u2019s payment page in a new tab.'}
           </div>
         </div>
       )}

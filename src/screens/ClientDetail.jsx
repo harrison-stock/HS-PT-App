@@ -9,6 +9,7 @@ import { BodyMap, Progress, SideSlider, Segmented } from './Progress'
 import { WorkedView } from './Body'
 import { InjuryThread } from './InjuryThread'
 import { ExerciseComments } from './ExerciseComments'
+import { safeUrl } from '../lib/billing'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
 import { injuryTitle } from '../lib/injuries'
 import { notify } from '../lib/notifications'
@@ -2103,6 +2104,7 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
   const [credits, setCredits]       = React.useState(c.credits ?? 0);
   const [cStatus, setCStatus]       = React.useState(c.client_status ?? 'online');
   const [subDue, setSubDue]         = React.useState(c.subscription_due ?? '');
+  const [payUrl, setPayUrl]         = React.useState(c.billing_url ?? '');
   const [tz, setTz]                 = React.useState(c.timezone ?? 'Europe/London');
   const [resetEmail, setResetEmail] = React.useState(c.email ?? '');
   const [saving, setSaving]         = React.useState(false);
@@ -2116,11 +2118,11 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
     const details = { name: name.trim() || c.name, email: email.trim(), date_of_birth: dob || null };
     if (isManaged) {
       let { error } = await supabase.from('managed_clients')
-        .update({ ...details, credits, client_status: cStatus }).eq('id', c.id);
+        .update({ ...details, credits, client_status: cStatus, billing_url: safeUrl(payUrl) }).eq('id', c.id);
       // Fallback if migration 044 (managed dob) isn't applied yet.
-      if (error) { const { date_of_birth, ...rest } = details; await supabase.from('managed_clients').update({ ...rest, credits, client_status: cStatus }).eq('id', c.id); }
+      if (error) { const { date_of_birth, ...rest } = details; await supabase.from('managed_clients').update({ ...rest, credits, client_status: cStatus, billing_url: safeUrl(payUrl) }).eq('id', c.id); }
     } else {
-      await supabase.from('profiles').update({ ...details, credits, client_status: cStatus, subscription_due: subDue || null, timezone: tz }).eq('id', c.id);
+      await supabase.from('profiles').update({ ...details, credits, client_status: cStatus, subscription_due: subDue || null, timezone: tz, billing_url: safeUrl(payUrl) }).eq('id', c.id);
     }
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
     onSaved?.();
@@ -2207,6 +2209,14 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
           <FieldLabel label="TIMEZONE">
             <input value={tz} onChange={e => setTz(e.target.value)} placeholder="Europe/London" style={fieldSt}/>
           </FieldLabel>
+          <FieldLabel label="STRIPE PAYMENT LINK">
+            <input value={payUrl} onChange={e => setPayUrl(e.target.value)} placeholder="https://buy.stripe.com/…" style={fieldSt}/>
+          </FieldLabel>
+          <Mono>
+            {payUrl.trim() && !safeUrl(payUrl)
+              ? 'Not a valid https link - no button will be shown to this client.'
+              : 'This client gets a SET UP PAYMENT button for their plan. The MANAGE BILLING button comes from your own portal link in Settings.'}
+          </Mono>
         </div>
       )}
 
