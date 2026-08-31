@@ -9,7 +9,7 @@ import { BodyMap, Progress, SideSlider, Segmented } from './Progress'
 import { WorkedView } from './Body'
 import { InjuryThread } from './InjuryThread'
 import { ExerciseComments } from './ExerciseComments'
-import { safeUrl } from '../lib/billing'
+import { safeUrl, billingStatus, formatAmount } from '../lib/billing'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
 import { injuryTitle } from '../lib/injuries'
 import { notify } from '../lib/notifications'
@@ -2209,6 +2209,31 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
           <FieldLabel label="TIMEZONE">
             <input value={tz} onChange={e => setTz(e.target.value)} placeholder="Europe/London" style={fieldSt}/>
           </FieldLabel>
+          {(() => {
+            // What Stripe says about this client. Read-only on purpose: it is
+            // written by the webhook and by nothing else, so a coach cannot
+            // mark someone paid by editing a field.
+            const st = billingStatus(c);
+            if (!st) return null;
+            const amt = formatAmount(c);
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.12em' }}>STRIPE</span>
+                <span className="mono" style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: st.color,
+                  border: `1px solid color-mix(in srgb, ${st.color} 45%, transparent)`,
+                  background: `color-mix(in srgb, ${st.color} 12%, transparent)`,
+                  borderRadius: 999, padding: '3px 9px',
+                }}>{st.label.toUpperCase()}</span>
+                {amt && <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>{amt}</span>}
+                {c.billing_period_end && (
+                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+                    renews {new Date(c.billing_period_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           <FieldLabel label="STRIPE PAYMENT LINK">
             <input value={payUrl} onChange={e => setPayUrl(e.target.value)} placeholder="https://buy.stripe.com/…" style={fieldSt}/>
           </FieldLabel>

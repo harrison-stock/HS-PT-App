@@ -128,7 +128,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     setLoadingClients(true);
     const [{ data: profiles }, { data: managed }, { data: archived }] = await Promise.all([
       supabase.from('profiles')
-        .select('id, name, email, credits, client_status, subscription_due, timezone, archived, billing_url')
+        .select('id, name, email, credits, client_status, subscription_due, timezone, archived, billing_url, billing_status, billing_period_end, billing_amount, billing_currency')
         .eq('trainer_id', trainerId).eq('role', 'client').eq('archived', false),
       supabase.from('managed_clients')
         .select('id, name, email, credits, client_status, billing_url')
@@ -486,6 +486,10 @@ function shapeClient(p) {
     subscription_due: p.subscription_due || '',
     timezone: p.timezone || 'Europe/London',
     billing_url: p.billing_url || '',
+    billing_status: p.billing_status || null,
+    billing_period_end: p.billing_period_end || null,
+    billing_amount: p.billing_amount ?? null,
+    billing_currency: p.billing_currency || null,
     status: 'active',
     phaseLabel: 'No programme assigned',
     lastSeen: '-',
@@ -653,6 +657,12 @@ function buildDigest(clients) {
       items.push({ id: c.id, sev: 3, tab: 'training', name: c.name, msg: 'no session in the last month - needs a nudge' });
     } else if (c.lastSeenDays >= 7) {
       items.push({ id: c.id, sev: 2, tab: 'training', name: c.name, msg: `hasn’t trained in ${c.lastSeenDays} days` });
+    }
+    // A failed payment outranks everything else here. It is the one item on
+    // this list that costs the coach money for every day it goes unseen, and
+    // unlike adherence it will not fix itself.
+    if (c.billing_status === 'past_due' || c.billing_status === 'unpaid') {
+      items.push({ id: c.id, sev: 4, tab: 'settings', name: c.name, msg: 'payment failed - subscription needs attention' });
     }
     // Low adherence over the 4-week window.
     if (c.compliance != null && c.compliance < 50) {
