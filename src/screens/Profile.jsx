@@ -4,7 +4,7 @@ import { IconSun, IconMoon, IconCheck } from '../components/icons'
 import { InstallPrompt } from './InstallPrompt'
 import { loadConnections, startWearableConnect } from '../lib/health'
 import { enablePush, disablePush, isPushEnabled, pushBlockedReason, sendTestPush } from '../lib/push'
-import { safeUrl, isStripeUrl, loadPortalUrl } from '../lib/billing'
+import { safeUrl, isStripeUrl, loadPortalUrl, billingStatus, renewalDate, formatAmount } from '../lib/billing'
 
 // Half-filled circle = "auto / follow system" appearance.
 const IconAuto = ({ size = 22, sw = 1.6 }) => (
@@ -475,8 +475,10 @@ function ConnectedDevices({ userId }) {
 function SubscriptionTab({ profile }) {
   const credits        = profile?.credits ?? 0;
   const clientStatus   = profile?.client_status || 'online';
-  const subDue         = profile?.subscription_due;
   const payUrl         = safeUrl(profile?.billing_url);
+  const status         = billingStatus(profile);
+  const renewal        = renewalDate(profile);
+  const amount         = formatAmount(profile);
   // The portal is the trainer's, shared by all their clients.
   const [portalUrl, setPortalUrl] = React.useState(null);
   React.useEffect(() => { loadPortalUrl(profile?.trainer_id).then(setPortalUrl); }, [profile?.trainer_id]);
@@ -529,22 +531,40 @@ function SubscriptionTab({ profile }) {
         </div>
       </div>
 
-      {/* Subscription due */}
-      {subDue && (
+      {/* Subscription. The status comes from Stripe and cannot be edited here or
+          anywhere else in the app - it is only ever written by the webhook. */}
+      {renewal.date && (
         <div className="card" style={{ padding: '16px 18px' }}>
-          <div className="label" style={{ marginBottom: 8 }}>// SUBSCRIPTION RENEWAL</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span className="label">// SUBSCRIPTION</span>
+            {status && (
+              <span className="mono" style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: status.color,
+                border: `1px solid color-mix(in srgb, ${status.color} 45%, transparent)`,
+                background: `color-mix(in srgb, ${status.color} 12%, transparent)`,
+                borderRadius: 999, padding: '3px 9px',
+              }}>{status.label.toUpperCase()}</span>
+            )}
+          </div>
           <div className="mono" style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, letterSpacing: '0.06em' }}>
-            {new Date(subDue).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+            {new Date(renewal.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
           </div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 6, letterSpacing: '0.06em' }}>
-            {daysUntil(subDue)}
+            {daysUntil(renewal.date)}{amount ? ` · ${amount}` : ''}
           </div>
+          {status?.tone === 'bad' && (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--c-coral)', marginTop: 8, lineHeight: 1.5 }}>
+              {status.raw === 'past_due'
+                ? 'Your last payment didn\u2019t go through. Update your card under MANAGE BILLING.'
+                : 'There\u2019s a problem with this subscription \u2014 check MANAGE BILLING.'}
+            </div>
+          )}
         </div>
       )}
 
-      {!subDue && (
+      {!renewal.date && (
         <div className="card" style={{ padding: '16px 18px', opacity: 0.5 }}>
-          <div className="label" style={{ marginBottom: 6 }}>// SUBSCRIPTION RENEWAL</div>
+          <div className="label" style={{ marginBottom: 6 }}>// SUBSCRIPTION</div>
           <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.08em' }}>
             No renewal date set
           </div>
