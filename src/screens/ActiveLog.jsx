@@ -924,6 +924,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
         <ExerciseComments
           exerciseId={commentForId} clientId={userId}
           exerciseName={exercises.find(e => e.id === commentForId)?.name}
+          workoutName={dayTitle}
           onClose={() => setCommentForId(null)}
         />
       )}

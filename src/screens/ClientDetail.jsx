@@ -1098,8 +1098,12 @@ function setLine(ex) {
 // meant loading the whole builder and backing out again. The sets are fetched
 // here rather than carried by the calendar query, which would otherwise haul
 // every set of every workout in a four-week view to show two lines of text.
-function WorkoutPreview({ dayId }) {
+function WorkoutPreview({ dayId, clientId, scheduledDate, workoutName }) {
   const [secs, setSecs] = React.useState(null);
+  // Somewhere for the coach to start a thread. Until now the comment sheet
+  // opened from a notification and nowhere else, so a coach could answer a
+  // client's question about an exercise but never raise one.
+  const [commentOn, setCommentOn] = React.useState(null);
 
   React.useEffect(() => {
     if (!dayId) { setSecs([]); return; }
@@ -1127,14 +1131,24 @@ function WorkoutPreview({ dayId }) {
           </div>
           <div style={{ display: 'grid', gap: 4 }}>
             {sec.exs.map(ex => (
-              <div key={ex.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '6px 8px', background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 7 }}>
+              <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 7 }}>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</span>
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.04em', flexShrink: 0 }}>{setLine(ex)}</span>
+                {clientId && (
+                  <button onClick={() => setCommentOn(ex)} aria-label={`Comment on ${ex.name}`} title="Comment on this exercise"
+                    style={{ all: 'unset', cursor: 'pointer', flexShrink: 0, padding: '2px 5px', borderRadius: 5, color: 'var(--text-3)', fontSize: 12, lineHeight: 1 }}>💬</button>
+                )}
               </div>
             ))}
           </div>
         </div>
       ))}
+      {commentOn && (
+        <ExerciseComments
+          exerciseId={commentOn.id} clientId={clientId} exerciseName={commentOn.name}
+          scheduledDate={scheduledDate} workoutName={workoutName}
+          onClose={() => setCommentOn(null)} />
+      )}
     </div>
   );
 }
@@ -1204,7 +1218,8 @@ function EditWorkout({ w, clientId, clientName = '', programmes, trainerId, onCl
         <div className="mono" style={{ fontSize: 9, color: done ? 'var(--accent)' : 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 6 }}>
           {(phase?.name || 'WORKOUT').toUpperCase()}{done ? ' · ✓ COMPLETED' : ''}
         </div>
-        <WorkoutPreview dayId={day?.id} />
+        <WorkoutPreview dayId={day?.id} clientId={clientId}
+          scheduledDate={w.scheduled_date} workoutName={workoutName(day, phase)} />
       </div>
 
       {done && (
