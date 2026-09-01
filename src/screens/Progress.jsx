@@ -850,6 +850,30 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
   const gid = 'mc' + uid.replace(/[:]/g, '');
   const hp = hover != null ? pts[hover] : null;
 
+  // Keep the readout inside the card.
+  //
+  // It used to clamp the anchor - clamp(4%, x, 82%) - and then shift the box
+  // left by half its own width, so the clamp protected a point that wasn't the
+  // edge. On the leftmost session of a chart the box started about a hundred
+  // pixels outside the card and the date, the weight and half the set list were
+  // simply cut off. A tooltip you can't read is worse than no tooltip.
+  //
+  // So the box is measured and its own edges are clamped, and it flips below
+  // the point when there isn't room above. Measuring is the only honest way:
+  // the width depends on how long the set list is, which is not knowable in CSS.
+  const tipRef = React.useRef(null);
+  const [tip, setTip] = React.useState(null);
+  React.useLayoutEffect(() => {
+    if (!hp || !tipRef.current) { setTip(null); return; }
+    const M = 8; // breathing room from the card edge
+    const { offsetWidth: tw, offsetHeight: th } = tipRef.current;
+    const half = tw / 2;
+    // A box wider than the space available can't be centred anywhere useful;
+    // pin it to the left margin rather than letting the clamp invert.
+    const left = tw + M * 2 >= W ? half + M : Math.min(Math.max(hp.x, half + M), W - half - M);
+    setTip({ left, above: hp.y - th - 12 >= 0 });
+  }, [hover, hp?.x, hp?.y, W, H]);
+
   return (
     <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block', overflow: 'visible' }}
@@ -897,15 +921,21 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
         ))}
       </svg>
       {hp && (
-        <div style={{
+        <div ref={tipRef} style={{
           position: 'absolute', top: `${(hp.y / H) * 100}%`,
-          left: `clamp(4%, ${(hp.x / W) * 100}%, 82%)`, transform: 'translate(-50%, calc(-100% - 12px))',
+          left: tip ? `${tip.left}px` : `${hp.x}px`,
+          transform: `translate(-50%, ${tip && !tip.above ? '12px' : 'calc(-100% - 12px)'})`,
+          // Never wider than the card it sits in, whatever the set list says.
+          maxWidth: 'calc(100% - 16px)', boxSizing: 'border-box',
+          // Hidden for the single frame between mounting and being measured,
+          // so it is never seen in the wrong place.
+          visibility: tip ? 'visible' : 'hidden',
           background: 'var(--bg-3)', border: `1px solid color-mix(in srgb, ${color} 55%, transparent)`,
           borderRadius: 9, padding: '7px 11px', pointerEvents: 'none', boxShadow: '0 8px 22px rgba(0,0,0,0.45)', whiteSpace: 'nowrap', zIndex: 3,
         }}>
           <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.08em' }}>{fmtMetricDate(hp.date)}</div>
           <div className="h-bold" style={{ fontSize: 16, color, lineHeight: 1.15, marginTop: 2 }}>{fmtTickVal(hp.v)}<span style={{ fontSize: 9, marginLeft: 3, color: 'var(--text-2)' }}>{unit}</span></div>
-          {hp.label && <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-2)', letterSpacing: '0.04em', marginTop: 3, maxWidth: 200, whiteSpace: 'normal' }}>{hp.label}</div>}
+          {hp.label && <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-2)', letterSpacing: '0.04em', marginTop: 3, maxWidth: 200, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{hp.label}</div>}
         </div>
       )}
     </div>
