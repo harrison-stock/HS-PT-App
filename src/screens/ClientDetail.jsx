@@ -10,6 +10,7 @@ import { WorkedView } from './Body'
 import { InjuryThread } from './InjuryThread'
 import { ExerciseComments } from './ExerciseComments'
 import { safeUrl, billingStatus, formatAmount } from '../lib/billing'
+import { Overlay } from '../components/Overlay'
 import { MUSCLE_BODY, REGION_LABELS } from '../data/musclePaths'
 import { injuryTitle } from '../lib/injuries'
 import { notify } from '../lib/notifications'
@@ -17,7 +18,8 @@ import { loadForms } from '../lib/forms'
 import { IconPlus, IconCheck, IconX2, IconChevronRight } from '../components/icons'
 import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
-import { materialiseDay, materialiseDays, staleAssignments, refreshCopy } from '../lib/programmeCopy'
+import { materialiseDay, materialiseDays, staleAssignments, refreshCopy, repeatDayOnce } from '../lib/programmeCopy'
+import { exportClient } from '../lib/exportClient'
 import { ImportHistory } from './ImportHistory'
 import { FormArchive } from './FormArchive'
 import { toast } from '../lib/toast'
@@ -720,6 +722,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
   const [editing, setEditing] = React.useState(null);
   const [builderProg, setBuilderProg] = React.useState(null);
   const [moving, setMoving] = React.useState(null); // a workout being drag-moved (id)
+  const [repeatOn, setRepeatOn] = React.useState(null); // a date to copy an old workout onto
 
   const loadWorkouts = React.useCallback(() => {
     const start = new Date(anchor);
@@ -860,7 +863,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
         <div style={{ display: 'grid', gap: 10 }}>
           {Array.from({ length: shownWeeks }, (_, wk) => (
             <CalendarWeek key={wk} vertical start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()}
-              wMap={wMap} onSelect={setEditing} onDelete={deleteWorkout} />
+              wMap={wMap} onSelect={setEditing} onDelete={deleteWorkout} onAdd={setRepeatOn} />
           ))}
         </div>
       ) : (
@@ -868,7 +871,7 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
           <div style={{ minWidth: 760, display: 'grid', gap: 10 }}>
             {Array.from({ length: shownWeeks }, (_, wk) => (
               <CalendarWeek key={wk} start={(() => { const d = new Date(anchor); d.setDate(d.getDate() + wk * 7); return d; })()}
-                wMap={wMap} onSelect={setEditing} onMove={moveWorkout} onDelete={deleteWorkout}
+                wMap={wMap} onSelect={setEditing} onMove={moveWorkout} onDelete={deleteWorkout} onAdd={setRepeatOn}
                 moving={moving} setMoving={setMoving} />
             ))}
           </div>
@@ -880,11 +883,149 @@ function TrainingTab({ c, trainerId, programmes, onChanged, initialDayId }) {
           onClose={() => setShowImport(false)}
           onImported={() => { loadWorkouts(); onChanged?.(); }} />
       )}
+
+      {repeatOn && (
+        <RepeatWorkout clientId={c.id} date={repeatOn}
+          onClose={() => setRepeatOn(null)}
+          onDone={() => { setRepeatOn(null); loadWorkouts(); onChanged?.(); }} />
+      )}
     </div>
   );
 }
 
-function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, moving, setMoving, vertical = false }) {
+// Repeat a workout the client has already had, onto one more date.
+//
+// The list is their own history, newest first and one row per workout however
+// many times it has been scheduled - a coach thinking "do last Tuesday again"
+// is thinking of the session, not of its dates.
+//
+// What lands is a fresh copy, not another pointer at the same one. Editing
+// Thursday's version must not rewrite the Tuesday it came from, which is
+// exactly the trap the assignment model was rebuilt to avoid.
+function RepeatWorkout({ clientId, date, onClose, onDone }) {
+  const [days, setDays] = React.useState(null);
+  const [busy, setBusy] = React.useState(null);
+  const [err, setErr] = React.useState('');
+
+  React.useEffect(() => {
+    let off = false;
+    supabase.from('client_workouts')
+      .select('scheduled_date, programme_days(id, title, owner_client_id, day_of_week, programme_phases(name), workout_sections(kind, section_exercises(id, name, sort_order)))')
+      .eq('client_id', clientId)
+      .order('scheduled_date', { ascending: false })
+      .limit(60)
+      .then(({ data }) => {
+        if (off) return;
+        const seen = new Set();
+        const rows = [];
+        for (const w of (data || [])) {
+          const d = w.programme_days;
+          if (!d || seen.has(d.id)) continue;
+          seen.add(d.id);
+          const exs = (d.workout_sections || [])
+            .flatMap(sec => sec.section_exercises || [])
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+          rows.push({
+            id: d.id,
+            title: workoutName(d, d.programme_phases),
+            lastOn: w.scheduled_date,
+            count: exs.length,
+            preview: exs.slice(0, 3).map(e => e.name).filter(Boolean).join(' · '),
+          });
+        }
+        setDays(rows);
+      });
+    return () => { off = true; };
+  }, [clientId]);
+
+  const pick = async (day) => {
+    if (busy) return;
+    setBusy(day.id); setErr('');
+    const r = await repeatDayOnce(day.id, clientId);
+    if (r.error) { setErr(r.error.message || 'Could not copy that workout'); setBusy(null); return; }
+    const { error } = await supabase.from('client_workouts')
+      .insert({ client_id: clientId, day_id: r.id, scheduled_date: date, status: 'scheduled' });
+    setBusy(null);
+    if (error) { setErr(error.message || 'Copied, but could not put it on the calendar'); return; }
+    toast(r.partial ? 'Copied, but some exercises are missing' : 'Workout copied');
+    onDone();
+  };
+
+  const when = new Date(date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  return (
+    <Overlay onClick={onClose} zIndex={210} style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', justifyContent: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{
+        background: 'var(--bg-1)', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        border: '1px solid var(--line-strong)', borderBottom: 0,
+        maxHeight: '82%', display: 'flex', flexDirection: 'column',
+        animation: 'sheetUp .28s cubic-bezier(.22,.61,.36,1)',
+      }}>
+        <div style={{ padding: '12px 16px 10px', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 4, background: 'var(--line-strong)', borderRadius: 2, margin: '0 auto 12px' }} />
+          <div className="label">// REPEAT A WORKOUT</div>
+          <div className="h-bold" style={{ fontSize: 15, marginTop: 4 }}>{when.toUpperCase()}</div>
+          <Mono style={{ marginTop: 6 }}>
+            A copy of its own - editing it here won't touch the day it came from.
+          </Mono>
+          {err && <div className="mono" style={{ fontSize: 10, color: 'var(--c-coral)', marginTop: 8 }}>{err}</div>}
+        </div>
+        <div className="scroller" style={{ height: 'auto', flex: 1, overflowY: 'auto', padding: '0 16px 28px', minHeight: 0 }}>
+          {days === null && <Mono>Loading…</Mono>}
+          {days && days.length === 0 && <Mono>Nothing to repeat yet - this client has no workouts on their calendar.</Mono>}
+          <div style={{ display: 'grid', gap: 6 }}>
+            {(days || []).map(d => (
+              <button key={d.id} onClick={() => pick(d)} disabled={!!busy} style={{
+                all: 'unset', cursor: busy ? 'default' : 'pointer', boxSizing: 'border-box',
+                padding: '10px 12px', background: 'var(--bg-2)',
+                border: `1px solid ${busy === d.id ? 'var(--accent)' : 'var(--line)'}`,
+                borderRadius: 10, opacity: busy && busy !== d.id ? 0.45 : 1,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</span>
+                  <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)', flexShrink: 0 }}>
+                    {busy === d.id ? 'COPYING…' : `${d.count} EX`}
+                  </span>
+                </div>
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-3)', letterSpacing: '0.04em', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {new Date(d.lastOn).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase()}
+                  {d.preview ? ` · ${d.preview}` : ''}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+// The way onto an empty Thursday.
+//
+// A month at a glance is mostly rest days, so this had to stay a slot rather
+// than become a button: faint outline, faint label, and it only steps forward
+// under the cursor. Loud enough to find, quiet enough that four weeks of them
+// still read as an empty calendar.
+function AddOnDay({ empty, onClick }) {
+  const [hot, setHot] = React.useState(false);
+  return (
+    <button onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onMouseEnter={() => setHot(true)} onMouseLeave={() => setHot(false)}
+      onFocus={() => setHot(true)} onBlur={() => setHot(false)}
+      aria-label="Repeat a workout on this day"
+      className="mono" style={{
+        all: 'unset', cursor: 'pointer', boxSizing: 'border-box', width: '100%',
+        textAlign: 'center', padding: '6px 0', borderRadius: 7,
+        border: `1px dashed ${hot ? 'var(--accent)' : 'var(--line)'}`,
+        color: hot ? 'var(--accent)' : 'var(--text-3)',
+        fontSize: 8.5, letterSpacing: '0.1em', fontWeight: 700,
+        opacity: hot ? 1 : (empty ? 0.45 : 0.22),
+        transition: 'opacity .12s, border-color .12s, color .12s',
+      }}>+ REPEAT</button>
+  );
+}
+
+function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, onAdd, moving, setMoving, vertical = false }) {
   const today = ymd(new Date());
   const [dragOver, setDragOver] = React.useState(null);
   const DOW = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -912,9 +1053,11 @@ function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, moving, setMovi
                 <div style={{ fontSize: 8, letterSpacing: '0.06em' }}>{MONTHS[d.getMonth()]}</div>
               </div>
               <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
-                {ws.length === 0
-                  ? <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', alignSelf: 'center', padding: '4px 2px' }}>REST DAY</div>
-                  : ws.map(w => <WorkoutCell key={w.id} w={w} onClick={() => onSelect(w)} onDelete={onDelete ? () => onDelete(w.id) : undefined} />)}
+                {ws.length === 0 && !onAdd && (
+                  <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', alignSelf: 'center', padding: '4px 2px' }}>REST DAY</div>
+                )}
+                {ws.map(w => <WorkoutCell key={w.id} w={w} onClick={() => onSelect(w)} onDelete={onDelete ? () => onDelete(w.id) : undefined} />)}
+                {onAdd && <AddOnDay empty={ws.length === 0} onClick={() => onAdd(ds)} />}
               </div>
             </div>
           );
@@ -978,6 +1121,7 @@ function CalendarWeek({ start, wMap, onSelect, onMove, onDelete, moving, setMovi
                 {ws.map(w => <WorkoutCell key={w.id} w={w} onClick={() => onSelect(w)}
                   onDelete={onDelete ? () => onDelete(w.id) : undefined}
                   onDragStart={() => setMoving({ id: w.id, date: ds })} onDragEnd={() => setMoving(null)} />)}
+                {onAdd && <AddOnDay empty={ws.length === 0} onClick={() => onAdd(ds)} />}
               </div>
             </div>
           );
@@ -2268,6 +2412,9 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
         {isManaged && <Mono>Sends only once the client has created their account.</Mono>}
       </div>
 
+      {/* Export */}
+      <ExportCard c={c} />
+
       {/* Archive */}
       <button onClick={archiveClient} style={{
         all: 'unset', cursor: 'pointer', padding: '13px', borderRadius: 10, textAlign: 'center',
@@ -2278,6 +2425,53 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
       }}>
         {archiveConfirm ? 'CONFIRM ARCHIVE - TAP AGAIN' : 'ARCHIVE CLIENT'}
       </button>
+    </div>
+  );
+}
+
+// Take your data with you.
+//
+// Nothing here is locked in. One button gives you the whole record as JSON -
+// programmes, every logged set, check-ins, metrics, injuries, photo records -
+// and the other gives you the training log as a spreadsheet. It reads through
+// the ordinary client, so it can only ever hand back what this account is
+// already allowed to see.
+function ExportCard({ c }) {
+  const [busy, setBusy] = React.useState(null);
+  const [note, setNote] = React.useState(null);
+
+  const run = async (format) => {
+    if (busy) return;
+    setBusy(format); setNote(null);
+    try {
+      const res = await exportClient(c.id, c.name, format);
+      if (res?.error) setNote(res.error);
+      else if (format === 'csv') setNote(`${res.count} logged sets downloaded.`);
+      else setNote(res?.warnings?.length ? `Downloaded, but some tables were unreadable: ${res.warnings.join('; ')}` : 'Downloaded.');
+    } catch (e) {
+      setNote(e?.message || 'Export failed.');
+    }
+    setBusy(null);
+    setTimeout(() => setNote(null), 8000);
+  };
+
+  const btn = (format, label) => (
+    <button onClick={() => run(format)} disabled={!!busy} style={{
+      all: 'unset', cursor: busy ? 'default' : 'pointer', padding: '11px', borderRadius: 10,
+      background: 'var(--bg-3)', border: '1px solid var(--line-strong)', color: 'var(--text)',
+      fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+      textAlign: 'center', opacity: busy && busy !== format ? 0.45 : 1,
+    }}>{busy === format ? 'GATHERING…' : label}</button>
+  );
+
+  return (
+    <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>
+      <div className="label">// EXPORT DATA</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {btn('json', 'FULL RECORD')}
+        {btn('csv', 'TRAINING LOG')}
+      </div>
+      <Mono>{note || 'FULL RECORD is everything as JSON. TRAINING LOG is one row per set, for a spreadsheet.'}</Mono>
     </div>
   );
 }
