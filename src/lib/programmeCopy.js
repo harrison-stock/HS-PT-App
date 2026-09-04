@@ -322,6 +322,49 @@ export async function materialiseDay(sourceDayId, clientId) {
   return { id: dayRow.id };
 }
 
+/**
+ * Copy a workout onto one more date, as a workout of its own.
+ *
+ * Deliberately not materialiseDay. That one reuses the copy a client already
+ * has, because assigning the same template twice is the same workout appearing
+ * twice in their plan - edit it and both dates should change. This is the
+ * opposite need: repeating last Tuesday's session on Thursday and then changing
+ * it for Thursday only. So it always writes a fresh row, and the two dates go
+ * their separate ways from the moment it lands.
+ *
+ * The source can be anything - a template day or another client's-own copy -
+ * because the new row is built from its contents rather than its identity.
+ * origin_day_id points at whatever the source itself came from, so a repeat of
+ * a programme day still traces back to that programme, and a repeat of a
+ * one-off traces back to nothing, which is the truth in both cases.
+ */
+export async function repeatDayOnce(sourceDayId, clientId, { title } = {}) {
+  if (!sourceDayId || !clientId) return { error: { message: 'Missing day or client' } };
+
+  const { data: src, error } = await supabase
+    .from('programme_days').select(DAY_SELECT).eq('id', sourceDayId).maybeSingle();
+  if (error || !src) return { error: error || { message: 'Could not read that workout' } };
+
+  const { data: dayRow, error: insErr } = await supabase.from('programme_days').insert({
+    phase_id: null, week_index: src.week_index, day_of_week: src.day_of_week,
+    intro: src.intro || '', notes: src.notes || '',
+    title: title ?? src.title ?? null, image_url: src.image_url ?? null,
+    owner_client_id: clientId,
+    origin_day_id: src.owner_client_id ? (src.origin_day_id ?? null) : src.id,
+    copied_at: new Date().toISOString(),
+  }).select('id').single();
+  if (insErr || !dayRow) return { error: insErr || { message: 'Could not create the workout' } };
+
+  try {
+    await writeContentInto(src, dayRow.id);
+  } catch (e) {
+    // The day exists but is short of its exercises. Say so rather than
+    // reporting success and leaving an empty workout on someone's calendar.
+    return { id: dayRow.id, partial: e.message };
+  }
+  return { id: dayRow.id };
+}
+
 /** Materialise several days for one client, in order. */
 export async function materialiseDays(sourceDayIds, clientId) {
   const map = new Map();
