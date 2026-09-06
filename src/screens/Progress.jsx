@@ -4,7 +4,7 @@ import { loadMuscleVolume, muscleGroupsFor } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { loadPhotoHistory, uploadProgressPhoto, deleteProgressPhoto } from '../lib/progressPhotos'
 import { toast } from '../lib/toast'
-import { loadHealthDaily } from '../lib/health'
+import { loadHealthDaily, saveManualSteps, stepSummary, todayISO } from '../lib/health'
 import { ZoomPan } from '../components/ZoomPan'
 import { MUSCLE_LABELS } from '../data/index'
 import { MUSCLE_BODY } from '../data/musclePaths'
@@ -155,17 +155,46 @@ export function Progress({ go, userId, embedded }) {
 
 }
 
-// Steps + resting HR from connected wearables. Renders nothing if no data yet.
+// Steps against a target, however the number got here.
+//
+// This used to render nothing at all until a wearable had reported, which meant
+// the clients who most need to be thinking about their daily activity - the
+// ones without a Garmin - never saw the subject mentioned. Now the card is
+// always here, the number can be typed, and if there is a target it says
+// plainly whether today has met it.
 function HealthActivityCard({ userId }) {
   const [data, setData] = React.useState(null);
-  React.useEffect(() => { if (userId) loadHealthDaily(userId, 14).then(setData); }, [userId]);
-  if (!data || data.length === 0) return null;
+  const [goal, setGoal] = React.useState(null);
+  const [entry, setEntry] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const [open, setOpen] = React.useState(false);
 
-  const desc = [...data].reverse();
-  const stepsRows = data.filter(d => d.steps != null);
-  const lastSteps = desc.find(d => d.steps != null)?.steps ?? null;
-  const avgSteps = stepsRows.length ? Math.round(stepsRows.reduce((n, d) => n + d.steps, 0) / stepsRows.length) : null;
-  const lastHr = desc.find(d => d.resting_hr != null)?.resting_hr ?? null;
+  const reload = React.useCallback(() => {
+    if (!userId) return;
+    loadHealthDaily(userId, 21).then(setData);
+  }, [userId]);
+
+  React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => {
+    if (!userId) return;
+    supabase.from('profiles').select('daily_step_goal').eq('id', userId).maybeSingle()
+      .then(({ data }) => setGoal(data?.daily_step_goal ?? null));
+  }, [userId]);
+
+  const s = React.useMemo(() => stepSummary(data || [], goal || 0), [data, goal]);
+  const hasAny = (data || []).some(d => d.steps != null || d.resting_hr != null);
+
+  const save = async () => {
+    if (busy) return;
+    setBusy(true); setErr('');
+    const { error } = await saveManualSteps(userId, todayISO(), entry.trim() === '' ? null : entry);
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setEntry(''); setOpen(false); reload();
+  };
+
+  const pct = goal > 0 && s.today != null ? Math.min(100, Math.round((s.today / goal) * 100)) : null;
 
   const Stat = ({ label, value, unit, sub }) => (
     <div style={{ flex: 1, textAlign: 'center' }}>
@@ -179,17 +208,77 @@ function HealthActivityCard({ userId }) {
 
   return (
     <div className="card" style={{ padding: 14, marginBottom: 14 }}>
-      <div className="label" style={{ marginBottom: 10 }}>// ACTIVITY · WEARABLE</div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Stat label="STEPS TODAY" value={lastSteps} />
-        <div style={{ width: 1, background: 'var(--line)' }}/>
-        <Stat label="AVG STEPS" value={avgSteps} sub="14 DAYS" />
-        <div style={{ width: 1, background: 'var(--line)' }}/>
-        <Stat label="RESTING HR" value={lastHr} unit="bpm" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div className="label" style={{ flex: 1 }}>// ACTIVITY</div>
+        <button onClick={() => { setOpen(o => !o); setErr(''); }} className="mono" style={{
+          all: 'unset', cursor: 'pointer', fontSize: 8.5, letterSpacing: '0.1em', fontWeight: 700,
+          color: open ? 'var(--text-3)' : 'var(--accent)', padding: '3px 8px', borderRadius: 6,
+          border: `1px solid ${open ? 'var(--line)' : 'color-mix(in srgb, var(--accent) 50%, transparent)'}`,
+        }}>{open ? 'CANCEL' : "+ TODAY'S STEPS"}</button>
       </div>
+
+      {open && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <input value={entry} onChange={e => setEntry(e.target.value.replace(/[^0-9]/g, ''))}
+            inputMode="numeric" placeholder="e.g. 8400" autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') save(); }}
+            style={{ flex: 1, boxSizing: 'border-box', background: 'var(--bg-1)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: '9px 11px', color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 13, outline: 'none' }}/>
+          <button onClick={save} disabled={busy} className="btn-primary" style={{ padding: '9px 14px', fontSize: 10 }}>
+            {busy ? '…' : 'SAVE'}
+          </button>
+        </div>
+      )}
+      {err && <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-coral)', marginBottom: 10 }}>{err}</div>}
+
+      {goal > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 5 }}>
+            <span className="h-bold" style={{ fontSize: 22, lineHeight: 1, color: s.hitToday ? 'var(--accent)' : 'var(--text)' }}>
+              {s.today == null ? '-' : s.today.toLocaleString()}
+            </span>
+            <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)' }}>/ {goal.toLocaleString()} TODAY</span>
+            {s.streak > 0 && (
+              <span className="mono" style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--c-amber)', fontWeight: 700 }}>
+                {s.streak} DAY{s.streak === 1 ? '' : 'S'} ON TARGET
+              </span>
+            )}
+          </div>
+          <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct ?? 0}%`, borderRadius: 3, background: s.hitToday ? 'var(--accent)' : 'var(--c-amber)', transition: 'width .3s' }}/>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        {/* With a target on screen above, repeating today's count here would
+            waste the slot. How many of the week hit it is the better number. */}
+        {goal > 0
+          ? <Stat label="ON TARGET" value={s.onTarget} sub="OF LAST 7 DAYS" />
+          : <Stat label="STEPS TODAY" value={s.today}
+              sub={s.latest && s.latest.day !== todayISO() ? `LAST: ${fmtDay(s.latest.day)}` : undefined} />}
+        <div style={{ width: 1, background: 'var(--line)' }}/>
+        <Stat label="AVG STEPS" value={s.week} sub={s.weekDays ? `${s.weekDays} DAY${s.weekDays === 1 ? '' : 'S'} LOGGED` : 'LAST 7 DAYS'} />
+        <div style={{ width: 1, background: 'var(--line)' }}/>
+        <Stat label="RESTING HR" value={[...(data || [])].reverse().find(d => d.resting_hr != null)?.resting_hr ?? null} unit="bpm" />
+      </div>
+
+      {!hasAny && (
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', lineHeight: 1.6, marginTop: 12 }}>
+          Nothing logged yet. Type today's steps above, or connect a watch under
+          Profile to have them arrive on their own.
+        </div>
+      )}
     </div>
   );
 }
+
+const fmtDay = (iso) => {
+  const t = todayISO();
+  if (iso === t) return 'TODAY';
+  const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (iso === y) return 'YESTERDAY';
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase();
+};
 
 function TabPill({ active, onClick, icon, label }) {
   return (

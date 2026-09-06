@@ -8,6 +8,12 @@ stores it, and the two routes in this folder do the sending.
   other person's phone as well as their notifications list.
 - `GET /api/reminders` — run daily by Vercel Cron. Pushes clients about check-ins
   and tasks that are due or overdue.
+- `GET /api/steps-check` — run weekly by Vercel Cron. Pushes **the coach** when a
+  client's step count has fallen off week on week. Deliberately coach-facing: a
+  drop is a conversation, and only the coach knows whether the answer is a new
+  job, an injury or losing interest. Thresholds live at the top of the file — a
+  30% fall, from a baseline of at least 4,000, with at least 4 days logged in
+  each week, and no more than one alert per client per week.
 - `api/_push.js` — shared sending code. The leading underscore keeps Vercel from
   exposing it as a route; it holds the keys and must never be reachable.
 
