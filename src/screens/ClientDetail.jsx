@@ -20,6 +20,7 @@ import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { materialiseDay, materialiseDays, staleAssignments, refreshCopy, repeatDayOnce } from '../lib/programmeCopy'
 import { exportClient } from '../lib/exportClient'
+import { stepSummary, mergeDaily } from '../lib/health'
 import { ImportHistory } from './ImportHistory'
 import { FormArchive } from './FormArchive'
 import { toast } from '../lib/toast'
@@ -353,7 +354,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
   React.useEffect(() => {
     let alive = true;
     (async () => {
-      const [sessions, injuries, metrics, wins, goal, notes, photos] = await Promise.all([
+      const [sessions, injuries, metrics, wins, goal, notes, photos, health] = await Promise.all([
         supabase.from('workout_sessions').select('id, started_at, completed_at')
           .eq('client_id', c.id).order('started_at', { ascending: false }).limit(8),
         supabase.from('client_injuries').select('id, muscle_group, laterality, severity').eq('client_id', c.id).is('resolved_at', null),
@@ -371,6 +372,8 @@ function OverviewTab({ c, go, onClose, onTab }) {
           : supabase.from(table).select('coach_notes, medical_notes').eq('id', c.id).maybeSingle(),
         supabase.from('progress_photos').select('taken_on', { count: 'exact' }).eq('client_id', c.id)
           .order('taken_on', { ascending: false }).limit(1),
+        supabase.from('health_daily').select('day, source, steps').eq('client_id', c.id)
+          .gte('day', ago(21)).order('day', { ascending: true }),
       ]);
       if (!alive) return;
       setD({
@@ -383,6 +386,7 @@ function OverviewTab({ c, go, onClose, onTab }) {
         medicalNotes: notes.data?.medical_notes || '',
         photoCount: photos.count || 0,
         lastPhoto: photos.data?.[0]?.taken_on || null,
+        health: mergeDaily(health.data || []),
       });
     })();
     return () => { alive = false; };
@@ -414,6 +418,13 @@ function OverviewTab({ c, go, onClose, onTab }) {
   const bodyfats = (d?.metrics || []).map(m => m.body_fat_pct).filter(v => v != null).map(Number);
   const latestW = weights.length ? weights[weights.length - 1] : null;
   const wDelta  = weights.length >= 2 ? +(weights[weights.length - 1] - weights[0]).toFixed(1) : null;
+
+  // ── Steps ──
+  // A weekly average on its own is not information: 8,400 is good or bad
+  // entirely depending on what last week was. So the card carries both, and
+  // the change between them is the part worth reading.
+  const stepGoal = c.daily_step_goal || 0;
+  const steps = React.useMemo(() => stepSummary(d?.health || [], stepGoal), [d, stepGoal]);
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -511,6 +522,31 @@ function OverviewTab({ c, go, onClose, onTab }) {
                     <MetricMini label="ENTRIES" value={bodyfats.length} />
                   </div>
                 </>}
+              </div>
+              <div style={{ paddingTop: 10, borderTop: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                  <Mono>STEPS · 7-DAY AVG</Mono>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    {steps.change != null && (
+                      <span className="mono" style={{ fontSize: 10, color: steps.change < -15 ? 'var(--c-coral)' : steps.change < 0 ? 'var(--c-amber)' : 'var(--accent)' }}>
+                        {steps.change > 0 ? '▲' : '▼'} {Math.abs(steps.change)}%
+                      </span>
+                    )}
+                    <div className="h-bold" style={{ fontSize: 16 }}>
+                      {steps.week != null
+                        ? steps.week.toLocaleString()
+                        : <span style={{ color: 'var(--text-3)', fontSize: 11 }}>No data</span>}
+                    </div>
+                  </div>
+                </div>
+                {steps.week != null && (
+                  <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
+                    <MetricMini label="TARGET" value={stepGoal ? stepGoal.toLocaleString() : 'NONE'} />
+                    <MetricMini label="WEEK BEFORE" value={steps.prior != null ? steps.prior.toLocaleString() : '-'} />
+                    <MetricMini label="DAYS LOGGED" value={`${steps.weekDays}/7`} />
+                    {stepGoal > 0 && <MetricMini label="STREAK" value={steps.streak} />}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2249,6 +2285,7 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
   const [cStatus, setCStatus]       = React.useState(c.client_status ?? 'online');
   const [subDue, setSubDue]         = React.useState(c.subscription_due ?? '');
   const [payUrl, setPayUrl]         = React.useState(c.billing_url ?? '');
+  const [stepGoal, setStepGoal]     = React.useState(c.daily_step_goal == null ? '' : String(c.daily_step_goal));
   const [tz, setTz]                 = React.useState(c.timezone ?? 'Europe/London');
   const [resetEmail, setResetEmail] = React.useState(c.email ?? '');
   const [saving, setSaving]         = React.useState(false);
@@ -2256,17 +2293,21 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
   const [resetSent, setResetSent]   = React.useState(false);
   const [archiveConfirm, setArchiveConfirm] = React.useState(false);
 
+  // Blank clears the target rather than storing a zero: no target and a target
+  // of nought are different instructions, and only one of them is meant.
+  const goalValue = stepGoal.trim() === '' ? null : Math.max(0, Math.min(100000, parseInt(stepGoal, 10) || 0)) || null;
+
   const saveSettings = async () => {
     if (saving) return;
     setSaving(true);
     const details = { name: name.trim() || c.name, email: email.trim(), date_of_birth: dob || null };
     if (isManaged) {
-      let { error } = await supabase.from('managed_clients')
-        .update({ ...details, credits, client_status: cStatus, billing_url: safeUrl(payUrl) }).eq('id', c.id);
+      const extra = { credits, client_status: cStatus, billing_url: safeUrl(payUrl), daily_step_goal: goalValue };
+      let { error } = await supabase.from('managed_clients').update({ ...details, ...extra }).eq('id', c.id);
       // Fallback if migration 044 (managed dob) isn't applied yet.
-      if (error) { const { date_of_birth, ...rest } = details; await supabase.from('managed_clients').update({ ...rest, credits, client_status: cStatus, billing_url: safeUrl(payUrl) }).eq('id', c.id); }
+      if (error) { const { date_of_birth, ...rest } = details; await supabase.from('managed_clients').update({ ...rest, ...extra }).eq('id', c.id); }
     } else {
-      await supabase.from('profiles').update({ ...details, credits, client_status: cStatus, subscription_due: subDue || null, timezone: tz, billing_url: safeUrl(payUrl) }).eq('id', c.id);
+      await supabase.from('profiles').update({ ...details, credits, client_status: cStatus, subscription_due: subDue || null, timezone: tz, billing_url: safeUrl(payUrl), daily_step_goal: goalValue }).eq('id', c.id);
     }
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
     onSaved?.();
@@ -2342,6 +2383,20 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
             }}>{opt.label}</button>
           ))}
         </div>
+      </div>
+
+      {/* Daily step target */}
+      <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>
+        <div className="label">// DAILY STEP TARGET</div>
+        <FieldLabel label="STEPS PER DAY">
+          <input value={stepGoal} onChange={e => setStepGoal(e.target.value.replace(/[^0-9]/g, ''))}
+            inputMode="numeric" placeholder="e.g. 8000" style={fieldSt}/>
+        </FieldLabel>
+        <Mono>
+          {goalValue
+            ? `They see ${goalValue.toLocaleString()} as today's target on their Progress screen, with a streak once they start hitting it.`
+            : 'No target set. Leave blank if steps are not part of this client\u2019s plan.'}
+        </Mono>
       </div>
 
       {/* Subscription + timezone */}
