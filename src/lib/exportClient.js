@@ -54,7 +54,7 @@ export async function gatherClientData(clientId) {
     return error ? { table, error: error.message, rows: null } : { table, rows: data ?? null };
   };
 
-  const [profile, managed, workouts, sessions, forms, tasks, metrics, injuries, goals, photos, comments] = await Promise.all([
+  const [profile, managed, workouts, sessions, forms, tasks, metrics, custom, health, injuries, goals, photos, comments] = await Promise.all([
     // A managed client has no auth account, so their details live in a
     // different table. Try both rather than exporting a record with no name on it.
     one('profile', supabase.from('profiles').select('*').eq('id', clientId).maybeSingle()),
@@ -65,9 +65,13 @@ export async function gatherClientData(clientId) {
     one('sessions', supabase.from('workout_sessions')
       .select('id, started_at, completed_at, day_id, logged_sets(set_index, exercise_name, actual_reps, actual_weight_kg, actual_time_secs, actual_band, intensity, section_exercises(name))')
       .eq('client_id', clientId).order('completed_at')),
-    one('check_ins', supabase.from('form_responses').select('*').eq('client_id', clientId).order('created_at')),
+    one('check_ins', supabase.from('form_responses')
+      .select('*, forms(title, description, fields)').eq('client_id', clientId).order('submitted_at')),
     one('tasks', supabase.from('client_tasks').select('*').eq('client_id', clientId).order('due_date')),
-    one('body_metrics', supabase.from('body_metrics').select('*').eq('client_id', clientId).order('taken_on')),
+    one('body_metrics', supabase.from('body_metrics').select('*').eq('client_id', clientId).order('recorded_at')),
+    one('custom_metrics', supabase.from('client_custom_metrics')
+      .select('*, custom_metric_entries(recorded_at, value)').eq('client_id', clientId)),
+    one('health_daily', supabase.from('health_daily').select('*').eq('client_id', clientId).order('day')),
     one('injuries', supabase.from('client_injuries').select('*, client_injury_notes(*)').eq('client_id', clientId)),
     one('goals', supabase.from('client_goals').select('*').eq('client_id', clientId)),
     one('progress_photos', supabase.from('progress_photos').select('*').eq('client_id', clientId).order('taken_on')),
@@ -76,7 +80,7 @@ export async function gatherClientData(clientId) {
 
   // A missing row in whichever of the two tables this client isn't in is
   // expected, not a fault, so neither is reported as a warning.
-  const parts = [workouts, sessions, forms, tasks, metrics, injuries, goals, photos, comments];
+  const parts = [workouts, sessions, forms, tasks, metrics, custom, health, injuries, goals, photos, comments];
   return {
     exported_at: new Date().toISOString(),
     // Named so a file found in six months explains itself.
@@ -88,6 +92,8 @@ export async function gatherClientData(clientId) {
     check_ins: forms.rows || [],
     tasks: tasks.rows || [],
     body_metrics: metrics.rows || [],
+    custom_metrics: custom.rows || [],
+    health_daily: health.rows || [],
     injuries: injuries.rows || [],
     goals: goals.rows || [],
     progress_photos: photos.rows || [],
