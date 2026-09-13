@@ -890,9 +890,21 @@ const fmtTickVal = (v) => Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'k' : (N
 // Large, axis-annotated line chart with a real date x-axis and one marker
 // per data point. Hover/tap a point to see its value, date, and source.
 // `series`: ascending [{ date: ISO, v: number, label?: string }].
+// The chart is two components, and the split is load-bearing.
+//
+// It used to be one, with an early return for "not enough data yet" sitting
+// above the tooltip's hooks. That breaks React's first rule: the number of
+// hooks a component calls has to be the same on every render. Logging a second
+// weigh-in - or switching to a range that happens to hold fewer points - took
+// the count from five to eight and back, and React responds to that by throwing
+// and handing the whole screen to the error boundary.
+//
+// Splitting it puts the early return on a component boundary instead of inside
+// one. The outer half measures its box and decides whether there is anything to
+// draw; the inner half is only ever mounted when there is, so it can hold as
+// many hooks as it likes and never change its mind. Vite compiles the one-piece
+// version quite happily, which is why this survived a build and a deploy.
 export function MetricChart({ series, unit = '', color = 'var(--accent)', height = 280 }) {
-  const [hover, setHover] = React.useState(null);
-  const uid = React.useId();
   // The viewBox used to be a fixed 760 wide with the height set in px. On a
   // phone that scales the drawing to about 47% to fit ~360px of width, and
   // because the height attribute holds the box open at full size, the chart
@@ -909,10 +921,20 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
     return () => ro.disconnect();
   }, []);
 
-  if (!series || series.length < 2) {
-    return <div ref={wrapRef} className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', padding: '28px 0', textAlign: 'center' }}>LOG MORE DATA TO SEE A TREND</div>;
-  }
-  const W = boxW, H = height;
+  return (
+    <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
+      {(!series || series.length < 2)
+        ? <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.08em', padding: '28px 0', textAlign: 'center' }}>LOG MORE DATA TO SEE A TREND</div>
+        : <MetricChartPlot series={series} unit={unit} color={color} height={height} W={boxW} />}
+    </div>
+  );
+}
+
+// Everything that needs at least two points. Mounted only when there are.
+function MetricChartPlot({ series, unit, color, height, W }) {
+  const [hover, setHover] = React.useState(null);
+  const uid = React.useId();
+  const H = height;
   // A phone can't spare 48px of gutter out of 360, and at 1:1 the labels need
   // to be a couple of points larger to read at arm's length.
   const narrow = W < 520;
@@ -964,7 +986,7 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
   }, [hover, hp?.x, hp?.y, W, H]);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', width: '100%' }}>
+    <>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block', overflow: 'visible' }}
         onMouseLeave={() => setHover(null)}>
         <defs>
@@ -1027,7 +1049,7 @@ export function MetricChart({ series, unit = '', color = 'var(--accent)', height
           {hp.label && <div className="mono" style={{ fontSize: 8.5, color: 'var(--text-2)', letterSpacing: '0.04em', marginTop: 3, maxWidth: 200, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{hp.label}</div>}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -1606,18 +1628,26 @@ function DetailStat({ label, value, color }) {
 // filled with accent color at intensity-based opacity.
 export function BodyMap({ side, intensity, picked, onPick, data, labels, heatColor, slugMap, perSide, zoomable, neutralBase, tintFor, monochrome, pulseTop }) {
   const body = MUSCLE_BODY[side];
-  if (!body) return null;
-  const vb = body.viewBox.split(' ').map(Number);
-  const centerX = vb[0] + vb[2] / 2;
 
   // slug -> heat group reverse lookup for this side. `slugMap` lets callers
   // (e.g. the injury map) widen the set of selectable regions to joints.
+  //
+  // Above the `!body` guard, not below it. This needs nothing from `body`, and
+  // sitting underneath meant the component called one hook for a side it could
+  // draw and none for a side it couldn't - so a `side` arriving late, or a
+  // caller passing anything but front or back, changed the hook count between
+  // renders and React threw. Same fault as the metric chart had; found by the
+  // lint rule added at the same time, not by reading.
   const slugToGroup = React.useMemo(() => {
     const m = {};
     const gs = slugMap || MUSCLE_BODY.groupSlugs[side] || {};
     Object.entries(gs).forEach(([group, slugs]) => slugs.forEach((s) => {m[s] = group;}));
     return m;
   }, [side, slugMap]);
+
+  if (!body) return null;
+  const vb = body.viewBox.split(' ').map(Number);
+  const centerX = vb[0] + vb[2] / 2;
 
   // Anatomical side of a path from its first move-to x. On the front view the
   // viewer's left is the subject's right (and vice-versa); flipped on the back.
