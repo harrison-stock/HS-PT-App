@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
+import { phaseByDay } from '../lib/programmeCopy'
 import { HexBackButton, HexShape } from '../components/hex'
 import { IconChevronRight, IconX2 } from '../components/icons'
 import { loadExercises, videoThumb } from '../lib/exercises'
@@ -1895,12 +1896,19 @@ function ClientHistorySheet({ exerciseName, libraryId, trainerId, programmeId, o
       // Prefer someone actually running this programme.
       let preferred = null;
       if (programmeId) {
+        // Joining through programme_phases to find who is running this
+        // programme misses everyone, because the day a client is assigned is
+        // their own copy and copies have no phase. Resolved through the
+        // template each copy came from instead.
         const { data: assigned } = await supabase.from('client_workouts')
-          .select('client_id, programme_days!inner(programme_phases!inner(programme_id))')
+          .select('client_id, programme_days ( id, origin_day_id, programme_phases ( programme_id ) )')
           .eq('trainer_id', trainerId)
-          .eq('programme_days.programme_phases.programme_id', programmeId)
-          .limit(200);
-        const ids = new Set((assigned || []).map(r => r.client_id));
+          .limit(400);
+        const rows = (assigned || []).filter(r => r.programme_days);
+        const phases = await phaseByDay(rows.map(r => r.programme_days));
+        const ids = new Set(rows
+          .filter(r => phases[r.programme_days.id]?.programme_id === programmeId)
+          .map(r => r.client_id));
         preferred = list.find(c => ids.has(c.id))?.id || null;
       }
       if (alive) setClientId(preferred || list[0]?.id || null);

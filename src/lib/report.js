@@ -1,11 +1,19 @@
 import { loggedSetName } from './loggedSets'
 import { supabase } from './supabase'
 import { muscleGroupsFor, expandGroups } from './muscleVolume'
+import { phaseByDay } from './programmeCopy'
 
 // ── Programme performance reports ─────────────────────────────────────────────
 // Sessions tie to a programme via day_id → programme_days → programme_phases →
 // programmes. We compare the FIRST week vs the FINAL week of training to show
-// strength progression, body-metric trends and which muscles grew the most.
+// strength progression, body-metric trends and where training volume moved.
+//
+// Both queries here used to join with !inner the whole way down that chain. A
+// client-owned day copy has no phase by design, so every session a client had
+// logged since the copy model landed was dropped before it was counted, and
+// this screen - which a coach opens in front of the person it is about - showed
+// nothing whatever. phaseByDay follows a copy back to the template it came
+// from, so the chain resolves for both kinds of day.
 
 const DAY = 86_400_000;
 const dateOnly = (iso) => new Date(new Date(iso).toISOString().slice(0, 10));
@@ -16,15 +24,19 @@ export const e1rm = (w, r) => (w > 0 && r > 0 ? w * (1 + r / 30) : 0);
 export async function loadReportProgrammes(clientId) {
   const { data } = await supabase
     .from('workout_sessions')
-    .select('completed_at, programme_days!inner ( programme_phases!inner ( programme_id, programmes!inner ( name, tag ) ) )')
+    .select('completed_at, programme_days ( id, origin_day_id, programme_phases ( programme_id, programmes ( name, tag ) ) )')
     .eq('client_id', clientId)
     .not('completed_at', 'is', null)
     .order('completed_at', { ascending: true });
 
+  const list = (data || []).filter(s => s.programme_days);
+  const phases = await phaseByDay(list.map(s => s.programme_days));
+
   const map = new Map();
-  for (const s of (data || [])) {
-    const p = s.programme_days?.programme_phases?.programmes;
-    const id = s.programme_days?.programme_phases?.programme_id;
+  for (const s of list) {
+    const ph = phases[s.programme_days.id];
+    const p = ph?.programmes;
+    const id = ph?.programme_id;
     if (!id || !p) continue;
     if (!map.has(id)) map.set(id, { id, name: p.name, tag: p.tag, sessions: 0, first: s.completed_at, last: s.completed_at });
     const e = map.get(id);
@@ -37,14 +49,31 @@ export async function loadReportProgrammes(clientId) {
 
 // Build the full report for one programme.
 export async function buildProgrammeReport(clientId, programmeId, nameMuscleMap) {
+  // Which of this client's sessions belong to this programme has to be worked
+  // out here rather than asked for in the query: the filter used to be
+  // .eq('programme_days.programme_phases.programme_id', …), and a copy has no
+  // phase for that to match against. So the day references come back first,
+  // cheaply, and only the sessions that turn out to belong are then read in
+  // full - rather than pulling every logged set the client has ever recorded.
+  const { data: refs } = await supabase
+    .from('workout_sessions')
+    .select('id, programme_days ( id, origin_day_id, programme_phases ( programme_id, name ) )')
+    .eq('client_id', clientId)
+    .not('completed_at', 'is', null);
+
+  const withDay = (refs || []).filter(r => r.programme_days);
+  const phases = await phaseByDay(withDay.map(r => r.programme_days));
+  const ids = withDay
+    .filter(r => phases[r.programme_days.id]?.programme_id === programmeId)
+    .map(r => r.id);
+
+  if (!ids.length) return { empty: true, sessionCount: 0 };
+
   const { data: sessions } = await supabase
     .from('workout_sessions')
     .select(`id, completed_at,
-             programme_days!inner ( programme_phases!inner ( programme_id, name ) ),
              logged_sets ( actual_weight_kg, actual_reps, set_index, exercise_name, section_exercises ( name ) )`)
-    .eq('client_id', clientId)
-    .not('completed_at', 'is', null)
-    .eq('programme_days.programme_phases.programme_id', programmeId)
+    .in('id', ids)
     .order('completed_at', { ascending: true });
 
   const list = sessions || [];

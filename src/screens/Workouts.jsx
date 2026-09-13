@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
+import { phaseByDay } from '../lib/programmeCopy'
 import { HEX_RATIO, Hex, HexBackButton } from '../components/hex'
 import { IconBand, IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconClock, IconDumbbell, IconFlame, IconLeaf, IconTarget } from '../components/icons'
 import { splitLoad } from '../lib/loadSplit'
@@ -50,10 +51,10 @@ function deriveLoad(sets, banded, split) {
   return sp ? `${sp.n} × ${sp.each}kg` : `${parseFloat(kg)}kg`;
 }
 
-function shapeWorkout(row) {
+function shapeWorkout(row, resolvedPhase) {
   const day = row.programme_days;
   if (!day) return null;
-  const phase = day.programme_phases;
+  const phase = day.programme_phases || resolvedPhase || null;
   const programme = phase?.programmes;
 
   const sections = (day.workout_sections || [])
@@ -160,12 +161,18 @@ export function Workouts({ go, openPreview, userId }) {
       .order('scheduled_date');
 
     (async () => {
-      let { data, error } = await query('id, day_of_week, notes, image_url, title', 'id, kind, title, sort_order, icon');
+      let { data, error } = await query('id, day_of_week, notes, image_url, title, origin_day_id', 'id, kind, title, sort_order, icon');
       // Fallback if migration 041 (cover photo) isn't applied yet.
-      if (error) ({ data, error } = await query('id, day_of_week, notes', 'id, kind, title, sort_order, icon'));
+      if (error) ({ data, error } = await query('id, day_of_week, notes, origin_day_id', 'id, kind, title, sort_order, icon'));
       // Fallback if migration 037 (per-section icon) isn't applied yet.
-      if (error) ({ data } = await query('id, day_of_week, notes', 'id, kind, title, sort_order'));
-      if (data) setWorkouts(data.map(shapeWorkout).filter(Boolean));
+      if (error) ({ data } = await query('id, day_of_week, notes, origin_day_id', 'id, kind, title, sort_order'));
+      if (data) {
+        // The client's own copies carry no phase, so the programme name and tag
+        // they are labelled with have to come from the template they were made
+        // from. Without this every assigned workout reads "STRENGTH".
+        const phases = await phaseByDay(data.map(r => r.programme_days));
+        setWorkouts(data.map(r => shapeWorkout(r, phases[r.programme_days?.id])).filter(Boolean));
+      }
       setLoading(false);
     })();
   }, [userId]);
