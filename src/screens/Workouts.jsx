@@ -310,7 +310,7 @@ export function Workouts({ go, openPreview, userId }) {
                     const done = w.status === 'completed';
                     return (
                       <button key={w.id}
-                        onClick={e => { if (!isResched) { e.stopPropagation(); done ? go('sessionresults', { dayId: w.dayId }) : setPreviewId(w.id); } }}
+                        onClick={e => { if (!isResched) { e.stopPropagation(); done ? go('sessionresults', { dayId: w.dayId, workoutId: w.id }) : setPreviewId(w.id); } }}
                         style={{
                           all: 'unset', cursor: isResched ? 'inherit' : 'pointer',
                           display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10,
@@ -356,7 +356,7 @@ export function Workouts({ go, openPreview, userId }) {
         <WorkoutPreview
           w={previewWorkout}
           onClose={() => setPreviewId(null)}
-          onStart={() => { setPreviewId(null); go('log', { dayId: previewWorkout?.dayId }); }}
+          onStart={() => { setPreviewId(null); go('log', { dayId: previewWorkout?.dayId, workoutId: previewWorkout?.id }); }}
           onReschedule={() => { setReschedulingId(previewWorkout.id); setPreviewId(null); }}
         />
       )}

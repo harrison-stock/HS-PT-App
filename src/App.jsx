@@ -84,11 +84,15 @@ export default function App() {
   }, [screen]);
   const [previewWorkoutId, setPreviewWorkoutId] = React.useState(null);
   const [logDayId, setLogDayId] = React.useState(null);
+  // Which scheduled occurrence, not just which workout - the same day can be on
+  // the calendar twice, and finishing one must not finish the other.
+  const [logWorkoutId, setLogWorkoutId] = React.useState(null);
   const [logResume, setLogResume] = React.useState(false);
   const [logEdit, setLogEdit] = React.useState(false);
   const [resumePrompt, setResumePrompt] = React.useState(null);
   const [showInstall, setShowInstall] = React.useState(false);
   const [resultsDayId, setResultsDayId] = React.useState(null);
+  const [resultsWorkoutId, setResultsWorkoutId] = React.useState(null);
   // Impersonation ("assume control") persists across a background reload so a
   // coach isn't booted out of a client when the OS reclaims the tab.
   const [clientViewId, setClientViewId] = React.useState(() => {
@@ -272,8 +276,8 @@ export default function App() {
       setPreviewWorkoutId(null);
       return;
     }
-    if (target === 'log') { setLogDayId(opts?.dayId || null); setLogResume(!!opts?.resume); setLogEdit(!!opts?.edit); }
-    if (target === 'sessionresults') setResultsDayId(opts?.dayId || null);
+    if (target === 'log') { setLogDayId(opts?.dayId || null); setLogWorkoutId(opts?.workoutId || null); setLogResume(!!opts?.resume); setLogEdit(!!opts?.edit); }
+    if (target === 'sessionresults') { setResultsDayId(opts?.dayId || null); setResultsWorkoutId(opts?.workoutId || null); }
     // While controlling a client, navigation stays in their app until the coach
     // exits (which routes to 'coach').
     if (target === 'coach') {
@@ -401,7 +405,7 @@ export default function App() {
 
   let ScreenEl;
   if (screen === 'workouts')        ScreenEl = <Workouts go={navigate} openPreview={previewWorkoutId} userId={activeUserId}/>;
-  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} userId={activeUserId} resume={logResume} edit={logEdit} onExitClientView={impersonating ? exitClientView : undefined}/>;
+  else if (screen === 'log')        ScreenEl = <ActiveLog go={navigate} dayId={logDayId} workoutId={logWorkoutId} userId={activeUserId} resume={logResume} edit={logEdit} onExitClientView={impersonating ? exitClientView : undefined}/>;
   else if (screen === 'progress')   ScreenEl = <Progress go={navigate} userId={activeUserId}/>;
   else if (screen === 'body')       ScreenEl = <Body go={navigate} userId={activeUserId} trainerId={impersonating ? session.user.id : profile?.trainer_id}/>;
   else if (screen === 'resources')  ScreenEl = <Resources go={navigate} userId={session.user.id} isTrainer={navIsTrainer}/>;
@@ -411,7 +415,7 @@ export default function App() {
   else if (screen === 'forms')      ScreenEl = <Forms trainerId={session.user.id}/>;
   else if (screen === 'notifications') ScreenEl = <Notifications go={navigate} userId={session.user.id} home={homeScreen}/>;
   else if (screen === 'sessionresults') ScreenEl = (
-    <SessionResults dayId={resultsDayId} userId={activeUserId} go={navigate} onClose={() => navigate('dashboard')}/>
+    <SessionResults dayId={resultsDayId} workoutId={resultsWorkoutId} userId={activeUserId} go={navigate} onClose={() => navigate('dashboard')}/>
   );
   else if (screen === 'profile') ScreenEl = (
     <Profile
@@ -460,7 +464,7 @@ export default function App() {
       {resumePrompt && screen !== 'log' && (
         <ResumeWorkoutPrompt
           snap={resumePrompt}
-          onResume={() => { const s = resumePrompt; setResumePrompt(null); navigate('log', { dayId: s.dayId, resume: true }); }}
+          onResume={() => { const s = resumePrompt; setResumePrompt(null); navigate('log', { dayId: s.dayId, workoutId: s.workoutId || null, resume: true }); }}
           onDiscard={() => { clearActiveWorkout(resumeUid); setResumePrompt(null); }}
         />
       )}
