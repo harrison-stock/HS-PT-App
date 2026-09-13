@@ -63,9 +63,48 @@ export async function currentSubscription() {
   } catch (e) { return null; }
 }
 
-export async function isPushEnabled() {
+// Enabled *for this account*, not merely "this browser has a subscription".
+// The old version asked the browser, which cannot tell you whose subscription
+// it is - so on a shared phone the next person saw notifications reported as on
+// and were quietly receiving the previous client's.
+export async function isPushEnabled(userId) {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
-  return !!(await currentSubscription());
+  const sub = await currentSubscription();
+  if (!sub) return false;
+  if (!userId) return false;
+  const { data } = await supabase.from('push_subscriptions')
+    .select('user_id').eq('endpoint', sub.endpoint).maybeSingle();
+  return data?.user_id === userId;
+}
+
+/**
+ * Detach this device from whoever was signed in.
+ *
+ * Called on sign-out, which previously did nothing of the sort: the browser
+ * subscription and its row both survived, so a client handing their phone back
+ * - or a coach signing out of a demo - left the next person receiving pushes
+ * addressed to the last one. Task titles carry real wording; "Weigh in and
+ * send Harrison your photos" is not a thing to deliver to a stranger.
+ *
+ * The browser subscription is torn down as well as the row. Leaving it would
+ * mean the next account re-uses the same endpoint, and the endpoint is the
+ * unique key - so the row would be re-pointed rather than replaced, and any
+ * push already in flight would land on the wrong person.
+ */
+export async function releasePush(userId) {
+  try {
+    const sub = await currentSubscription();
+    if (!sub) return { ok: true };
+    let q = supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+    // Scope the delete to the account when we know it, so a race with another
+    // tab can't remove a row that has already been claimed by someone else.
+    if (userId) q = q.eq('user_id', userId);
+    await q;
+    await sub.unsubscribe();
+    return { ok: true };
+  } catch (e) {
+    return { error: e?.message || 'Could not detach notifications from this device.' };
+  }
 }
 
 // Must be called from a user gesture - browsers refuse a permission prompt

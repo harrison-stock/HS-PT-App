@@ -23,17 +23,44 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession:
 // ── Signature verification ───────────────────────────────────────────────────
 // Terra sends `terra-signature: t=<ts>,v1=<hmac>` — HMAC-SHA256 of `${t}.${body}`.
 // Vital uses Svix (`svix-id`/`svix-timestamp`/`svix-signature`). Swap as needed.
+// Constant-time compare. A === on hex digests leaks, through how long the
+// comparison takes, how many leading characters were right - which is enough to
+// find a valid signature a character at a time.
+function sameDigest(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
+const TOLERANCE_SECS = 300
+
 async function verifyTerra(req: Request, raw: string): Promise<boolean> {
-  if (!WEBHOOK_SECRET) return true; // allow while wiring up; set the secret in prod
+  // Fails closed. This used to `return true` when the secret was unset - a
+  // convenience for wiring the thing up that becomes, the moment the function
+  // is deployed with --no-verify-jwt and the secret forgotten, an unauthed
+  // endpoint writing health records for any client whose id you can name.
+  // Missing configuration is now a refusal, which is noisy and safe rather than
+  // quiet and open.
+  if (!WEBHOOK_SECRET) {
+    console.error('HEALTH_WEBHOOK_SECRET is not set - refusing every request')
+    return false
+  }
   const header = req.headers.get('terra-signature') || ''
   const parts = Object.fromEntries(header.split(',').map(p => p.split('=')))
   const t = parts['t']; const v1 = parts['v1']
   if (!t || !v1) return false
+
+  // A signature stays valid forever unless its timestamp is checked, so a
+  // captured request could be replayed indefinitely.
+  const age = Math.abs(Date.now() / 1000 - Number(t))
+  if (!Number.isFinite(age) || age > TOLERANCE_SECS) return false
+
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(WEBHOOK_SECRET),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${raw}`))
   const hex = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, '0')).join('')
-  return hex === v1
+  return sameDigest(hex, v1)
 }
 
 const dayOf = (iso: string) => new Date(iso).toISOString().slice(0, 10)
@@ -82,9 +109,15 @@ Deno.serve(async (req) => {
     const clientId = payload?.user?.reference_id || payload?.reference_id
     const provider = (payload?.user?.provider || payload?.provider || 'wearable').toLowerCase()
     if (clientId) {
-      await admin.from('wearable_connections').upsert(
+      const { error } = await admin.from('wearable_connections').upsert(
         { client_id: clientId, provider, status: 'connected', ref_user_id: payload?.user?.user_id || null, last_sync: new Date().toISOString() },
         { onConflict: 'client_id,provider' })
+      // 200 tells the aggregator the event is dealt with and it need not retry.
+      // Saying that about a write that failed loses the event for good.
+      if (error) {
+        console.error('wearable_connections upsert failed', error.message)
+        return new Response('write failed', { status: 500 })
+      }
     }
     return new Response('ok', { status: 200 })
   }
@@ -96,7 +129,11 @@ Deno.serve(async (req) => {
     client_id: norm.clientId, day, source: norm.source, updated_at: new Date().toISOString(), ...m,
   }))
   if (rows.length) {
-    await admin.from('health_daily').upsert(rows, { onConflict: 'client_id,day,source' })
+    const { error } = await admin.from('health_daily').upsert(rows, { onConflict: 'client_id,day,source' })
+    if (error) {
+      console.error('health_daily upsert failed', error.message)
+      return new Response('write failed', { status: 500 })
+    }
     // Mirror any weigh-ins into body_metrics so the existing charts/report pick
     // them up (no unique constraint there, so check-then-write).
     for (const r of rows) {
