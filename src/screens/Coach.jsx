@@ -1542,15 +1542,21 @@ function InviteSheet({ trainerId, onClose, onCreated }) {
       return;
     }
 
-    // Create an invite linked to this managed client (for the client to sign up later)
-    const { data: invite, error: invErr } = await supabase
-      .from('invites')
-      .insert({ trainer_id: trainerId, client_name: clientName.trim(), client_email: clientEmail.trim(), managed_client_id: mc.id })
-      .select('code')
-      .single();
-    if (invErr || !invite) { setSaving(false); setError(invErr?.message || 'Could not create invite link'); return; }
+    // The invite link is a secret, so the database stores only its hash and
+    // hands the token back once. This is the only moment it exists in readable
+    // form - if the coach loses the link, the fix is a new invite, not a lookup.
+    const { data: token, error: invErr } = await supabase.rpc('create_invite', {
+      p_client_name: clientName.trim(),
+      p_client_email: clientEmail.trim(),
+      p_managed_client_id: mc.id,
+    });
+    if (invErr || !token) { setSaving(false); setError(invErr?.message || 'Could not create invite link'); return; }
 
-    const url = `${window.location.origin}?invite=${invite.code}&tid=${trainerId}&mc=${mc.id}&name=${encodeURIComponent(clientName.trim())}${clientEmail.trim() ? `&email=${encodeURIComponent(clientEmail.trim())}` : ''}`;
+    // Only the token and the name that pre-fills the form. The coach and the
+    // client record this link belongs to used to travel in the URL as well, and
+    // sign-up believed them; now they are read from the invite row the token
+    // resolves to, so there is nothing here worth tampering with.
+    const url = `${window.location.origin}?invite=${token}&name=${encodeURIComponent(clientName.trim())}${clientEmail.trim() ? `&email=${encodeURIComponent(clientEmail.trim())}` : ''}`;
     setInviteUrl(url);
 
     // If an email was given, send the branded invite email (via Resend) carrying

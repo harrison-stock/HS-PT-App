@@ -180,18 +180,11 @@ export default function App() {
       setAuthLoading(false);
     }
 
-    // Mark the invite claimed. The managed_clients link + data merge is handled
-    // server-side by the handle_new_user trigger (it has the rights; the client
-    // does not), so we only stamp the claim here.
-    const pendingInvite = localStorage.getItem('pt_pending_invite');
-    if (pendingInvite) {
-      localStorage.removeItem('pt_pending_invite');
-      await supabase
-        .from('invites')
-        .update({ claimed_by: userId, claimed_at: new Date().toISOString() })
-        .eq('code', pendingInvite)
-        .is('claimed_by', null);
-    }
+    // The invite used to be stamped claimed from here, on the client, after the
+    // account existed. It is now part of creating the account: the sign-up
+    // trigger claims the row and reads the coach and client record off it in
+    // one statement, so there is no window in which an account exists against
+    // an unclaimed invite, and no claim for the browser to forget to make.
   };
 
   // Live notifications: unread badge + browser notification while open.
