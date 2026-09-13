@@ -146,57 +146,90 @@ export function ProgrammeBuilder({ programme, onClose, openRoadmap = false, trai
 
   // Everything under a day: sections, exercises, sets. Split out so a day
   // opened by id and a day upserted into a slot share one implementation.
+  //
+  // This deletes the day's sections and rebuilds them, and every write used to
+  // go unchecked. A rejected insert therefore left the day emptier than it
+  // started while the coach was told it saved - and one rejection was reliable
+  // rather than unlucky, because the set-type buttons emitted kinds the column
+  // constraint did not allow.
+  //
+  // Two changes in response. The draft is checked before anything is deleted,
+  // so a save that cannot succeed doesn't destroy the old version first. And
+  // every result is read, so a save that fails part-way says so instead of
+  // reporting success over a half-built day.
+  const SET_KINDS = ['WARMUP', 'WORK', 'DROPSET', 'FAILURE', 'PARTIAL'];
+
+  const checkDraft = (content) => {
+    for (const s of content.sections || []) {
+      for (const ex of s.items || []) {
+        if (!String(ex.name || '').trim()) return 'Every exercise needs a name.';
+        for (const st of ex.setsList || []) {
+          if (st.kind && !SET_KINDS.includes(st.kind)) {
+            return `"${st.kind}" isn't a set type this database accepts - is migration 072 applied?`;
+          }
+        }
+      }
+    }
+    return null;
+  };
+
   const writeDayBody = async (targetDayId, content) => {
-    await supabase.from('workout_sections').delete().eq('day_id', targetDayId);
+    const bad = checkDraft(content);
+    if (bad) throw new Error(bad);
+
+    const { error: delErr } = await supabase.from('workout_sections').delete().eq('day_id', targetDayId);
+    if (delErr) throw new Error(delErr.message);
 
     for (let sOrd = 0; sOrd < content.sections.length; sOrd++) {
       const s = content.sections[sOrd];
-      let { data: sec } = await supabase
+      let { data: sec, error: secErr } = await supabase
         .from('workout_sections')
         .insert({ day_id: targetDayId, kind: s.kind, title: s.title, intro: s.intro || '', icon: s.icon || '', sort_order: sOrd })
         .select('id').single();
       // Fallback if migrations 036 (slide text) / 037 (icon) aren't applied yet.
       if (!sec) {
-        ({ data: sec } = await supabase
+        ({ data: sec, error: secErr } = await supabase
           .from('workout_sections')
           .insert({ day_id: targetDayId, kind: s.kind, title: s.title, sort_order: sOrd })
           .select('id').single());
       }
-      if (!sec) continue;
+      if (!sec) throw new Error(`Could not save the "${s.title || s.kind}" section: ${secErr?.message || 'rejected'}`);
 
       for (let eOrd = 0; eOrd < s.items.length; eOrd++) {
         const ex = s.items[eOrd];
         const exRowValues = { section_id: sec.id, name: ex.name, img_url: ex.img, timed: ex.timed, banded: ex.banded || false, unilateral: ex.unilateral || false, load_split: ex.split || 1, tempo: ex.tempo || '', coach_notes: ex.coachNotes || '', superset_group: ex.ssGroup ?? null, alternates: ex.alternates || [], sort_order: eOrd };
-        let { data: exRow } = await supabase
+        let { data: exRow, error: exErr } = await supabase
           .from('section_exercises')
           .insert({ ...exRowValues, library_exercise_id: ex.libraryId ?? null })
           .select('id').single();
         // Fallback if migration 055 (library exercise id) isn't applied yet.
-        // This save has already deleted the day's sections, so an insert that
-        // fails here doesn't just lose one column - it leaves the day empty,
-        // and the client opens a workout with nothing in it.
         if (!exRow) {
-          ({ data: exRow } = await supabase
+          ({ data: exRow, error: exErr } = await supabase
             .from('section_exercises')
             .insert(exRowValues)
             .select('id').single());
         }
-        if (!exRow) continue;
+        if (!exRow) throw new Error(`Could not save "${ex.name}": ${exErr?.message || 'rejected'}`);
 
-        await supabase.from('exercise_sets').insert(
-          ex.setsList.map((st, i) => ({
-            exercise_id: exRow.id, set_index: i,
-            kind: st.kind,
-            reps: parseInt(st.repsText) || 0,
-            reps_text: st.repsText || '',
-            weight_kg: st.weight,
-            band: st.band ?? null,
-            rest_secs: st.rest, time_secs: st.time, intensity: st.intensity,
-          }))
-        );
+        const setRows = ex.setsList.map((st, i) => ({
+          exercise_id: exRow.id, set_index: i,
+          kind: st.kind,
+          reps: parseInt(st.repsText) || 0,
+          reps_text: st.repsText || '',
+          weight_kg: st.weight,
+          band: st.band ?? null,
+          rest_secs: st.rest, time_secs: st.time, intensity: st.intensity,
+        }));
+        if (setRows.length) {
+          const { error: setErr } = await supabase.from('exercise_sets').insert(setRows);
+          // The one that was silently failing: an exercise saved with no sets
+          // is a prescription with no prescription in it.
+          if (setErr) throw new Error(`Could not save the sets for "${ex.name}": ${setErr.message}`);
+        }
       }
     }
   };
+
   const writeDay = (phid) => writeDayContent(phid, weekIdx, dayIdx, day, dayId);
 
   const saveDay = async () => {

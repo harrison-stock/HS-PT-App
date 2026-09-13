@@ -380,6 +380,51 @@ end $$;
 reset role;
 select public.be(null);
 
+-- ════════════════════════════════════════════════════════════════════════════
+--  072 — the set types the builder offers are the set types the column takes
+-- ════════════════════════════════════════════════════════════════════════════
+-- Worth pinning. The two drifted apart once already, and because saving a day
+-- deletes its sections before rebuilding them, the mismatch didn't reject a
+-- button - it emptied a workout the coach had just written.
+select public.be(null);
+insert into public.programmes (id, trainer_id, name)
+  values ('cccc0000-0000-0000-0000-0000000000a1','11111111-1111-1111-1111-111111111111','P');
+insert into public.programme_phases (id, programme_id, name)
+  values ('cccc0000-0000-0000-0000-0000000000b1','cccc0000-0000-0000-0000-0000000000a1','Ph');
+insert into public.programme_days (id, phase_id, week_index, day_of_week)
+  values ('cccc0000-0000-0000-0000-0000000000c1','cccc0000-0000-0000-0000-0000000000b1',0,0);
+insert into public.workout_sections (id, day_id, kind, title, sort_order)
+  values ('cccc0000-0000-0000-0000-0000000000d1','cccc0000-0000-0000-0000-0000000000c1','MAIN','Workout',0);
+insert into public.section_exercises (id, section_id, name, sort_order)
+  values ('cccc0000-0000-0000-0000-0000000000e1','cccc0000-0000-0000-0000-0000000000d1','Back Squat',0);
+
+do $$
+declare k text; ok int := 0; i int := 0;
+begin
+  foreach k in array array['WARMUP','WORK','DROPSET','FAILURE','PARTIAL'] loop
+    i := i + 1;
+    begin
+      insert into public.exercise_sets (exercise_id, set_index, kind, reps, reps_text, weight_kg)
+      values ('cccc0000-0000-0000-0000-0000000000e1', i, k, 8, '8', 60);
+      ok := ok + 1;
+    exception when others then null;
+    end;
+  end loop;
+  perform public.t('072 every set type the builder offers is storable', ok = 5, ok::text || ' of 5');
+end $$;
+
+select public.t('072 nothing is left on the old DROP spelling',
+  (select count(*) from public.exercise_sets where kind = 'DROP') = 0);
+
+do $$
+begin
+  insert into public.exercise_sets (exercise_id, set_index, kind, reps, reps_text, weight_kg)
+  values ('cccc0000-0000-0000-0000-0000000000e1', 99, 'NONSENSE', 8, '8', 60);
+  perform public.t('072 an invalid set type is still refused', false, 'it was accepted');
+exception when check_violation then
+  perform public.t('072 an invalid set type is still refused', true);
+end $$;
+
 -- ── Summary ─────────────────────────────────────────────────────────────────
 \pset tuples_only on
 \pset format unaligned
@@ -389,9 +434,9 @@ from public._t order by n;
 select '';
 -- A check that never recorded a result is a failure, not an absence: an
 -- assertion silently lost to a permissions error is exactly how a test suite
--- reports success it hasn't earned. 45 is the number of t() calls in this file.
+-- reports success it hasn't earned. 48 is the number of t() calls in this file.
 select case
-  when count(*) <> 45 then 'HARNESS BROKEN - expected 45 checks, recorded ' || count(*)::text
+  when count(*) <> 48 then 'HARNESS BROKEN - expected 48 checks, recorded ' || count(*)::text
   when count(*) filter (where pass is not true) > 0
     then count(*) filter (where pass is not true)::text || ' OF ' || count(*)::text || ' FAILED'
   else 'ALL ' || count(*)::text || ' CHECKS PASSED' end
