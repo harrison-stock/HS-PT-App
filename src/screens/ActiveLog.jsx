@@ -24,7 +24,7 @@ import { ExercisePicker } from './ProgrammeBuilder'
 // One full-page card per exercise; horizontal snap-scroll between them.
 // Phases (Pulse · Banded · Main · Cooldown) are pinned as a strip up top.
 // Tap exercise title to see/swap alternatives.
-export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView }) {
+export function ActiveLog({ go, dayId, workoutId, userId, resume, edit, onExitClientView }) {
   const [exercises, setExercises] = React.useState(ACTIVE_EXERCISES);
   const [activeIdx, setActiveIdx] = React.useState(0); // start on Pulse warm-up
   const [sessionTime, setSessionTime] = React.useState(0);
@@ -292,10 +292,24 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
           //    client's logged session after the day had been reworked.
           const needStored = edit || rows.length === 0;
           if (needStored && userId) {
-            const { data: sess } = await supabase.from('workout_sessions')
+            // The session for THIS occurrence where we know which one it is.
+            // Matching on the day alone hands back the newest session for that
+            // workout, so re-opening an old Tuesday to correct it loaded - and
+            // would then have overwritten - the following Thursday's results.
+            let q = supabase.from('workout_sessions')
               .select('id, started_at, completed_at, logged_sets ( exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, intensity )')
-              .eq('client_id', userId).eq('day_id', dayId)
-              .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle();
+              .eq('client_id', userId)
+              .not('completed_at', 'is', null);
+            q = workoutId ? q.eq('client_workout_id', workoutId) : q.eq('day_id', dayId);
+            let { data: sess } = await q.order('completed_at', { ascending: false }).limit(1).maybeSingle();
+            // Sessions logged before occurrences had ids carry no link, so fall
+            // back to the day rather than showing someone an empty history.
+            if (!sess && workoutId) {
+              ({ data: sess } = await supabase.from('workout_sessions')
+                .select('id, started_at, completed_at, logged_sets ( exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, intensity )')
+                .eq('client_id', userId).eq('day_id', dayId).is('client_workout_id', null)
+                .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle());
+            }
 
             if (sess) {
               // Carry the original session forward rather than starting a new
@@ -340,6 +354,17 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
   // The session being amended. Kept so the edit writes back to the same row -
   // preserving started_at, and never leaving a window with no session at all.
   const editSessionRef = React.useRef(null);
+  // The date this occurrence is scheduled for. Comments are stamped with it and
+  // read back by it, so "this session" means this one rather than every time
+  // the client has ever done this workout.
+  const [scheduledDate, setScheduledDate] = React.useState(null);
+  React.useEffect(() => {
+    let off = false;
+    if (!workoutId) { setScheduledDate(null); return; }
+    supabase.from('client_workouts').select('scheduled_date').eq('id', workoutId).maybeSingle()
+      .then(({ data }) => { if (!off) setScheduledDate(data?.scheduled_date || null); });
+    return () => { off = true; };
+  }, [workoutId]);
   const dayTitleRef = React.useRef('');
 
   // ── Persist in-progress state so a crash/close can be resumed ──
@@ -375,6 +400,20 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
   // Once finished, drop the snapshot so we don't re-prompt.
   React.useEffect(() => { if (complete && userId) clearActiveWorkout(userId); }, [complete, userId]);
 
+  // Mark this occurrence complete - and only this one.
+  //
+  // It used to be `.eq('day_id', dayId).eq('client_id', userId)`, which marks
+  // every scheduled instance of that workout done at once. Assigning the same
+  // day to two dates is a thing the model supports on purpose, so finishing
+  // Tuesday's session was ticking Thursday's off too.
+  //
+  // Falls back to the old behaviour when there is no occurrence to name, which
+  // is the case for a resumed snapshot saved before this shipped.
+  const markOccurrenceDone = React.useCallback(async () => {
+    if (workoutId) return supabase.from('client_workouts').update({ status: 'completed' }).eq('id', workoutId);
+    return supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
+  }, [workoutId, dayId, userId]);
+
   // Returns { ok } or { ok: false, error }. The caller shows the celebration
   // only on ok, because until this file was fixed it showed it either way:
   // every write here ignored the error Supabase handed back, the whole body sat
@@ -407,8 +446,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       // that was finished without re-logging). Just mark the day complete.
       if (pendingSets.length === 0) {
         editModeRef.current = false;
-        const { error } = await supabase.from('client_workouts')
-          .update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
+        const { error } = await markOccurrenceDone();
         return error ? { ok: false, error: error.message } : { ok: true };
       }
 
@@ -449,7 +487,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       if (!ws) {
         const { data: fresh, error: sErr } = await supabase
           .from('workout_sessions')
-          .insert({ client_id: userId, day_id: dayId, started_at: sessionStartRef.current, completed_at: completedAt })
+          .insert({ client_id: userId, day_id: dayId, client_workout_id: workoutId || null, started_at: sessionStartRef.current, completed_at: completedAt })
           .select('id').single();
         if (sErr || !fresh) return { ok: false, error: sErr?.message || 'Could not create the session.' };
         ws = fresh;
@@ -486,8 +524,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
         };
       }
 
-      const { error: cwErr } = await supabase.from('client_workouts')
-        .update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
+      const { error: cwErr } = await markOccurrenceDone();
       if (cwErr) return { ok: false, error: cwErr.message };
 
       // Telling the coach is not part of saving. A failed push must not put a
@@ -981,6 +1018,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
           exerciseId={commentForId} clientId={userId}
           exerciseName={exercises.find(e => e.id === commentForId)?.name}
           workoutName={dayTitle}
+          scheduledDate={scheduledDate}
           onClose={() => setCommentForId(null)}
         />
       )}
@@ -2718,20 +2756,30 @@ function PriorProgressSheet({ ex, userId, onClose }) {
 // ── SESSION RESULTS (standalone) ─────────────────────────────────
 // Loads the most recent completed session for a programme day and
 // renders the results screen from the real logged sets.
-export function SessionResults({ dayId, userId, go, onClose }) {
+export function SessionResults({ dayId, workoutId, userId, go, onClose }) {
   const [state, setState] = React.useState(null); // null=loading, 'none', or { exercises, sessionTime }
 
   React.useEffect(() => {
     if (!dayId || !userId) { setState('none'); return; }
-    supabase
-      .from('workout_sessions')
-      .select('id, started_at, completed_at, logged_sets ( exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, section_exercises ( id, name, workout_sections ( kind ) ) )')
-      .eq('client_id', userId)
-      .eq('day_id', dayId)
-      .not('completed_at', 'is', null)
-      .order('completed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    const SEL = 'id, started_at, completed_at, logged_sets ( exercise_id, exercise_name, set_index, actual_reps, actual_weight_kg, actual_time_secs, actual_band, section_exercises ( id, name, workout_sections ( kind ) ) )';
+    // The results for the date being opened. Keyed on the day, this showed the
+    // most recent session for that workout whichever date you asked about.
+    const forOccurrence = () => {
+      let q = supabase.from('workout_sessions').select(SEL)
+        .eq('client_id', userId).not('completed_at', 'is', null);
+      q = workoutId ? q.eq('client_workout_id', workoutId) : q.eq('day_id', dayId);
+      return q.order('completed_at', { ascending: false }).limit(1).maybeSingle();
+    };
+    forOccurrence()
+      .then(async (r) => {
+        // Pre-occurrence sessions have no link; don't show an empty history.
+        if (!r.data && workoutId) {
+          return supabase.from('workout_sessions').select(SEL)
+            .eq('client_id', userId).eq('day_id', dayId).is('client_workout_id', null)
+            .not('completed_at', 'is', null).order('completed_at', { ascending: false }).limit(1).maybeSingle();
+        }
+        return r;
+      })
       .then(({ data }) => {
         if (!data) { setState('none'); return; }
         const KIND_TO_PHASE = { PULSE_RAISER: 'pulse', BANDED: 'banded', MAIN: 'main', COOLDOWN: 'cooldown' };
@@ -2786,5 +2834,5 @@ export function SessionResults({ dayId, userId, go, onClose }) {
   );
 
   return <SessionComplete exercises={state.exercises} sessionTime={state.sessionTime} go={go} onClose={onClose}
-    onEdit={dayId ? () => go('log', { dayId, resume: false, edit: true }) : undefined}/>;
+    onEdit={dayId ? () => go('log', { dayId, workoutId, resume: false, edit: true }) : undefined}/>;
 }

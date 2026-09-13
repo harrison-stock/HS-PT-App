@@ -425,6 +425,43 @@ exception when check_violation then
   perform public.t('072 an invalid set type is still refused', true);
 end $$;
 
+-- ════════════════════════════════════════════════════════════════════════════
+--  073 — a scheduled occurrence is its own thing
+-- ════════════════════════════════════════════════════════════════════════════
+-- One day copy on the calendar twice, which is what assigning a workout to two
+-- dates produces. Before this, finishing either marked both done and opening
+-- either showed the newer one's results.
+select public.be(null);
+insert into public.programme_days (id, phase_id, owner_client_id, week_index, day_of_week, title)
+  values ('bbbb0000-0000-0000-0000-0000000000c1', null, '33333333-3333-3333-3333-333333333333', 0, 1, 'Push A');
+insert into public.client_workouts (id, client_id, trainer_id, day_id, scheduled_date, status) values
+  ('bbbb0000-0000-0000-0000-0000000000f1','33333333-3333-3333-3333-333333333333','11111111-1111-1111-1111-111111111111','bbbb0000-0000-0000-0000-0000000000c1', current_date - 7, 'scheduled'),
+  ('bbbb0000-0000-0000-0000-0000000000f2','33333333-3333-3333-3333-333333333333','11111111-1111-1111-1111-111111111111','bbbb0000-0000-0000-0000-0000000000c1', current_date, 'scheduled');
+
+-- Finish only last week's, the way the app now does it.
+insert into public.workout_sessions (id, client_id, day_id, client_workout_id, started_at, completed_at)
+  values ('bbbb0000-0000-0000-0000-00000000a001','33333333-3333-3333-3333-333333333333','bbbb0000-0000-0000-0000-0000000000c1','bbbb0000-0000-0000-0000-0000000000f1', now() - interval '7 days', now() - interval '7 days' + interval '1 hour');
+update public.client_workouts set status='completed' where id='bbbb0000-0000-0000-0000-0000000000f1';
+
+select public.t('073 finishing one occurrence does not finish the other',
+  (select status from public.client_workouts where id='bbbb0000-0000-0000-0000-0000000000f1') = 'completed'
+  and (select status from public.client_workouts where id='bbbb0000-0000-0000-0000-0000000000f2') = 'scheduled');
+
+select public.t('073 today has no results of its own yet',
+  (select count(*) from public.workout_sessions
+    where client_workout_id='bbbb0000-0000-0000-0000-0000000000f2' and completed_at is not null) = 0);
+
+select public.t('073 last week''s results stay attached to last week',
+  (select count(*) from public.workout_sessions
+    where client_workout_id='bbbb0000-0000-0000-0000-0000000000f1' and completed_at is not null) = 1);
+
+-- And the backfill can tell two sessions of one repeated day apart.
+insert into public.workout_sessions (id, client_id, day_id, started_at, completed_at)
+  values ('bbbb0000-0000-0000-0000-00000000a002','33333333-3333-3333-3333-333333333333','bbbb0000-0000-0000-0000-0000000000c1', now() - interval '1 hour', now());
+select public.t('073 a session logged without an occurrence is still findable by day',
+  (select count(*) from public.workout_sessions
+    where day_id='bbbb0000-0000-0000-0000-0000000000c1' and client_workout_id is null) = 1);
+
 -- ── Summary ─────────────────────────────────────────────────────────────────
 \pset tuples_only on
 \pset format unaligned
@@ -434,9 +471,9 @@ from public._t order by n;
 select '';
 -- A check that never recorded a result is a failure, not an absence: an
 -- assertion silently lost to a permissions error is exactly how a test suite
--- reports success it hasn't earned. 48 is the number of t() calls in this file.
+-- reports success it hasn't earned. 52 is the number of t() calls in this file.
 select case
-  when count(*) <> 48 then 'HARNESS BROKEN - expected 48 checks, recorded ' || count(*)::text
+  when count(*) <> 52 then 'HARNESS BROKEN - expected 52 checks, recorded ' || count(*)::text
   when count(*) filter (where pass is not true) > 0
     then count(*) filter (where pass is not true)::text || ' OF ' || count(*)::text || ' FAILED'
   else 'ALL ' || count(*)::text || ' CHECKS PASSED' end

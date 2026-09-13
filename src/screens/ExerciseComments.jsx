@@ -54,13 +54,24 @@ export function ExerciseComments({ exerciseId, clientId, exerciseName, scheduled
         .order('created_at', { ascending: true });
       if (!error) { setRows(data || []); return; }
     }
-    // This exercise, in this workout. The id is the client's own copy, so it is
-    // already scoped to one movement inside one session's worth of work.
-    const { data } = await supabase.from('exercise_comments').select(SELECT)
-      .eq('exercise_id', exerciseId).eq('client_id', clientId)
-      .order('created_at', { ascending: true });
+    // This exercise, on this date.
+    //
+    // The id alone is not enough, and the comment that used to sit here said it
+    // was: a client's own day copy is reused every time that workout is
+    // scheduled, so the exercise id is the same on every occurrence of it. Six
+    // weeks of "elbows drifting on set 3" all arrived in the current session's
+    // thread, each looking like it was written about today.
+    //
+    // scheduled_date is what separates them, which is why it was added. Older
+    // comments predate the column and have none; they stay visible here rather
+    // than disappearing, since a thread that loses its history is worse than
+    // one carrying a few undated lines.
+    let q = supabase.from('exercise_comments').select(SELECT)
+      .eq('exercise_id', exerciseId).eq('client_id', clientId);
+    if (scheduledDate) q = q.or(`scheduled_date.eq.${scheduledDate},scheduled_date.is.null`);
+    const { data } = await q.order('created_at', { ascending: true });
     setRows(data || []);
-  }, [exerciseId, clientId, exerciseName, view]);
+  }, [exerciseId, clientId, exerciseName, scheduledDate, view]);
 
   React.useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setMe(data?.user?.id || null));
