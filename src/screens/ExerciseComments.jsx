@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
+import { todayISO } from '../lib/day'
 import { IconCheck } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
 import { Skel } from '../components/Loading'
@@ -93,7 +94,7 @@ export function ExerciseComments({ exerciseId, clientId, exerciseName, scheduled
       exercise_id: exerciseId, client_id: clientId, author_id: me, body: text.trim(),
       // The session this is about. Given by the caller where it knows the date
       // exactly; today otherwise, which is the session being logged.
-      scheduled_date: scheduledDate || new Date().toISOString().slice(0, 10),
+      scheduled_date: scheduledDate || todayISO(),
     });
     const recipient = me === clientId ? await trainerOf(clientId) : clientId;
     if (recipient) notify({

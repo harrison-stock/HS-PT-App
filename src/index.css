@@ -847,3 +847,13 @@ pre { max-width: 100%; overflow-x: auto; }
   .bm-pulse { animation: none !important; }
 }
 
+/* iOS zooms the whole page when you focus a text field whose font is under
+   16px - the thing the viewport lock used to suppress by disabling zoom
+   outright. 16px is what it is actually asking for, so it is given here and
+   the lock is gone. Applied on coarse pointers only: the desktop layout is
+   dense on purpose and doesn't have the problem. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea { font-size: 16px; }
+}

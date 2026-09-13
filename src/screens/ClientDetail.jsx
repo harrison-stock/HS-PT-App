@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
+import { todayISO } from '../lib/day'
 import { loadMuscleVolume } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { Hex, HexBackButton } from '../components/hex'
@@ -171,7 +172,7 @@ function AdherenceCard({ clientId }) {
   React.useEffect(() => {
     let alive = true;
     (async () => {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = todayISO();
       const base = new Date(todayStr + 'T00:00:00Z');
       const dow = (base.getUTCDay() + 6) % 7; // Mon = 0
       const monday = new Date(base.getTime() - dow * 86400000);
@@ -284,7 +285,7 @@ function ProgrammeProgressCard({ clientId, onTab }) {
       const mine = rows.filter(r => r.programme_days?.programme_phases?.programmes?.id === prog.id);
       const total = mine.length;
       const done = mine.filter(r => r.status === 'completed').length;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
       const current = [...mine].reverse().find(r => r.scheduled_date <= today) || mine[0];
       const currentPhaseId = current?.programme_days?.programme_phases?.id;
       // Per-phase completion from the assigned workouts.
@@ -3008,7 +3009,7 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
   const [days, setDays]         = React.useState([]);
   const [loading, setLoading]   = React.useState(false);
   const [dayId, setDayId]       = React.useState(null);
-  const [date, setDate]         = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate]         = React.useState(() => todayISO());
   const [phaseSel, setPhaseSel] = React.useState({}); // phaseId → included in bulk assign
   const [allDays, setAllDays]   = React.useState([]); // [{ dayId, dayOffset }] for bulk assign
   const [loadingAll, setLoadingAll] = React.useState(false);
