@@ -1,6 +1,73 @@
 -- Out-of-gym activity: a target to hit, a way to enter it by hand, and a way
 -- for the coach to be told when someone stops moving.
 --
+-- ── First, make sure the tables this alters are actually there ───────────────
+--
+-- This migration shipped assuming health_daily existed, because migration 030
+-- creates it. In production it did not: 030 sits below the runner's baseline,
+-- and the baseline is a guess. The runner records every file up to 054 as
+-- applied on the evidence of a single column (exercises.load_split, from 052)
+-- being present - which proves that one migration ran and nothing about the
+-- other fifty-three. 030 had never actually been applied, so this file failed
+-- on `drop policy ... on public.health_daily`, and it failed on every deploy
+-- from 6 September onwards. Nothing merged after that date reached production:
+-- not the step tracking this migration is for, and not the access-control
+-- fixes that followed it.
+--
+-- So it now creates what it alters. Every statement is guarded, so this is a
+-- no-op against a database where 030 did run, and a repair against one where
+-- it did not. Editing a migration that has shipped is normally forbidden - but
+-- this one has never once applied anywhere, so there is no database in which
+-- its old contents are recorded as done.
+--
+-- The runner's baseline check is widened in the same change, so the next table
+-- the baseline invents is caught by the build rather than by a feature quietly
+-- doing nothing.
+
+create table if not exists public.health_daily (
+  id          uuid primary key default gen_random_uuid(),
+  client_id   uuid not null,
+  day         date not null,
+  source      text not null default 'wearable',
+  steps       int,
+  resting_hr  int,
+  avg_hr      int,
+  weight_kg   numeric(6,2),
+  updated_at  timestamptz not null default now(),
+  created_at  timestamptz not null default now(),
+  unique (client_id, day, source)
+);
+alter table public.health_daily enable row level security;
+
+drop policy if exists "health_daily: client all" on public.health_daily;
+create policy "health_daily: client all" on public.health_daily for all
+  using (client_id = auth.uid()) with check (client_id = auth.uid());
+
+create table if not exists public.wearable_connections (
+  id           uuid primary key default gen_random_uuid(),
+  client_id    uuid not null references public.profiles(id) on delete cascade,
+  provider     text not null,
+  status       text not null default 'connected',
+  ref_user_id  text,
+  last_sync    timestamptz,
+  created_at   timestamptz not null default now(),
+  unique (client_id, provider)
+);
+alter table public.wearable_connections enable row level security;
+
+drop policy if exists "wearable_connections: client all" on public.wearable_connections;
+create policy "wearable_connections: client all" on public.wearable_connections for all
+  using (client_id = auth.uid()) with check (client_id = auth.uid());
+
+drop policy if exists "wearable_connections: trainer read" on public.wearable_connections;
+create policy "wearable_connections: trainer read" on public.wearable_connections for select
+  using (
+    exists (select 1 from public.profiles p where p.id = client_id and p.trainer_id = auth.uid())
+    or exists (select 1 from public.managed_clients mc where mc.id = client_id and mc.trainer_id = auth.uid())
+  );
+
+-- ── The step goal itself ────────────────────────────────────────────────────
+--
 -- The wearable plumbing (health_daily, wearable_connections, the ingest-health
 -- function) has existed since slice 31 but was only ever a read-out: numbers
 -- arrived, drew a chart, and nothing followed. Three gaps closed here.

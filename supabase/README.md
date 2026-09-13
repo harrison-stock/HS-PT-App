@@ -85,6 +85,29 @@ SUPABASE_DB_URL='postgresql://...' npm run migrate
 
 Safe to run repeatedly; already-applied files are skipped.
 
+## When the baseline is wrong
+
+The runner records every migration up to 054 as applied without running it, on
+the evidence of one column existing. That is a claim about a database nobody
+has checked, and it was wrong: migration 030 had never been applied to
+production, so `health_daily` did not exist. Nothing noticed until migration
+066 tried to alter it, five months later - at which point every deploy failed
+for a week and took four merged pull requests down with it, including the
+access-control fixes.
+
+Every run now checks that each table the migrations create is actually present,
+and fails the build naming the ones that aren't. If you see that list:
+
+1. Find the migration that creates the table.
+2. Make its statements safe to re-run - `create table if not exists`, and
+   `drop policy if exists` before each `create policy`.
+3. Put them in a **new** migration so the runner applies it. Do not edit the
+   old file; the runner already believes it ran.
+
+Re-creating a table without its policies leaves it readable by anyone, so carry
+the `enable row level security` and the policies across too, not just the
+`create table`.
+
 ## Checking the access rules
 
 `./supabase/tests/run.sh` applies every migration to a throwaway local Postgres

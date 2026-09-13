@@ -116,6 +116,47 @@ try {
     }
   }
   if (pending.length) log(`applied ${pending.length} migration(s)`);
+
+  // ── Does the schema actually match what the migrations describe? ───────────
+  //
+  // The baseline is a guess, and it was wrong. It records fifty-four files as
+  // applied on the evidence of one column existing, which proves that one
+  // migration ran and nothing about the rest. Migration 030 had never been
+  // applied to production, so health_daily did not exist - and nobody found
+  // out until a migration five months later tried to alter it, by which point
+  // every deploy had been failing for a week and the wearable feature had been
+  // quietly writing to a table that wasn't there.
+  //
+  // So: every table the migrations create is checked against the database that
+  // is about to be shipped against. This is cheap, it needs no manifest to
+  // maintain - the migrations are the manifest - and it turns a silent gap
+  // into a named one.
+  const declared = new Set();
+  for (const f of files) {
+    const sql = readFileSync(join(DIR, f), 'utf8')
+      // Ignore the commentary, which quotes plenty of SQL it doesn't run.
+      .replace(/--[^\n]*/g, '');
+    for (const m of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?"?(\w+)"?/gi)) {
+      declared.add(m[1]);
+    }
+  }
+  const { rows: present } = await client.query(
+    `select table_name from information_schema.tables where table_schema = 'public'`);
+  const have = new Set(present.map(r => r.table_name));
+  const missing = [...declared].filter(t => !have.has(t)).sort();
+
+  if (missing.length) {
+    log('');
+    log(`the database is missing ${missing.length} table(s) the migrations create:`);
+    for (const t of missing) log(`  - ${t}`);
+    log('');
+    log('These are almost certainly from a migration the baseline recorded as');
+    log('applied without checking. Find the file that creates each one and make it');
+    log('safe to re-run (create table if not exists, drop policy if exists before');
+    log('create policy), then add it to a new migration so the runner applies it.');
+    throw new Error(`schema is missing: ${missing.join(', ')}`);
+  }
+  log(`schema check: all ${declared.size} declared tables present`);
 } catch (err) {
   console.error('[migrate] migration failed - aborting the build');
   console.error(err.message);
