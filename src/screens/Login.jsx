@@ -54,13 +54,16 @@ export function Login() {
       })
       if (err) setError(err.message)
     } else {
+      // The token is all that travels. The coach and the client record it
+      // belongs to are looked up from the invite row it hashes to, rather than
+      // being asserted here - sign-up metadata is written by whoever is signing
+      // up, so it was never evidence of anything.
       const meta = { name: (name.trim() || invite.name || '') };
-      if (invite.code) { meta.trainer_id = invite.tid || ''; meta.managed_client_id = invite.mc || ''; }
+      if (invite.code) meta.invite_token = invite.code;
       const { error: err } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: meta } })
       if (err) {
         setError(err.message)
       } else {
-        if (invite.code) localStorage.setItem('pt_pending_invite', invite.code);
         setSignedUp(true)
       }
     }

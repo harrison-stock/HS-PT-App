@@ -85,6 +85,24 @@ SUPABASE_DB_URL='postgresql://...' npm run migrate
 
 Safe to run repeatedly; already-applied files are skipped.
 
+## Checking the access rules
+
+`./supabase/tests/run.sh` applies every migration to a throwaway local Postgres
+and then attacks the result: it tries to promote a client to coach, award them
+credits, mark them paid, claim another client's medical records at sign-up,
+replay a used invite, and use an expired one - and it checks that everything
+the coach and the Stripe webhook legitimately do still works.
+
+Run it after any migration that touches a policy, a trigger or a privileged
+function. It needs a local postgres and nothing else; `tests/scaffold.sql`
+stands up the parts of Supabase the migrations expect.
+
+It is not optional politeness. Row-level security, the profile column guard and
+the sign-up trigger cannot be checked from the application at all - a mocked
+client has no policies to enforce and no triggers to fire, so it answers
+whatever it is asked. The suite's first run found a foreign key that aborted
+every invited sign-up, on code that had been read through twice.
+
 ## Writing a new one
 
 Write it so re-running it is harmless — `if not exists`, `drop ... if exists`
