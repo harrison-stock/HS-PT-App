@@ -28,7 +28,7 @@ const parseClock = (v) => {
   return parseInt(v) || 0;
 };
 
-const SELECT = 'id, phase_id, week_index, day_of_week, intro, workout_sections(id, title, kind, sort_order, section_exercises(id, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, alternates, superset_group, sort_order, exercise_sets(id, set_index, kind, reps_text, reps, weight_kg, band, rest_secs, time_secs, intensity)))';
+const SELECT = 'id, phase_id, week_index, day_of_week, intro, workout_sections(id, day_id, title, kind, sort_order, section_exercises(id, name, img_url, timed, banded, unilateral, load_split, tempo, coach_notes, alternates, superset_group, sort_order, exercise_sets(id, set_index, kind, reps_text, reps, weight_kg, band, rest_secs, time_secs, intensity)))';
 
 // Master Planner - every day of the programme pulled out at once, fully editable
 // inline. Two layouts: same day across all weeks ("Week by Week"), or all seven
@@ -68,10 +68,41 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
 
   const dayAt = (phaseId, weekInPhase, dowIdx) => days?.[`${phaseId}|${weekInPhase}|${dowIdx}`] || null;
 
+  // Mark the day this edit belongs to as changed.
+  //
+  // staleAssignments compares a template day's content_updated_at against the
+  // copied_at of each client's copy, to answer "who is running an old version
+  // of this?". The builder stamps it on save; the planner never did - and the
+  // planner is where sets and exercises actually get edited. So a coach could
+  // change a prescription here, every assigned client would keep the old one,
+  // and nothing would say an update was outstanding.
+  //
+  // The stamp is on the day, but edits here land on a set or an exercise, so
+  // the day has to be found from the row that changed. Best effort by design:
+  // failing to stamp must never undo an edit that has already been made.
+  const stampDayOf = React.useCallback(async ({ dayId, exerciseId, setId }) => {
+    try {
+      let id = dayId || null;
+      if (!id && setId) {
+        const { data } = await supabase.from('exercise_sets')
+          .select('section_exercises ( workout_sections ( day_id ) )').eq('id', setId).maybeSingle();
+        id = data?.section_exercises?.workout_sections?.day_id || null;
+      }
+      if (!id && exerciseId) {
+        const { data } = await supabase.from('section_exercises')
+          .select('workout_sections ( day_id )').eq('id', exerciseId).maybeSingle();
+        id = data?.workout_sections?.day_id || null;
+      }
+      if (id) await supabase.from('programme_days')
+        .update({ content_updated_at: new Date().toISOString() }).eq('id', id);
+    } catch (e) { /* pre-migration-061, or a row already gone */ }
+  }, []);
+
   // ── Inline edits (persist immediately, update optimistically) ──
   const patchSet = (setId, patch, dbPatch) => {
     setDays(prev => mapSets(prev, setId, st => ({ ...st, ...patch })));
-    supabase.from('exercise_sets').update(dbPatch ?? patch).eq('id', setId).then(() => {});
+    supabase.from('exercise_sets').update(dbPatch ?? patch).eq('id', setId)
+      .then(() => stampDayOf({ setId }));
   };
   const addSet = async (ex) => {
     const last = ex.exercise_sets[ex.exercise_sets.length - 1];
@@ -81,16 +112,27 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
       weight_kg: last?.weight_kg ?? 0, rest_secs: last?.rest_secs ?? 60, time_secs: last?.time_secs ?? 60,
     };
     await supabase.from('exercise_sets').insert(row);
+    await stampDayOf({ exerciseId: ex.id });
     reload();
   };
-  const delSet = async (setId) => { await supabase.from('exercise_sets').delete().eq('id', setId); reload(); };
-  const delExercise = async (exId) => { await supabase.from('section_exercises').delete().eq('id', exId); reload(); };
+  const delSet = async (setId) => {
+    // Stamped before the delete: afterwards there is no row to find the day from.
+    await stampDayOf({ setId });
+    await supabase.from('exercise_sets').delete().eq('id', setId);
+    reload();
+  };
+  const delExercise = async (exId) => {
+    await stampDayOf({ exerciseId: exId });
+    await supabase.from('section_exercises').delete().eq('id', exId);
+    reload();
+  };
 
   // Exercise-level edits (toggles, tempo, notes, alternates, swap). Applied
   // optimistically then persisted, matching how set edits behave here.
   const patchExercise = (exId, patch) => {
     setDays(prev => mapExercises(prev, exId, ex => ({ ...ex, ...patch })));
-    supabase.from('section_exercises').update(patch).eq('id', exId).then(() => {});
+    supabase.from('section_exercises').update(patch).eq('id', exId)
+      .then(() => stampDayOf({ exerciseId: exId }));
   };
   // Move an exercise to a position within a section - the same section (a
   // reorder) or a different one, including a different day's. The planner has
@@ -127,6 +169,9 @@ export function MasterPlanner({ programme, onClose, onPickDay }) {
       const patch = e.id === exId ? { sort_order: e.sort_order, section_id: toSectionId } : { sort_order: e.sort_order };
       supabase.from('section_exercises').update(patch).eq('id', e.id).then(() => {});
     });
+    // A move across days changes both of them, so both have copies to refresh.
+    stampDayOf({ dayId: fromSec.day_id });
+    if (!sameSection && toSec?.day_id !== fromSec.day_id) stampDayOf({ dayId: toSec.day_id });
   };
 
   // Track a drag across the whole board (window-level, since the drop target
