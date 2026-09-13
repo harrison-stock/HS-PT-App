@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { todayISO } from './day'
 
 // Two separate decisions: telling someone a task exists, and nagging them about
 // it. A weekly check-in wants both; "bring your trainers on Thursday" wants the
@@ -93,7 +94,7 @@ export function nextDueAfter(fromISO, recurrence, todayISO) {
 // own device - it catches up when the coach next opens them. Returns whether
 // anything was written, so the caller knows to reload.
 export async function catchUpRecurring(tasks) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   // Completed ones count too. A series that was ticked off before migration 071
   // had its successor refused by RLS, so the task most in need of repair is the
   // one that looks finished.

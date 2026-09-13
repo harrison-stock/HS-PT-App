@@ -2325,6 +2325,19 @@ const SECTION_DEFAULTS = {
 };
 
 function seedDay() {
+  // A starting skeleton, not a prescription.
+  //
+  // This used to arrive with a 100kg back squat, a 105kg top set and an 80kg
+  // RDL - plausible numbers, on the real "add a day" path, one tap from being
+  // assigned. Nothing about the layout tells a coach in a hurry that they are
+  // examples rather than something they chose, and a beginner handed an
+  // assessed-looking load they have never lifted is the one mistake in this
+  // screen that can hurt somebody.
+  //
+  // So the shape is seeded and the numbers are not. Reps and rest are ordinary
+  // defaults that suit any exercise; weight is left unset, so it reads as "-"
+  // until a coach puts a figure in, and a set nobody has filled in is
+  // obviously unfinished rather than quietly plausible.
   return {
     notes: '',
     sections: [
@@ -2336,11 +2349,11 @@ function seedDay() {
       ]},
       { kind:'MAIN', title:'Workout', items:[
         { id:'m1', name:'Back Squat', timed:false, tempo:'3-1-1-0', coachNotes:'', img:'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=70',
-          setsList:[mkSet('WARMUP',{reps:10,weight:40,rest:60,intensity:3}),mkSet('WARMUP',{reps:8,weight:70,rest:60,intensity:5}),mkSet('WORK',{reps:8,weight:100,rest:120,intensity:8}),mkSet('WORK',{reps:8,weight:100,rest:120,intensity:8}),mkSet('WORK',{reps:8,weight:100,rest:120,intensity:9}),mkSet('WORK',{reps:6,weight:105,rest:150,intensity:9})] },
+          setsList:[mkSet('WARMUP',{reps:10,weight:null,rest:60,intensity:3}),mkSet('WARMUP',{reps:8,weight:null,rest:60,intensity:5}),mkSet('WORK',{reps:8,weight:null,rest:120,intensity:8}),mkSet('WORK',{reps:8,weight:null,rest:120,intensity:8}),mkSet('WORK',{reps:8,weight:null,rest:120,intensity:9}),mkSet('WORK',{reps:6,weight:null,rest:150,intensity:9})] },
         { id:'m2', name:'Romanian Deadlift', timed:false, tempo:'3-0-1-0', coachNotes:'', img:'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200&q=70',
-          setsList:[mkSet('WORK',{reps:10,weight:80,rest:90,intensity:7}),mkSet('WORK',{reps:10,weight:80,rest:90,intensity:7}),mkSet('WORK',{reps:10,weight:80,rest:90,intensity:7})] },
+          setsList:[mkSet('WORK',{reps:10,weight:null,rest:90,intensity:7}),mkSet('WORK',{reps:10,weight:null,rest:90,intensity:7}),mkSet('WORK',{reps:10,weight:null,rest:90,intensity:7})] },
         { id:'m3', name:'Walking Lunges', timed:false, tempo:'', coachNotes:'', img:'https://images.unsplash.com/photo-1599058917212-d750089bc07e?w=200&q=70',
-          setsList:[mkSet('WORK',{reps:12,weight:20,rest:60,intensity:6}),mkSet('WORK',{reps:12,weight:20,rest:60,intensity:6}),mkSet('WORK',{reps:12,weight:20,rest:60,intensity:6})] },
+          setsList:[mkSet('WORK',{reps:12,weight:null,rest:60,intensity:6}),mkSet('WORK',{reps:12,weight:null,rest:60,intensity:6}),mkSet('WORK',{reps:12,weight:null,rest:60,intensity:6})] },
       ]},
       { kind:'COOLDOWN', title:'Cooldown', items:[
         { id:'c1', name:'Couch Stretch', timed:true, tempo:'', coachNotes:'', img:'https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?w=200&q=70', setsList:[mkSet('WORK',{time:60,rest:0,intensity:2}),mkSet('WORK',{time:60,rest:0,intensity:2})] },
@@ -2348,3 +2361,4 @@ function seedDay() {
     ],
   };
 }
+

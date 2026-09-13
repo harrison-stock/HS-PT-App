@@ -11,7 +11,14 @@ const regionLabel = (g) => REGION_LABELS[g] || (g || '').replace(/([A-Z])/g, ' $
 const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 // Full-screen programme performance report: first week vs final week strength
-// progression, body-metric trends and a muscle map of where they grew most.
+// progression, body-metric trends and a muscle map of where the training
+// volume went.
+//
+// The wording matters more than it looks. Tonnage is not a measurement of
+// muscle, and the app has no way to measure muscle - so this says how much work
+// each region took, which is true and useful, rather than how much it grew,
+// which would be a claim the numbers cannot support. Nor is a falling weight
+// automatically good news: for a client putting size on, it is the opposite.
 export function ProgrammeReport({ clientId, clientName, onClose, embedded = false }) {
   const [progs, setProgs]   = React.useState(null);
   const [progId, setProgId] = React.useState(null);
@@ -94,7 +101,12 @@ export function ProgrammeReport({ clientId, clientName, onClose, embedded = fals
                 {/* ── Body metrics ── */}
                 <SectionLabel>METRIC TRENDS</SectionLabel>
                 <div style={{ display: 'grid', gap: 8 }}>
-                  <MetricRow label="WEIGHT"   m={report.metrics.weight}  lowerBetter />
+                  {/* Body fat and waist falling is what nearly everyone who
+                      tracks them is after. Bodyweight is not - which way is
+                      "good" depends on the goal, so it isn't coloured as
+                      either; the number and the direction are shown plainly and
+                      the coach reads them against what they set. */}
+                  <MetricRow label="WEIGHT"   m={report.metrics.weight} />
                   <MetricRow label="BODY FAT" m={report.metrics.bodyfat} lowerBetter />
                   <MetricRow label="WAIST"    m={report.metrics.waist}   lowerBetter />
                   {!report.metrics.weight && !report.metrics.bodyfat && !report.metrics.waist && (
@@ -113,7 +125,7 @@ export function ProgrammeReport({ clientId, clientName, onClose, embedded = fals
                 )}
 
                 {/* ── Muscle growth ── */}
-                <SectionLabel>MUSCLE GROWTH · TRAINING VOLUME</SectionLabel>
+                <SectionLabel>TRAINING VOLUME BY REGION</SectionLabel>
                 <div className="card" style={{ padding: 14 }}>
                   <div style={{ marginBottom: 10 }}><SideSlider side={side} onChange={(s) => { setSide(s); setPicked(null); }} /></div>
                   <BodyMap side={side} data={muscles} intensity={intensity} tintFor={tintFor} neutralBase
@@ -200,9 +212,10 @@ function ExerciseRow({ ex, top }) {
 
 function MetricRow({ label, m, lowerBetter }) {
   if (!m) return null;
-  const down = m.delta < 0;
-  const good = lowerBetter ? m.delta < 0 : m.delta > 0;
-  const col = m.delta === 0 ? 'var(--text-3)' : good ? 'var(--accent)' : 'var(--c-amber)';
+  // With no lowerBetter given, the direction is reported and not judged.
+  const col = (m.delta === 0 || lowerBetter === undefined)
+    ? 'var(--text-3)'
+    : (lowerBetter ? m.delta < 0 : m.delta > 0) ? 'var(--accent)' : 'var(--c-amber)';
   return (
     <div className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
       <div style={{ flexShrink: 0, minWidth: 84 }}>

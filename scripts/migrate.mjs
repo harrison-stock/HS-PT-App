@@ -59,8 +59,19 @@ if (!files.length) { log('no migration files found'); process.exit(0); }
 
 const client = new pg.Client({
   connectionString: url,
-  // Supabase terminates plain connections; its CA isn't in the build image.
-  ssl: url.includes('localhost') || url.includes('127.0.0.1') ? false : { rejectUnauthorized: false },
+  // Verify the server, not just encrypt the traffic.
+  //
+  // This was { rejectUnauthorized: false }, which encrypts and then accepts
+  // whatever certificate turns up - on the connection that holds the database
+  // password and runs DDL. The reason given was that Supabase's CA isn't in the
+  // build image; it doesn't need to be, because Supabase's pooler presents a
+  // certificate chaining to a public root that Node already trusts.
+  //
+  // If a project genuinely needs the Supabase CA, set SUPABASE_CA_CERT to its
+  // PEM contents and it is used. Verification is not optional either way.
+  ssl: url.includes('localhost') || url.includes('127.0.0.1')
+    ? false
+    : { rejectUnauthorized: true, ...(process.env.SUPABASE_CA_CERT ? { ca: process.env.SUPABASE_CA_CERT } : {}) },
 });
 
 let locked = false;
@@ -170,6 +181,13 @@ try {
       "Supabase's direct connection (db.<ref>.supabase.co) is IPv6 unless the project " +
       'has the IPv4 add-on. Use the Session pooler string from the Connect dialog ' +
       'instead: postgres.<ref>@aws-N-<region>.pooler.supabase.com:5432.'
+    );
+  }
+  if (/self.signed|unable to verify|certificate/i.test(err.message || '')) {
+    console.error(
+      '[migrate] the database certificate could not be verified. If this project ' +
+      'really does present a private CA, put its PEM in SUPABASE_CA_CERT. Do not ' +
+      'turn verification off - this connection carries the database password.'
     );
   }
   if (url.includes(':6543')) {

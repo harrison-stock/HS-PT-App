@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
+import { todayISO } from '../lib/day'
 import { Hex, HexBackButton } from '../components/hex'
 import { IconBell, IconBolt, IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconMore, IconUser, IconPlus, IconX2 } from '../components/icons'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
@@ -36,7 +37,7 @@ const DAY_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 function computeStreak(daysSet, lastDate) {
   if (!lastDate) return 0;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   if (lastDate < yesterday) return 0;
   let streak = 0;
@@ -91,7 +92,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
   }, []);
 
   const fetchTodaySchedule = async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     const { data } = await supabase
       .from('client_workouts')
       .select('id, client_id, status, programme_days ( day_of_week, programme_phases ( name, programmes ( name ) ) )')
@@ -145,7 +146,7 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     if (real.length > 0) {
       const ids   = real.map(c => c.id);
       const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const today28   = new Date().toISOString().slice(0, 10);
+      const today28   = todayISO();
       const since28   = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const [{ data: sessions }, { data: schedRows }] = await Promise.all([
         supabase
@@ -1195,7 +1196,7 @@ function TAG_COLOR(tag) {
 function AssignAdhocSheet({ workout, clients, trainerId, onClose }) {
   const [dayId, setDayId]   = React.useState(undefined); // undefined=loading, null=none
   const [clientId, setClientId] = React.useState('');
-  const [date, setDate]     = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate]     = React.useState(() => todayISO());
   const [q, setQ]           = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const [done, setDone]     = React.useState(false);

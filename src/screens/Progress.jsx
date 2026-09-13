@@ -1,10 +1,11 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
+import { todayISO } from '../lib/day'
 import { loadMuscleVolume, muscleGroupsFor } from '../lib/muscleVolume'
 import { loadExerciseMuscleMap } from '../lib/exercises'
 import { loadPhotoHistory, uploadProgressPhoto, deleteProgressPhoto } from '../lib/progressPhotos'
 import { toast } from '../lib/toast'
-import { loadHealthDaily, saveManualSteps, stepSummary, todayISO } from '../lib/health'
+import { loadHealthDaily, saveManualSteps, stepSummary } from '../lib/health'
 import { ZoomPan } from '../components/ZoomPan'
 import { MUSCLE_LABELS } from '../data/index'
 import { MUSCLE_BODY } from '../data/musclePaths'
@@ -541,7 +542,8 @@ function BodyTab({ userId }) {
   const m = React.useMemo(() => ({ ...buildMetrics(rows || []), ...buildCustomMetrics(customDefs) }), [rows, customDefs]);
   const keys = Object.keys(m);
   const sel = m[selected] || m[keys[0]];
-  const heroSeries = React.useMemo(() => sel ? filterByRange(sel.series, range) : [], [sel, range]);
+  const heroRange = React.useMemo(() => sel ? filterByRange(sel.series, range) : { points: [], outOfRange: false }, [sel, range]);
+  const heroSeries = heroRange.points;
 
   if (rows === null) return <SkeletonCard rows={3} />;
 
@@ -589,6 +591,11 @@ function BodyTab({ userId }) {
           <RangeSeg range={range} onChange={setRange} />
         </div>
 
+        {heroRange.outOfRange && (
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-amber)', letterSpacing: '0.04em', marginBottom: 6 }}>
+            Nothing logged in this range - showing the last two entries instead.
+          </div>
+        )}
         <MetricChart series={heroSeries} unit={sel.unit} color="var(--accent)" height={300} />
 
         <button onClick={() => setDetail(sel.key)} style={{
@@ -642,7 +649,7 @@ function BodyMetricDetail({ met, onBack, onLog }) {
   const [range, setRange] = React.useState('12m');
   if (!met) return null;
   const rows = [...met.series].reverse(); // most recent first
-  const chartSeries = filterByRange(met.series, range);
+  const { points: chartSeries, outOfRange } = filterByRange(met.series, range);
 
   return (
     <div style={{
@@ -675,6 +682,11 @@ function BodyMetricDetail({ met, onBack, onLog }) {
             <RangeSeg range={range} onChange={setRange} />
           </div>
           <div style={{ marginTop: 14 }}>
+            {outOfRange && (
+              <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-amber)', letterSpacing: '0.04em', marginBottom: 6 }}>
+                Nothing logged in this range - showing the last two entries instead.
+              </div>
+            )}
             <MetricChart series={chartSeries} unit={met.unit} color="var(--accent)" height={340} />
           </div>
         </div>
@@ -719,7 +731,7 @@ function LogMeasurementSheet({ userId, metrics, customDefs = [], onClose, onSave
   const [saving, setSaving] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const anyFilled = allDefs.some((f) => (vals[f.key] || '').trim() !== '');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const save = async () => {
     if (!anyFilled || saving) return;
@@ -863,10 +875,14 @@ function AddCustomMetricSheet({ userId, onClose, onSaved }) {
 const METRIC_RANGE_DAYS = { '1m': 30, '3m': 90, '12m': 365 };
 export function filterByRange(series, range) {
   const days = METRIC_RANGE_DAYS[range];
-  if (!days) return series;
+  if (!days) return { points: series, outOfRange: false };
   const cutoff = Date.now() - days * 86_400_000;
   const kept = series.filter((s) => new Date(s.date).getTime() >= cutoff);
-  return kept.length ? kept : series.slice(-2); // never show an empty chart
+  // An empty chart is useless, so a range with nothing in it falls back to the
+  // last two points - but those can be a year old while the tab still says 1M.
+  // The caller is told, so it can say so rather than mislabelling old data.
+  if (kept.length >= 2) return { points: kept, outOfRange: false };
+  return { points: series.slice(-2), outOfRange: series.length >= 2 };
 }
 // "Nice" axis ticks spanning [min,max] with ~count divisions. The step is
 // rounded UP to a 1/2/2.5/5/10 multiple so charts stay uncluttered.
@@ -1862,7 +1878,7 @@ function ExerciseDrill({ ex, onBack, onChanged }) {
   const [range, setRange] = React.useState('12m');
   const cat = null;
   const zc = ZONE_COLOR_ALL[ex.category] || 'var(--accent)';
-  const chartSeries = filterByRange(
+  const { points: chartSeries, outOfRange } = filterByRange(
     ex.history.map((h) => ({ date: h.date, v: ex.timed ? h.t : (view === 'weight' ? h.w : h.r), label: h.label })),
     range,
   );
@@ -1923,6 +1939,11 @@ function ExerciseDrill({ ex, onBack, onChanged }) {
           <div className="label">// {ex.timed ? 'TIME (SECS)' : view === 'weight' ? 'WEIGHT (KG)' : 'REPS'} OVER TIME</div>
           <RangeSeg range={range} onChange={setRange} color={zc} />
         </div>
+        {outOfRange && (
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--c-amber)', letterSpacing: '0.04em', marginBottom: 6 }}>
+            Nothing logged in this range - showing the last two entries instead.
+          </div>
+        )}
         <MetricChart series={chartSeries} unit={ex.timed ? 's' : (view === 'weight' ? 'kg' : 'reps')} color={zc} height={320} />
       </div>
 

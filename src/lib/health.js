@@ -1,10 +1,11 @@
 import { supabase } from './supabase'
+import { todayISO, ymd as localISO } from './day'
 
 // Recent daily health metrics (steps / resting HR / weight) for a client.
 // Collapses multiple sources per day, preferring non-null values.
 export async function loadHealthDaily(userId, days = 30) {
   if (!userId) return [];
-  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const since = localISO(new Date(Date.now() - days * 86400000));
   const { data } = await supabase
     .from('health_daily')
     .select('day, source, steps, resting_hr, avg_hr, weight_kg')
@@ -35,7 +36,9 @@ export function mergeDaily(rows) {
   return Object.values(byDay).sort((a, b) => (a.day < b.day ? -1 : 1));
 }
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+// Re-exported so callers that already import it from here keep working. The
+// reason it is not defined here is in lib/day.js.
+export { todayISO };
 
 /**
  * Type in a day's steps.
@@ -72,7 +75,7 @@ export function stepSummary(rows, goal) {
   const days = (rows || []).filter(d => d.steps != null);
   const byDay = Object.fromEntries(days.map(d => [d.day, d.steps]));
 
-  const back = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  const back = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
   const windowAvg = (from, to) => {
     const vals = [];
     for (let i = from; i < to; i++) { const v = byDay[back(i)]; if (v != null) vals.push(v); }

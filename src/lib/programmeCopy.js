@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { todayISO } from './day'
 
 // Deep-copies a programme: phases → days → sections → exercises → sets.
 //
@@ -433,7 +434,7 @@ export async function materialiseDays(sourceDayIds, clientId) {
  */
 export async function staleAssignments(clientId, programmeId = null) {
   if (!clientId) return [];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const { data } = await supabase.from('client_workouts')
     .select('id, scheduled_date, status, programme_days!inner ( id, title, copied_at, origin_day_id )')
     .eq('client_id', clientId)

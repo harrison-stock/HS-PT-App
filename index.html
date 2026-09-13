@@ -4,12 +4,15 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <script>
-    // On phones, lock the zoom to a fixed scale. The app is designed at a fixed
-    // width, so pinch-zoom and iOS's focus-zoom (which fires when you tap an
-    // input with <16px text) both make the layout jump. maximum-scale=1 +
-    // user-scalable=no pins it. Runs inline (before the app bundle) so it
-    // applies even if the app's JS is still loading. Desktop/tablet keep the
-    // default zoomable meta.
+    // On phones, opt the layout into the safe areas (viewport-fit=cover) so it
+    // can reach behind the notch and the home indicator.
+    //
+    // This used to add maximum-scale=1 and user-scalable=no as well, to stop
+    // iOS zooming when you tap an input smaller than 16px. It worked, at the
+    // cost of taking pinch zoom away from every client - on a screen with a lot
+    // of 9px labels, and from exactly the people most likely to need it. The
+    // focus-zoom is fixed where it belongs instead: inputs are 16px on a phone
+    // (see index.css), which is the size iOS wants and stops it zooming at all.
     (function () {
       try {
         var mm = window.matchMedia;
@@ -19,7 +22,13 @@
         var phone = Math.min(window.innerWidth || 0, window.innerHeight || 0) < 820;
         if (phone && (coarse || uaMobile || touch)) {
           var vp = document.querySelector('meta[name="viewport"]');
-          if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+          // viewport-fit=cover is what this is for: it lets the layout reach
+          // into the safe areas on a notched phone. It used to add
+          // maximum-scale=1 and user-scalable=no as well, which takes pinch
+          // zoom away from everyone - including the clients most likely to need
+          // it, on a screen full of 9px labels. Nothing here needs that, and
+          // iOS ignores it in a home-screen app anyway.
+          if (vp) vp.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
         }
       } catch (e) {}
     })();

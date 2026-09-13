@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
+import { todayISO } from '../lib/day'
 import { HEX_RATIO, HexShape, Hex, HexBackButton } from '../components/hex'
 import { IconBell, IconPlay, IconChart, IconCheck, IconClipboard, IconScale, IconCamera2, IconDoc, IconChevronRight } from '../components/icons'
 import { notify, trainerOf } from '../lib/notifications'
@@ -59,7 +60,7 @@ function shapeWorkout(row) {
 }
 
 function shapeTask(t) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   let sub;
   if (t.completed_at)   sub = `Completed ${new Date(t.completed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
   else if (!t.due_date) sub = 'No due date';
@@ -92,7 +93,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
   const [trainerId, setTrainerId] = React.useState(null);
   const now = useLiveClock();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const done = todayWorkout?.status === 'completed';
 
   React.useEffect(() => { if (userId) trainerOf(userId).then(setTrainerId); }, [userId]);
@@ -103,7 +104,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
       .select('*')
       .eq('client_id', userId)
       .then(({ data }) => {
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = todayISO();
         // A completed task lingers only for the day it was done, then drops off.
         const rows = (data || []).filter(t => !t.completed_at || t.completed_at.slice(0, 10) >= todayStr);
         rows.sort((a, b) => {
@@ -344,7 +345,7 @@ export function Dashboard({ go, user, userId, impersonating, unread = 0, onClien
 // already passed), and nothing on rest days. Taps through to the Train screen.
 function WeekStrip({ userId, go }) {
   const [byDate, setByDate] = React.useState(null);
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayISO();
 
   // Build the current Mon–Sun week in the same UTC-date convention the rest
   // of the app uses for scheduled_date comparisons.
