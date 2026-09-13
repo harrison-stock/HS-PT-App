@@ -365,6 +365,52 @@ export async function repeatDayOnce(sourceDayId, clientId, { title } = {}) {
   return { id: dayRow.id };
 }
 
+/**
+ * Which programme each day belongs to, copies included.
+ *
+ * A template day hangs off a phase, and a phase off a programme. A client-owned
+ * copy deliberately has no phase - that absence is what makes it the client's,
+ * editable without touching the template - so any query that reaches a
+ * programme by joining through programme_phases silently drops them. With
+ * !inner on that join it drops the session entirely.
+ *
+ * Which, since the copy model went in, has meant every workout a client has
+ * actually logged. The programme report was reading sessions that way and
+ * quietly showing nothing at all.
+ *
+ * Give it day rows already carrying { id, origin_day_id, programme_phases };
+ * it returns dayId -> phase, following a copy back to the template it came
+ * from. One extra round trip, and only when there are copies to resolve.
+ *
+ * One hop is enough by construction: repeatDayOnce points a copy of a copy at
+ * the original template rather than at its immediate source, so origin_day_id
+ * always names a template day or nothing.
+ */
+export async function phaseByDay(days) {
+  const out = {};
+  const needed = new Set();
+  for (const d of days) {
+    if (!d || !d.id) continue;
+    if (d.programme_phases) out[d.id] = d.programme_phases;
+    else if (d.origin_day_id) needed.add(d.origin_day_id);
+  }
+  if (!needed.size) return out;
+
+  const { data } = await supabase.from('programme_days')
+    .select('id, programme_phases ( programme_id, name, programmes ( name, tag ) )')
+    .in('id', [...needed]);
+  const byOrigin = Object.fromEntries((data || []).map(r => [r.id, r.programme_phases]));
+
+  for (const d of days) {
+    if (!d || !d.id || out[d.id] || !d.origin_day_id) continue;
+    const ph = byOrigin[d.origin_day_id];
+    // A one-off with no origin belongs to no programme, which is the truth
+    // rather than a gap - it is left out instead of guessed at.
+    if (ph) out[d.id] = ph;
+  }
+  return out;
+}
+
 /** Materialise several days for one client, in order. */
 export async function materialiseDays(sourceDayIds, clientId) {
   const map = new Map();
