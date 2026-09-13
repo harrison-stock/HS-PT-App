@@ -49,6 +49,7 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
     return next;
   });
   const [finishing, setFinishing] = React.useState(false);
+  const [saveError, setSaveError] = React.useState(null);
   const [confirmQuit, setConfirmQuit] = React.useState(false);
   const [complete, setComplete] = React.useState(false);
   const scrollRef = React.useRef(null);
@@ -374,8 +375,16 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
   // Once finished, drop the snapshot so we don't re-prompt.
   React.useEffect(() => { if (complete && userId) clearActiveWorkout(userId); }, [complete, userId]);
 
+  // Returns { ok } or { ok: false, error }. The caller shows the celebration
+  // only on ok, because until this file was fixed it showed it either way:
+  // every write here ignored the error Supabase handed back, the whole body sat
+  // in a catch that only logged, and the finish button set `complete` without
+  // asking how the save went. Which then cleared the resume snapshot. A dropped
+  // connection in a gym basement - the normal case, not the exotic one - could
+  // therefore produce a congratulations screen, no logged sets, and nothing
+  // left on the phone to recover from.
   const saveSession = async () => {
-    if (!dayId || !userId) return;
+    if (!dayId || !userId) return { ok: false, error: 'No workout to save.' };
     try {
       // Build the rows FIRST. Client-added exercises have non-DB ids - log them
       // by name with a null exercise_id (the FK only accepts real rows).
@@ -398,8 +407,9 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       // that was finished without re-logging). Just mark the day complete.
       if (pendingSets.length === 0) {
         editModeRef.current = false;
-        await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
-        return;
+        const { error } = await supabase.from('client_workouts')
+          .update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
+        return error ? { ok: false, error: error.message } : { ok: true };
       }
 
       // Amending an existing session rewrites that session's sets in place. The
@@ -416,53 +426,88 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
         : new Date().toISOString();
 
       let ws = null;
+      let oldSetIds = [];
       const amendId = editSessionRef.current || savedSessionRef.current;
       if (amendId) {
-        await supabase.from('logged_sets').delete().eq('session_id', amendId);
+        // Note what is already logged - do not remove it yet. This used to
+        // delete first and insert after, so a failed insert left the session
+        // with nothing in it and the original results gone for good. Writing
+        // the replacement first means the worst case is duplicates, which are
+        // visible and recoverable, rather than an empty session, which is
+        // neither. A transaction would be better still; that needs an RPC.
+        const { data: existing, error: readErr } = await supabase
+          .from('logged_sets').select('id').eq('session_id', amendId);
+        if (readErr) return { ok: false, error: readErr.message };
+        oldSetIds = (existing || []).map(r => r.id);
+
         const { error: upErr } = await supabase.from('workout_sessions')
           .update({ completed_at: completedAt }).eq('id', amendId);
-        if (!upErr) ws = { id: amendId };
+        if (upErr) return { ok: false, error: upErr.message };
+        ws = { id: amendId };
         editModeRef.current = false;
       }
       if (!ws) {
-        const { data: fresh } = await supabase
+        const { data: fresh, error: sErr } = await supabase
           .from('workout_sessions')
           .insert({ client_id: userId, day_id: dayId, started_at: sessionStartRef.current, completed_at: completedAt })
           .select('id').single();
+        if (sErr || !fresh) return { ok: false, error: sErr?.message || 'Could not create the session.' };
         ws = fresh;
       }
-      if (ws) {
-        savedSessionRef.current = ws.id;
-        editSessionRef.current = ws.id;
-        const logRows = pendingSets.map(r => ({ ...r, session_id: ws.id }));
-        let { error: logErr } = await supabase.from('logged_sets').insert(logRows);
-        // Fallback if migration 055 (library exercise id) isn't applied yet.
-        // This one only drops the new column, so nothing logged is lost.
+
+      savedSessionRef.current = ws.id;
+      editSessionRef.current = ws.id;
+      const logRows = pendingSets.map(r => ({ ...r, session_id: ws.id }));
+      let { error: logErr } = await supabase.from('logged_sets').insert(logRows);
+      // Fallback if migration 055 (library exercise id) isn't applied yet.
+      // This one only drops the new column, so nothing logged is lost.
+      if (logErr) {
+        const noLib = logRows.map(({ library_exercise_id, ...r }) => r);
+        ({ error: logErr } = await supabase.from('logged_sets').insert(noLib));
+        // Fallback if migration 032 (exercise_name / nullable exercise_id)
+        // isn't applied either: log the programme exercises without the new
+        // fields. Lossy, so it stays the last resort.
         if (logErr) {
-          const noLib = logRows.map(({ library_exercise_id, ...r }) => r);
-          ({ error: logErr } = await supabase.from('logged_sets').insert(noLib));
-          // Fallback if migration 032 (exercise_name / nullable exercise_id)
-          // isn't applied either: log the programme exercises without the new
-          // fields. Lossy, so it stays the last resort.
-          if (logErr) {
-            const safe = noLib.filter(r => r.exercise_id).map(({ exercise_name, ...r }) => r);
-            if (safe.length) await supabase.from('logged_sets').insert(safe);
-          }
+          const safe = noLib.filter(r => r.exercise_id).map(({ exercise_name, ...r }) => r);
+          if (safe.length) ({ error: logErr } = await supabase.from('logged_sets').insert(safe));
         }
-        await supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
-        // Notify the coach that the client finished a workout - or, if they
-        // went back in to correct it, that the results changed. Two identical
-        // "Workout completed" pings for one session read like a bug.
+      }
+      // The line that was missing. Every fallback having failed is exactly when
+      // the client most needs to be told, and told while their phone still
+      // holds the only copy.
+      if (logErr) return { ok: false, error: logErr.message };
+
+      if (oldSetIds.length) {
+        const { error: delErr } = await supabase.from('logged_sets').delete().in('id', oldSetIds);
+        if (delErr) return {
+          ok: false,
+          error: 'Saved, but the previous version of this session is still there too - '
+               + 'your results may show each set twice. Tell your coach.',
+        };
+      }
+
+      const { error: cwErr } = await supabase.from('client_workouts')
+        .update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
+      if (cwErr) return { ok: false, error: cwErr.message };
+
+      // Telling the coach is not part of saving. A failed push must not put a
+      // client back on the finish screen with their work already stored.
+      try {
         const tId = await trainerOf(userId);
-        if (tId) notify({
+        if (tId) await notify({
           recipientId: tId, actorId: userId, kind: 'done',
           title: amendId ? 'Results updated' : 'Workout completed',
           body: dayTitleRef.current ? `${dayTitleRef.current} - review their logged sets.` : 'Review their logged sets.',
           // Straight to their results rather than the hub.
           link: { screen: 'coach', clientId: userId, tab: 'training', dayId },
         });
-      }
-    } catch (e) { console.error('saveSession', e); }
+      } catch (e) { console.error('notify after save', e); }
+
+      return { ok: true };
+    } catch (e) {
+      console.error('saveSession', e);
+      return { ok: false, error: e?.message || 'Could not reach the server.' };
+    }
   };
 
   // Sync activeIdx -> scroll position. While we drive the scroll
@@ -816,7 +861,18 @@ export function ActiveLog({ go, dayId, userId, resume, edit, onExitClientView })
       }}>
         {railItems.map((it, i) =>
         it.type === 'finish' ?
-        <FinishSlide key={`f${i}`} phaseId={it.phaseId} missed={missedCount} onFinish={async () => { setFinishing(true); try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {} await saveSession(); setFinishing(false); setComplete(true); }} /> :
+        <FinishSlide key={`f${i}`} phaseId={it.phaseId} missed={missedCount} error={saveError}
+          onFinish={async () => {
+            setFinishing(true); setSaveError(null);
+            const r = await saveSession();
+            setFinishing(false);
+            // Stay put on failure. `complete` is what clears the snapshot this
+            // session could be rebuilt from, and what marks the day done on the
+            // dashboard - neither should happen for work that isn't stored.
+            if (!r?.ok) { setSaveError(r?.error || 'Could not save. Check your signal and try again.'); return; }
+            try { localStorage.setItem('hs_today_complete', '1'); } catch (e) {}
+            setComplete(true);
+          }} /> :
         it.type === 'superset' ?
         <SupersetCard key={`ss${it.group[0].id}`} group={it.group} unit={unit} onToggleUnit={toggleUnit}
           onComplete={(exId, si) => completeSet(exId, si)}
@@ -1350,7 +1406,7 @@ function ExerciseComment() {
 
 // ── FINAL SLIDE (after cooldown) ─────────────────────────────────
 // "Cooldown complete · ready to finish?" - last rail slide before results.
-function FinishSlide({ phaseId, missed = 0, onFinish }) {
+function FinishSlide({ phaseId, missed = 0, error = null, onFinish }) {
   const phase = PHASES.find((p) => p.id === phaseId) || {};
   const clean = missed === 0;
   const confetti = ['var(--c-amber)', 'var(--c-blue)', 'var(--c-coral)', 'var(--accent)', 'var(--c-pink)'];
@@ -1414,12 +1470,33 @@ function FinishSlide({ phaseId, missed = 0, onFinish }) {
           </div>
         )}
 
+        {/* A save that didn't happen. Said here rather than in a toast, because
+            the one thing that must not happen next is the client walking away
+            believing the session is stored - it is still on this phone, and
+            only this screen can put it anywhere else. */}
+        {error && (
+          <div className="mono" style={{
+            maxWidth: 340, marginBottom: 18, padding: '12px 14px', borderRadius: 10, textAlign: 'left',
+            fontSize: 11, lineHeight: 1.55, color: 'var(--c-coral)',
+            background: 'color-mix(in srgb, var(--c-coral) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--c-coral) 45%, transparent)',
+          }}>
+            <div style={{ fontWeight: 700, letterSpacing: '0.08em', marginBottom: 5 }}>NOT SAVED YET</div>
+            <div style={{ color: 'var(--text-2)' }}>{error}</div>
+            <div style={{ color: 'var(--text-3)', marginTop: 6 }}>
+              Your sets are still here - nothing is lost. Try again, or come back to this
+              screen when you have signal.
+            </div>
+          </div>
+        )}
+
         {/* The pulse is the reward for a clean sweep - it would read as
-            celebration if it fired over a half-finished session. */}
-        <button onClick={onFinish} className={clean ? 'btn-primary btn-pulse' : 'btn-primary'} style={{
+            celebration if it fired over a half-finished session, or over one
+            that hasn't been stored. */}
+        <button onClick={onFinish} className={clean && !error ? 'btn-primary btn-pulse' : 'btn-primary'} style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 30px'
         }}>
-          FINISH &amp; SEE RESULTS <IconCheck size={15} sw={3} />
+          {error ? 'TRY AGAIN' : <>FINISH &amp; SEE RESULTS</>} <IconCheck size={15} sw={3} />
         </button>
       </div>
     </div>);
