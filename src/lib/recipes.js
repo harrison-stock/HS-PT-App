@@ -93,8 +93,12 @@ export async function saveRecipe(trainerId, draft) {
     recipeId = data.id;
   }
 
-  // Replace ingredients
-  await supabase.from('recipe_ingredients').delete().eq('recipe_id', recipeId);
+  // Replace ingredients. Same delete-then-insert shape as the workout log had,
+  // with the same failure: a refused insert after a successful delete leaves a
+  // recipe with no ingredients and reports that it saved. Every result is now
+  // checked, and a failure says so rather than being returned as an id.
+  const { error: delIng } = await supabase.from('recipe_ingredients').delete().eq('recipe_id', recipeId);
+  if (delIng) return { error: delIng };
   const ingRows = (draft.ingredients || [])
     .filter(i => i.name.trim() !== '')
     .map((i, idx) => ({
@@ -104,14 +108,21 @@ export async function saveRecipe(trainerId, draft) {
       unit: i.unit?.trim() || '',
       name: i.name.trim(),
     }));
-  if (ingRows.length) await supabase.from('recipe_ingredients').insert(ingRows);
+  if (ingRows.length) {
+    const { error } = await supabase.from('recipe_ingredients').insert(ingRows);
+    if (error) return { error };
+  }
 
   // Replace steps
-  await supabase.from('recipe_steps').delete().eq('recipe_id', recipeId);
+  const { error: delSteps } = await supabase.from('recipe_steps').delete().eq('recipe_id', recipeId);
+  if (delSteps) return { error: delSteps };
   const stepRows = (draft.steps || [])
     .filter(s => s.trim() !== '')
     .map((s, idx) => ({ recipe_id: recipeId, sort_order: idx, body: s.trim() }));
-  if (stepRows.length) await supabase.from('recipe_steps').insert(stepRows);
+  if (stepRows.length) {
+    const { error } = await supabase.from('recipe_steps').insert(stepRows);
+    if (error) return { error };
+  }
 
   return { id: recipeId };
 }

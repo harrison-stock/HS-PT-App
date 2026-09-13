@@ -128,10 +128,10 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
     setLoadingClients(true);
     const [{ data: profiles }, { data: managed }, { data: archived }] = await Promise.all([
       supabase.from('profiles')
-        .select('id, name, email, credits, client_status, subscription_due, timezone, archived, billing_url, billing_status, billing_period_end, billing_amount, billing_currency, daily_step_goal')
+        .select('id, name, email, credits, client_status, subscription_due, timezone, archived, billing_url, billing_status, billing_period_end, billing_amount, billing_currency, daily_step_goal, date_of_birth')
         .eq('trainer_id', trainerId).eq('role', 'client').eq('archived', false),
       supabase.from('managed_clients')
-        .select('id, name, email, credits, client_status, billing_url, daily_step_goal')
+        .select('id, name, email, credits, client_status, billing_url, daily_step_goal, date_of_birth')
         .eq('trainer_id', trainerId).is('linked_profile_id', null),
       supabase.from('profiles')
         .select('id, name, email, credits, client_status')
@@ -487,6 +487,7 @@ function shapeClient(p) {
     timezone: p.timezone || 'Europe/London',
     billing_url: p.billing_url || '',
     daily_step_goal: p.daily_step_goal ?? null,
+    date_of_birth: p.date_of_birth ?? null,
     billing_status: p.billing_status || null,
     billing_period_end: p.billing_period_end || null,
     billing_amount: p.billing_amount ?? null,
@@ -513,6 +514,7 @@ function shapeManagedClient(mc) {
     client_status: mc.client_status || 'online',
     billing_url: mc.billing_url || '',
     daily_step_goal: mc.daily_step_goal ?? null,
+    date_of_birth: mc.date_of_birth ?? null,
     managed: true,
     status: 'managed',
     // An in-person client is not waiting for anything - the coach logs their

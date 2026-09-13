@@ -23,41 +23,48 @@ export function advanceDate(fromISO, recurrence) {
   const d = fromISO ? new Date(fromISO + 'T00:00:00Z') : new Date();
   if (recurrence === 'daily')   d.setUTCDate(d.getUTCDate() + 1);
   else if (recurrence === 'weekly')  d.setUTCDate(d.getUTCDate() + 7);
-  else if (recurrence === 'monthly') d.setUTCMonth(d.getUTCMonth() + 1);
+  else if (recurrence === 'monthly') {
+    // setUTCMonth on the 31st rolls into the month after next - 31 January
+    // becomes 3 March - which is not what anyone means by monthly. Clamp to the
+    // last day of the target month instead.
+    const day = d.getUTCDate();
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(day, lastDay));
+  }
   else return null;
   return d.toISOString().slice(0, 10);
 }
 
-// Toggle a task's completion. When *completing* a recurring task, the next
-// occurrence is created once (guarded by recur_spawned). Completion itself
-// always succeeds even if the recurrence columns aren't present yet - the
-// recurrence step is best-effort and simply no-ops pre-migration.
+/**
+ * Toggle a task's completion.
+ *
+ * One server-side call, because the two halves need different rights. Marking
+ * it done is the client's to do; laying down the next occurrence is the
+ * coach's, and the client has no insert permission on client_tasks. This used
+ * to be an update followed by an insert from the browser, so when a client
+ * ticked off a weekly check-in the update went through, the insert was refused
+ * by RLS, the refusal was never checked, and the series quietly ended. It
+ * worked when the coach ticked it - which is why nobody noticed it failing for
+ * the only person who was supposed to.
+ *
+ * Returns { error } so a caller can say something when it doesn't work.
+ */
 export async function setTaskComplete(taskId, complete) {
-  await supabase.from('client_tasks')
-    .update({ completed_at: complete ? new Date().toISOString() : null })
-    .eq('id', taskId);
-  if (!complete) return;
+  const { error } = await supabase.rpc('complete_task', { p_task_id: taskId, p_complete: !!complete });
+  if (!error) return {};
 
-  const { data: t } = await supabase.from('client_tasks').select('*').eq('id', taskId).maybeSingle();
-  if (!t || !t.recurrence || t.recurrence === 'none' || t.recur_spawned) return;
-
-  const nextDue = advanceDate(t.due_date, t.recurrence);
-  const row = {
-    client_id: t.client_id, trainer_id: t.trainer_id,
-    title: t.title, kind: t.kind, form_id: t.form_id || null,
-    due_date: nextDue, recurrence: t.recurrence,
-    // The reminder choice belongs to the series, not to one occurrence - a
-    // check-in set never to nag mustn't start nagging next week.
-    notify_on_assign: t.notify_on_assign !== false,
-    remind: t.remind || 'chase',
-  };
-  if (t.icon) row.icon = t.icon;
-  let { error } = await supabase.from('client_tasks').insert(row);
-  if (error) {
-    const { icon: _i, notify_on_assign: _n, remind: _m, ...bare } = row;
-    ({ error } = await supabase.from('client_tasks').insert(bare));
+  // A database still behind migration 071 has no such function. Fall back to
+  // what the app did before, which at least completes the task - the spawn is
+  // then repaired by catchUpRecurring next time the coach opens them.
+  if (/complete_task|function|schema cache/i.test(error.message || '')) {
+    const { error: upErr } = await supabase.from('client_tasks')
+      .update({ completed_at: complete ? new Date().toISOString() : null })
+      .eq('id', taskId);
+    return upErr ? { error: upErr } : {};
   }
-  if (!error) await supabase.from('client_tasks').update({ recur_spawned: true }).eq('id', taskId);
+  return { error };
 }
 
 // Advance past `todayISO` in one go. A client away for a month shouldn't come
@@ -87,9 +94,12 @@ export function nextDueAfter(fromISO, recurrence, todayISO) {
 // anything was written, so the caller knows to reload.
 export async function catchUpRecurring(tasks) {
   const today = new Date().toISOString().slice(0, 10);
+  // Completed ones count too. A series that was ticked off before migration 071
+  // had its successor refused by RLS, so the task most in need of repair is the
+  // one that looks finished.
   const stalled = (tasks || []).filter(t =>
     t.recurrence && t.recurrence !== 'none' && !t.recur_spawned &&
-    !t.completed_at && t.due_date && t.due_date < today);
+    t.due_date && t.due_date < today);
   if (!stalled.length) return false;
 
   let wrote = false;

@@ -309,6 +309,77 @@ select public.t('070 a submitted check-in cannot be deleted',
 select public.t('070 a client CAN still submit a new one',
   (select count(*) from public.form_responses where answers->>'sleep' = 'ok') = 1);
 
+-- ════════════════════════════════════════════════════════════════════════════
+--  071 — a client completing a recurring task keeps the series alive
+-- ════════════════════════════════════════════════════════════════════════════
+select public.be(null);
+insert into public.client_tasks (id, client_id, trainer_id, title, kind, due_date, recurrence)
+values ('aaaa0000-0000-0000-0000-000000000001','33333333-3333-3333-3333-333333333333',
+        '11111111-1111-1111-1111-111111111111','Weekly check-in','check', current_date, 'weekly');
+
+-- The client ticks it off. Before this migration the update landed, the insert
+-- of the next occurrence was refused by RLS, and the series ended there.
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+select public.complete_task('aaaa0000-0000-0000-0000-000000000001', true);
+reset role;
+
+select public.t('071 the task is marked done',
+  (select completed_at from public.client_tasks where id='aaaa0000-0000-0000-0000-000000000001') is not null);
+select public.t('071 the series continues after the CLIENT completes it',
+  (select count(*) from public.client_tasks
+    where client_id='33333333-3333-3333-3333-333333333333' and title='Weekly check-in'
+      and completed_at is null) = 1);
+select public.t('071 the next one is a week later, and still the coach''s row',
+  (select due_date from public.client_tasks where title='Weekly check-in' and completed_at is null)
+    = current_date + 7
+  and (select trainer_id from public.client_tasks where title='Weekly check-in' and completed_at is null)
+    = '11111111-1111-1111-1111-111111111111');
+
+-- Ticking it twice must not produce two.
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+select public.complete_task('aaaa0000-0000-0000-0000-000000000001', true);
+reset role;
+select public.t('071 completing twice does not spawn twice',
+  (select count(*) from public.client_tasks where title='Weekly check-in') = 2);
+
+-- Month-end: 31 January monthly must land on 28/29 February, not in March.
+select public.be(null);
+insert into public.client_tasks (id, client_id, trainer_id, title, kind, due_date, recurrence)
+values ('aaaa0000-0000-0000-0000-000000000002','33333333-3333-3333-3333-333333333333',
+        '11111111-1111-1111-1111-111111111111','Monthly photos','photo', date '2027-01-31', 'monthly');
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+select public.complete_task('aaaa0000-0000-0000-0000-000000000002', true);
+reset role;
+select public.t('071 monthly from the 31st lands at month end, not in the month after',
+  (select due_date from public.client_tasks where title='Monthly photos' and completed_at is null)
+    = date '2027-02-28',
+  'got ' || coalesce((select due_date from public.client_tasks where title='Monthly photos' and completed_at is null)::text,'none'));
+
+-- The RPC exists because the client genuinely cannot do this themselves, and
+-- that is still true - the fix is a narrow privileged path, not a wider policy.
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+insert into public.client_tasks (client_id, trainer_id, title, kind, due_date)
+  values ('33333333-3333-3333-3333-333333333333','11111111-1111-1111-1111-111111111111','Self-assigned','check', current_date);
+reset role;
+select public.t('071 a client still cannot create tasks directly',
+  (select count(*) from public.client_tasks where title='Self-assigned') = 0);
+
+-- Somebody else's task is nobody else's business.
+select public.be('88888888-8888-8888-8888-888888888888');
+set role authenticated;
+do $$ begin
+  perform public.complete_task('aaaa0000-0000-0000-0000-000000000001', false);
+  perform public.t('071 a stranger cannot complete someone else''s task', false, 'it succeeded');
+exception when others then
+  perform public.t('071 a stranger cannot complete someone else''s task', true, sqlerrm);
+end $$;
+reset role;
+select public.be(null);
+
 -- ── Summary ─────────────────────────────────────────────────────────────────
 \pset tuples_only on
 \pset format unaligned
@@ -318,9 +389,9 @@ from public._t order by n;
 select '';
 -- A check that never recorded a result is a failure, not an absence: an
 -- assertion silently lost to a permissions error is exactly how a test suite
--- reports success it hasn't earned. 38 is the number of t() calls in this file.
+-- reports success it hasn't earned. 45 is the number of t() calls in this file.
 select case
-  when count(*) <> 38 then 'HARNESS BROKEN - expected 38 checks, recorded ' || count(*)::text
+  when count(*) <> 45 then 'HARNESS BROKEN - expected 45 checks, recorded ' || count(*)::text
   when count(*) filter (where pass is not true) > 0
     then count(*) filter (where pass is not true)::text || ' OF ' || count(*)::text || ' FAILED'
   else 'ALL ' || count(*)::text || ' CHECKS PASSED' end

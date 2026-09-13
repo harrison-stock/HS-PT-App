@@ -9,22 +9,30 @@ export function FormFill({ formId, taskId, clientId, onClose, onSubmitted }) {
   const [answers, setAnswers] = React.useState({});
   const [saving, setSaving] = React.useState(false);
   const [done, setDone] = React.useState(false);
+  const [err, setErr] = React.useState('');
 
   React.useEffect(() => { loadForm(formId).then(setForm); }, [formId]);
 
   const set = (id, v) => setAnswers(a => ({ ...a, [id]: v }));
   const fields = form?.fields || [];
-  const complete = fields.filter(f => f.required).every(f => {
+  // `form` is null until it loads, so fields is [] and [].every() is true -
+  // which made an unloaded form count as a completed one. A quick tap sent an
+  // empty check-in that looked, to the coach, like a client who had nothing to
+  // say. Nothing is submittable until the questions have actually arrived.
+  const loaded = !!form;
+  const complete = loaded && fields.filter(f => f.required).every(f => {
     const v = answers[f.id];
     return v != null && v !== '';
   });
 
   const submit = async () => {
     if (!complete || saving) return;
-    setSaving(true);
+    setSaving(true); setErr('');
     const { error } = await submitFormResponse({ formId, clientId, taskId, answers });
     setSaving(false);
-    if (error) return;
+    // A failed submit used to return silently, leaving the client looking at a
+    // filled-in form with no idea their coach hadn't received it.
+    if (error) { setErr(error.message || 'Could not send that. Check your signal and try again.'); return; }
     setDone(true);
     onSubmitted?.();
     setTimeout(onClose, 1000);
@@ -55,9 +63,17 @@ export function FormFill({ formId, taskId, clientId, onClose, onSubmitted }) {
               {fields.map(f => <FormField key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} />)}
             </div>
             <div style={{ padding: '12px 16px 26px', flexShrink: 0 }}>
+              {err && (
+                <div className="mono" style={{
+                  fontSize: 10.5, lineHeight: 1.55, color: 'var(--c-coral)', marginBottom: 10,
+                  padding: '10px 12px', borderRadius: 9,
+                  background: 'color-mix(in srgb, var(--c-coral) 12%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--c-coral) 45%, transparent)',
+                }}>{err}</div>
+              )}
               <button onClick={submit} disabled={!complete || saving} className="btn-primary"
                 style={{ width: '100%', opacity: complete ? 1 : 0.45, pointerEvents: complete && !saving ? 'auto' : 'none' }}>
-                {saving ? 'SUBMITTING…' : 'SUBMIT TO COACH'}
+                {saving ? 'SUBMITTING…' : !loaded ? 'LOADING…' : err ? 'TRY AGAIN' : 'SUBMIT TO COACH'}
               </button>
             </div>
           </>

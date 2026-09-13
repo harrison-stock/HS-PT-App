@@ -117,7 +117,8 @@ function ProfileTab({ user, userId, onSave, theme, onThemeChange, isTrainer }) {
           <input value={user?.email || ''} readOnly type="email" placeholder="you@email.com"
             style={{ ...inputStyle, color: 'var(--text-3)', cursor: 'default' }} />
           <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', letterSpacing: '0.05em', marginTop: 5 }}>
-            Your login email - contact your coach to change it.
+            The address you sign in with. It can't be changed from inside the app -
+            ask your coach and they'll sort it out with support.
           </div>
         </Field>
         <Field label="DATE OF BIRTH">

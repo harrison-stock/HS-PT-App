@@ -2281,6 +2281,7 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
   const [name, setName]             = React.useState(c.name ?? '');
   const [email, setEmail]           = React.useState(c.email ?? '');
   const [dob, setDob]               = React.useState(c.date_of_birth ?? '');
+  const dobLoaded = c.date_of_birth !== undefined;
   const [credits, setCredits]       = React.useState(c.credits ?? 0);
   const [cStatus, setCStatus]       = React.useState(c.client_status ?? 'online');
   const [subDue, setSubDue]         = React.useState(c.subscription_due ?? '');
@@ -2290,6 +2291,7 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
   const [resetEmail, setResetEmail] = React.useState(c.email ?? '');
   const [saving, setSaving]         = React.useState(false);
   const [saved, setSaved]           = React.useState(false);
+  const [saveErr, setSaveErr]       = React.useState('');
   const [resetSent, setResetSent]   = React.useState(false);
   const [archiveConfirm, setArchiveConfirm] = React.useState(false);
 
@@ -2300,16 +2302,23 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
   const saveSettings = async () => {
     if (saving) return;
     setSaving(true);
-    const details = { name: name.trim() || c.name, email: email.trim(), date_of_birth: dob || null };
+    // date_of_birth only travels when we actually loaded one. The roster query
+    // used to omit the column, so the field initialised blank and saving any
+    // unrelated change wrote null over a real date of birth - the editor could
+    // not tell "not loaded" from "deliberately cleared".
+    const details = { name: name.trim() || c.name };
+    if (isManaged) details.email = email.trim();
+    if (dobLoaded) details.date_of_birth = dob || null;
     if (isManaged) {
       const extra = { credits, client_status: cStatus, billing_url: safeUrl(payUrl), daily_step_goal: goalValue };
       let { error } = await supabase.from('managed_clients').update({ ...details, ...extra }).eq('id', c.id);
       // Fallback if migration 044 (managed dob) isn't applied yet.
       if (error) { const { date_of_birth, ...rest } = details; await supabase.from('managed_clients').update({ ...rest, ...extra }).eq('id', c.id); }
     } else {
-      await supabase.from('profiles').update({ ...details, credits, client_status: cStatus, subscription_due: subDue || null, timezone: tz, billing_url: safeUrl(payUrl), daily_step_goal: goalValue }).eq('id', c.id);
+      const { error } = await supabase.from('profiles').update({ ...details, credits, client_status: cStatus, subscription_due: subDue || null, timezone: tz, billing_url: safeUrl(payUrl), daily_step_goal: goalValue }).eq('id', c.id);
+      if (error) { setSaving(false); setSaveErr(error.message); return; }
     }
-    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
+    setSaving(false); setSaved(true); setSaveErr(''); setTimeout(() => setSaved(false), 2000);
     onSaved?.();
   };
 
@@ -2348,8 +2357,17 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" style={fieldSt}/>
         </FieldLabel>
         <FieldLabel label="EMAIL">
-          <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="client@email.com" style={fieldSt}/>
+          <input value={email} onChange={e => setEmail(e.target.value)} type="email"
+            disabled={!isManaged} placeholder="client@email.com"
+            style={{ ...fieldSt, opacity: isManaged ? 1 : 0.55, cursor: isManaged ? 'text' : 'not-allowed' }}/>
         </FieldLabel>
+        {!isManaged && (
+          <Mono>
+            This is the address they sign in with, and editing it here would only change
+            the label - they would still need the old one to log in, and wouldn't know it.
+            Changing a login address has to be done in Supabase.
+          </Mono>
+        )}
         <FieldLabel label="DATE OF BIRTH">
           <input value={dob} onChange={e => setDob(e.target.value)} type="date" style={fieldSt}/>
         </FieldLabel>
@@ -2444,10 +2462,17 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
         </div>
       )}
 
-      <button onClick={saveSettings} disabled={saving} className="btn-primary"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        {saved ? <><IconCheck size={14}/> SAVED</> : saving ? 'SAVING…' : 'SAVE SETTINGS'}
-      </button>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {saveErr && (
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--c-coral)', lineHeight: 1.5 }}>
+            Not saved - {saveErr}
+          </div>
+        )}
+        <button onClick={saveSettings} disabled={saving} className="btn-primary"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {saved ? <><IconCheck size={14}/> SAVED</> : saving ? 'SAVING…' : saveErr ? 'TRY AGAIN' : 'SAVE SETTINGS'}
+        </button>
+      </div>
 
       {/* Password reset */}
       <div className="card" style={{ padding: 14, display: 'grid', gap: 10 }}>
