@@ -28,7 +28,7 @@ export function PushPrompt({ userId }) {
     (async () => {
       try { if (localStorage.getItem(KEY) === '1') return; } catch (e) { /* ignore */ }
       if (pushBlockedReason()) return;
-      if (await isPushEnabled()) return;
+      if (await isPushEnabled(userId)) return;
       if (alive) setShow(true);
     })();
     return () => { alive = false; };

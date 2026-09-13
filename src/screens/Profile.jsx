@@ -641,7 +641,7 @@ function PushSetting({ userId }) {
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState('');
 
-  React.useEffect(() => { isPushEnabled().then(setOn); }, []);
+  React.useEffect(() => { isPushEnabled(userId).then(setOn); }, [userId]);
   const blocked = pushBlockedReason();
 
   const [okMsg, setOkMsg] = React.useState('');
@@ -651,7 +651,7 @@ function PushSetting({ userId }) {
     const r = on ? await disablePush() : await enablePush(userId);
     setBusy(false);
     if (r?.error) { setMsg(r.error); return; }
-    setOn(await isPushEnabled());
+    setOn(await isPushEnabled(userId));
   };
 
   // The round trip that matters: through the server, out to the push service,

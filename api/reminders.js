@@ -21,10 +21,15 @@ export default async function handler(req, res) {
   // Vercel signs its own cron requests; the secret is for anyone else who finds
   // the URL. Unset means open, which is survivable - the worst a stranger can
   // do is make today's reminders go out slightly early, once.
+  // Required, not optional. This used to run the check only `if (secret)`, so
+  // forgetting to set it left a public URL that sends every client their
+  // reminders on demand - and the comment beside it reasoned that the worst
+  // case was "slightly early, once", which is true only until someone calls it
+  // in a loop. Missing configuration is now a refusal.
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.authorization || '';
-    if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'unauthorised' });
+  if (!secret) return res.status(503).json({ error: 'CRON_SECRET is not configured' });
+  if ((req.headers.authorization || '') !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'unauthorised' });
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -43,7 +48,16 @@ export default async function handler(req, res) {
     .limit(500);
 
   if (error) return res.status(500).json({ error: error.message });
-  const due = (rows || []).filter(t => t.remind === 'chase' || t.due_date === today);
+  let due = (rows || []).filter(t => t.remind === 'chase' || t.due_date === today);
+  if (!due.length) return res.status(200).json({ clients: 0, tasks: 0, sent: 0 });
+
+  // An archived client is one the coach has stopped working with. Chasing them
+  // daily about a check-in they will never do is the clearest possible way to
+  // get the app's notifications turned off - by someone who has already left.
+  const ids = [...new Set(due.map(t => t.client_id))];
+  const { data: live } = await db.from('profiles').select('id').in('id', ids).eq('archived', false);
+  const active = new Set((live || []).map(r => r.id));
+  due = due.filter(t => active.has(t.client_id));
   if (!due.length) return res.status(200).json({ clients: 0, tasks: 0, sent: 0 });
 
   // One push per client, however much they owe. Four separate buzzes for four

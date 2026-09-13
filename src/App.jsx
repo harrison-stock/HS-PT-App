@@ -8,6 +8,7 @@ import { Login, SetPassword } from './screens/Login'
 import { Dashboard } from './screens/Dashboard'
 import { unreadCount, subscribeNotifications, maybeBrowserNotify, requestNotifyPermission } from './lib/notifications'
 import { loadActiveWorkout, clearActiveWorkout } from './lib/activeWorkout'
+import { releasePush } from './lib/push'
 import { InstallPrompt } from './screens/InstallPrompt'
 import { isStandalone } from './lib/installPrompt'
 import { ToastHost } from './lib/toast'
@@ -187,6 +188,22 @@ export default function App() {
     // an unclaimed invite, and no claim for the browser to forget to make.
   };
 
+  // Signing out has to take this device's notifications with it.
+  //
+  // It used to be a bare signOut(), which leaves both the browser subscription
+  // and its row pointing at the account that just left. On a shared phone the
+  // next person kept receiving the last one's reminders - and task titles carry
+  // real wording, so that is somebody else's coaching arriving on your screen.
+  // Local draft state goes too: an unfinished workout belongs to whoever logged
+  // it, not to whoever picks the phone up next.
+  const signOutFully = React.useCallback(async (uid) => {
+    try { sessionStorage.removeItem('hs_set_pw'); } catch (e) { /* ignore */ }
+    try { await releasePush(uid); } catch (e) { /* never block the sign-out */ }
+    try { if (uid) clearActiveWorkout(uid); } catch (e) { /* ignore */ }
+    try { localStorage.removeItem('hs_today_complete'); } catch (e) { /* ignore */ }
+    await supabase.auth.signOut();
+  }, []);
+
   // Live notifications: unread badge + browser notification while open.
   React.useEffect(() => {
     if (!session) { setUnread(0); return; }
@@ -349,7 +366,7 @@ export default function App() {
         if (window.location.hash) { try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) {} }
         setNeedsPassword(false);
       }}
-      onSignOut={() => { try { sessionStorage.removeItem('hs_set_pw'); } catch (e) {} supabase.auth.signOut(); }}
+      onSignOut={() => signOutFully(session?.user?.id)}
     />
   );
 
@@ -410,7 +427,7 @@ export default function App() {
       }}
       theme={theme}
       onThemeChange={setTheme}
-      onLogout={() => supabase.auth.signOut()}
+      onLogout={() => signOutFully(session?.user?.id)}
     />
   );
   else ScreenEl = <Dashboard go={navigate} user={dashUser} userId={activeUserId} impersonating={impersonating} unread={unread} onClientSettings={impersonating ? openClientSettings : undefined}/>;

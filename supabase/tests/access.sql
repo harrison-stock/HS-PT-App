@@ -245,6 +245,70 @@ select public.t('068 the Stripe webhook can still write billing',
   and (select billing_amount from public.profiles where id='33333333-3333-3333-3333-333333333333') = 12000
   and (select stripe_customer_id from public.profiles where id='33333333-3333-3333-3333-333333333333') = 'cus_123');
 
+-- ════════════════════════════════════════════════════════════════════════════
+--  070 — authorship
+-- ════════════════════════════════════════════════════════════════════════════
+select public.be(null);
+insert into public.client_injuries (id, client_id, trainer_id, muscle_group, note)
+values ('dddddddd-1111-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333',
+        '11111111-1111-1111-1111-111111111111', 'knee', 'Coach assessment');
+
+-- The coach writes a note on their client's injury.
+select public.be('11111111-1111-1111-1111-111111111111');
+set role authenticated;
+insert into public.client_injury_notes (id, injury_id, author_id, body)
+values ('eeeeeeee-1111-0000-0000-000000000001', 'dddddddd-1111-0000-0000-000000000001',
+        '11111111-1111-1111-1111-111111111111', 'Loading looked off on the left');
+reset role;
+select public.t('070 the coach can write a note on their client',
+  (select count(*) from public.client_injury_notes where id = 'eeeeeeee-1111-0000-0000-000000000001') = 1);
+
+-- The client tries to rewrite it, delete it, and forge one in the coach's name.
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+update public.client_injury_notes set body = 'Everything is fine'
+  where id = 'eeeeeeee-1111-0000-0000-000000000001';
+delete from public.client_injury_notes where id = 'eeeeeeee-1111-0000-0000-000000000001';
+insert into public.client_injury_notes (injury_id, author_id, body)
+  values ('dddddddd-1111-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'Signed by the coach');
+reset role;
+
+select public.t('070 a client cannot rewrite their coach''s note',
+  (select body from public.client_injury_notes where id = 'eeeeeeee-1111-0000-0000-000000000001')
+    = 'Loading looked off on the left');
+select public.t('070 a client cannot delete their coach''s note',
+  (select count(*) from public.client_injury_notes where id = 'eeeeeeee-1111-0000-0000-000000000001') = 1);
+select public.t('070 a client cannot post as their coach',
+  (select count(*) from public.client_injury_notes where body = 'Signed by the coach') = 0);
+
+-- But they can still take part.
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+insert into public.client_injury_notes (injury_id, author_id, body)
+  values ('dddddddd-1111-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333', 'Still aches on stairs');
+reset role;
+select public.t('070 a client CAN add their own note',
+  (select count(*) from public.client_injury_notes where body = 'Still aches on stairs') = 1);
+
+-- Check-ins are a record, not a draft.
+select public.be(null);
+insert into public.forms (id, trainer_id, title) values ('ffffffff-1111-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','Weekly');
+insert into public.form_responses (id, form_id, client_id, answers)
+values ('ffffffff-2222-0000-0000-000000000001','ffffffff-1111-0000-0000-000000000001','33333333-3333-3333-3333-333333333333','{"sleep":"poor"}');
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+update public.form_responses set answers = '{"sleep":"great"}' where id = 'ffffffff-2222-0000-0000-000000000001';
+delete from public.form_responses where id = 'ffffffff-2222-0000-0000-000000000001';
+insert into public.form_responses (form_id, client_id, answers)
+  values ('ffffffff-1111-0000-0000-000000000001','33333333-3333-3333-3333-333333333333','{"sleep":"ok"}');
+reset role;
+select public.t('070 a submitted check-in cannot be rewritten later',
+  (select answers->>'sleep' from public.form_responses where id = 'ffffffff-2222-0000-0000-000000000001') = 'poor');
+select public.t('070 a submitted check-in cannot be deleted',
+  (select count(*) from public.form_responses where id = 'ffffffff-2222-0000-0000-000000000001') = 1);
+select public.t('070 a client CAN still submit a new one',
+  (select count(*) from public.form_responses where answers->>'sleep' = 'ok') = 1);
+
 -- ── Summary ─────────────────────────────────────────────────────────────────
 \pset tuples_only on
 \pset format unaligned
@@ -254,9 +318,9 @@ from public._t order by n;
 select '';
 -- A check that never recorded a result is a failure, not an absence: an
 -- assertion silently lost to a permissions error is exactly how a test suite
--- reports success it hasn't earned. 30 is the number of t() calls in this file.
+-- reports success it hasn't earned. 38 is the number of t() calls in this file.
 select case
-  when count(*) <> 30 then 'HARNESS BROKEN - expected 30 checks, recorded ' || count(*)::text
+  when count(*) <> 38 then 'HARNESS BROKEN - expected 38 checks, recorded ' || count(*)::text
   when count(*) filter (where pass is not true) > 0
     then count(*) filter (where pass is not true)::text || ' OF ' || count(*)::text || ' FAILED'
   else 'ALL ' || count(*)::text || ' CHECKS PASSED' end

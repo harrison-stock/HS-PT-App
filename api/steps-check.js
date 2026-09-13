@@ -45,10 +45,15 @@ const avg = (byDay, from, to) => {
 export default async function handler(req, res) {
   if (!pushReady()) return res.status(503).json({ error: 'push not configured' });
 
+  // Required, not optional. This used to run the check only `if (secret)`, so
+  // forgetting to set it left a public URL that sends every client their
+  // reminders on demand - and the comment beside it reasoned that the worst
+  // case was "slightly early, once", which is true only until someone calls it
+  // in a loop. Missing configuration is now a refusal.
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.authorization || '';
-    if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'unauthorised' });
+  if (!secret) return res.status(503).json({ error: 'CRON_SECRET is not configured' });
+  if ((req.headers.authorization || '') !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'unauthorised' });
   }
 
   const today = iso(new Date());
