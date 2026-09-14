@@ -288,9 +288,18 @@ export async function duplicateProgramme(trainerId, prog) {
  * that lands on two dates, reuses the copy it already made - two copies would
  * leave a logged session with no single day to belong to.
  *
- * On failure the caller gets the template id back rather than nothing. A client
- * with the old shared workout on their calendar is worse than the new model;
- * a client with no workout at all is worse than both.
+ * On failure the caller gets an error, and no longer the template's own id.
+ *
+ * That fallback was written when migration 060 might not have been applied, and
+ * the reasoning was that a shared workout on someone's calendar beats no
+ * workout at all. It doesn't, and the cost is invisible at the moment it is
+ * paid: scheduling a template directly means the client's Thursday IS the
+ * template, so the next edit to "their" workout rewrites the programme for
+ * every other client running it. A coach fixing one person's weights would
+ * change everybody's, and nothing on screen would say so.
+ *
+ * A missing workout is obvious and can be assigned again. A silently shared one
+ * is neither.
  */
 export async function materialiseDay(sourceDayId, clientId) {
   if (!sourceDayId || !clientId) return { error: { message: 'Missing day or client' } };
@@ -301,19 +310,17 @@ export async function materialiseDay(sourceDayId, clientId) {
 
   const { data: src } = await supabase
     .from('programme_days').select(DAY_SELECT).eq('id', sourceDayId).maybeSingle();
-  if (!src) return { id: sourceDayId, sharedFallback: true };
+  if (!src) return { error: { message: 'That workout could not be read.' } };
   // Already somebody's copy - schedule it as-is rather than copying a copy.
   if (src.owner_client_id) return { id: src.id };
 
-  const { data: dayRow } = await supabase.from('programme_days').insert({
+  const { data: dayRow, error: insErr } = await supabase.from('programme_days').insert({
     phase_id: null, week_index: src.week_index, day_of_week: src.day_of_week,
     intro: src.intro || '', notes: src.notes || '',
     title: src.title ?? null, image_url: src.image_url ?? null,
     owner_client_id: clientId, origin_day_id: src.id, copied_at: new Date().toISOString(),
   }).select('id').single();
-  // Migration 060 not applied yet: with no ownership columns there is no copy
-  // to make, so carry on pointing at the template exactly as before.
-  if (!dayRow) return { id: sourceDayId, sharedFallback: true };
+  if (!dayRow) return { error: insErr || { message: 'Could not make this client their own copy of that workout.' } };
 
   try {
     await writeContentInto(src, dayRow.id);
@@ -412,15 +419,26 @@ export async function phaseByDay(days) {
   return out;
 }
 
-/** Materialise several days for one client, in order. */
+/**
+ * Materialise several days for one client, in order.
+ *
+ * Returns { map } or { error, map }. It used to return the Map itself and fall
+ * back to the template id for anything that failed, which meant a partly-failed
+ * assignment quietly put shared rows on a client's calendar. It now stops at
+ * the first failure and says so; the caller decides what to do with the copies
+ * that did succeed.
+ */
 export async function materialiseDays(sourceDayIds, clientId) {
   const map = new Map();
   for (const id of sourceDayIds) {
     if (map.has(id)) continue;
     const r = await materialiseDay(id, clientId);
-    map.set(id, r.id || id);
+    // `r.id || id` used to be the line here, which put the template back in the
+    // map the moment a copy failed - the same silent sharing, one level up.
+    if (r.error) return { error: r.error, map };
+    map.set(id, r.id);
   }
-  return map;
+  return { map };
 }
 
 /**

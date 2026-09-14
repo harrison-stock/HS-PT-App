@@ -584,6 +584,52 @@ select public.t('075 another coach still cannot read it',
 reset role;
 select public.be(null);
 
+-- ════════════════════════════════════════════════════════════════════════════
+--  076 — a managed client owns their own copy, like everyone else
+-- ════════════════════════════════════════════════════════════════════════════
+select public.be(null);
+-- A managed client - the coach's record for someone with no account, so not in
+-- profiles at all. The old foreign key made this impossible.
+insert into public.managed_clients (id, trainer_id, name)
+  values ('6666aaaa-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','Managed Mo');
+insert into public.programme_days (id, phase_id, week_index, day_of_week, title)
+  values ('6666aaaa-0000-0000-0000-000000000002','cccc0000-0000-0000-0000-0000000000b1',0,3,'Template Pull');
+insert into public.workout_sections (id, day_id, kind, title, sort_order)
+  values ('6666aaaa-0000-0000-0000-000000000003','6666aaaa-0000-0000-0000-000000000002','MAIN','Workout',0);
+insert into public.section_exercises (id, section_id, name, sort_order)
+  values ('6666aaaa-0000-0000-0000-000000000004','6666aaaa-0000-0000-0000-000000000003','Barbell Row',0);
+
+do $$ begin
+  insert into public.programme_days (id, phase_id, week_index, day_of_week, owner_client_id, origin_day_id)
+  values ('6666aaaa-0000-0000-0000-000000000005', null, 0, 3,
+          '6666aaaa-0000-0000-0000-000000000001','6666aaaa-0000-0000-0000-000000000002');
+  perform public.t('076 a managed client can own a day copy', true);
+exception when others then
+  perform public.t('076 a managed client can own a day copy', false, sqlerrm);
+end $$;
+
+-- The isolation the whole model exists for: one client's copy, edited, must
+-- leave the template and everybody else exactly as they were.
+insert into public.workout_sections (id, day_id, kind, title, sort_order)
+  values ('6666aaaa-0000-0000-0000-000000000006','6666aaaa-0000-0000-0000-000000000005','MAIN','Workout',0);
+insert into public.section_exercises (id, section_id, name, sort_order)
+  values ('6666aaaa-0000-0000-0000-000000000007','6666aaaa-0000-0000-0000-000000000006','Barbell Row',0);
+update public.section_exercises set name = 'Chest-Supported Row'
+  where id = '6666aaaa-0000-0000-0000-000000000007';
+
+select public.t('076 editing their copy does not touch the template',
+  (select name from public.section_exercises where id='6666aaaa-0000-0000-0000-000000000004') = 'Barbell Row');
+select public.t('076 and their copy holds the change',
+  (select name from public.section_exercises where id='6666aaaa-0000-0000-0000-000000000007') = 'Chest-Supported Row');
+
+-- The cascade the foreign key used to provide, now a trigger - and covering the
+-- kind of client it never covered.
+delete from public.managed_clients where id = '6666aaaa-0000-0000-0000-000000000001';
+select public.t('076 deleting a managed client takes their owned days with them',
+  (select count(*) from public.programme_days where id='6666aaaa-0000-0000-0000-000000000005') = 0);
+select public.t('076 without taking the template',
+  (select count(*) from public.programme_days where id='6666aaaa-0000-0000-0000-000000000002') = 1);
+
 -- ── Summary ─────────────────────────────────────────────────────────────────
 \pset tuples_only on
 \pset format unaligned
@@ -593,9 +639,9 @@ from public._t order by n;
 select '';
 -- A check that never recorded a result is a failure, not an absence: an
 -- assertion silently lost to a permissions error is exactly how a test suite
--- reports success it hasn't earned. 64 is the number of t() calls in this file.
+-- reports success it hasn't earned. 69 is the number of t() calls in this file.
 select case
-  when count(*) <> 64 then 'HARNESS BROKEN - expected 64 checks, recorded ' || count(*)::text
+  when count(*) <> 69 then 'HARNESS BROKEN - expected 69 checks, recorded ' || count(*)::text
   when count(*) filter (where pass is not true) > 0
     then count(*) filter (where pass is not true)::text || ' OF ' || count(*)::text || ' FAILED'
   else 'ALL ' || count(*)::text || ' CHECKS PASSED' end
