@@ -1,7 +1,7 @@
 import React from 'react'
 import { HexBackButton, Hex } from '../components/hex'
 import { IconPlus, IconX2 } from '../components/icons'
-import { FIELD_TYPES, saveForm, deleteForm } from '../lib/forms'
+import { FIELD_TYPES, saveForm, archiveForm } from '../lib/forms'
 
 let _fid = 0;
 const newField = (type = 'text') => ({ id: `f${Date.now()}_${_fid++}`, type, label: '', options: type === 'choice' ? ['Option 1', 'Option 2'] : [], required: true });
@@ -47,7 +47,9 @@ export function FormBuilder({ trainerId, form, onClose, onSaved }) {
     if (res.error) return;
     if (close) onSaved(); else { setD(prev => ({ ...prev, id: res.id })); onSaved(true); }
   };
-  const remove = async () => { if (!confirmDel) { setConfirmDel(true); return; } if (d.id) await deleteForm(d.id); onSaved(); };
+  // Retires it rather than deleting it: the answers people gave it are a
+  // record, and tidying up a form should not destroy months of check-ins.
+  const remove = async () => { if (!confirmDel) { setConfirmDel(true); return; } if (d.id) await archiveForm(d.id); onSaved(); };
 
   return (
     // The overlay scrolls itself, with the header stuck to its top. The previous
@@ -130,7 +132,7 @@ export function FormBuilder({ trainerId, form, onClose, onSaved }) {
             all: 'unset', cursor: 'pointer', padding: '13px', borderRadius: 10, textAlign: 'center', marginTop: 4,
             border: `1px solid color-mix(in srgb, var(--c-coral) ${confirmDel ? 60 : 35}%, var(--line))`,
             color: confirmDel ? 'var(--c-coral)' : 'var(--text-3)', fontFamily: 'JetBrains Mono', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
-          }}>{confirmDel ? 'CONFIRM DELETE - TAP AGAIN' : 'DELETE FORM'}</button>
+          }}>{confirmDel ? 'CONFIRM RETIRE - TAP AGAIN' : 'RETIRE FORM'}</button>
         )}
       </div>
     </div>

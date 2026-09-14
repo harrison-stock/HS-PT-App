@@ -28,7 +28,8 @@ export function FormFill({ formId, taskId, clientId, onClose, onSubmitted }) {
   const submit = async () => {
     if (!complete || saving) return;
     setSaving(true); setErr('');
-    const { error } = await submitFormResponse({ formId, clientId, taskId, answers });
+    // The questions travel with the answers - see submitFormResponse.
+    const { error } = await submitFormResponse({ formId, clientId, taskId, answers, form });
     setSaving(false);
     // A failed submit used to return silently, leaving the client looking at a
     // filled-in form with no idea their coach hadn't received it.

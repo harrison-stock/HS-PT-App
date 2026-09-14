@@ -414,6 +414,21 @@ export function ActiveLog({ go, dayId, workoutId, userId, resume, edit, onExitCl
     return supabase.from('client_workouts').update({ status: 'completed' }).eq('day_id', dayId).eq('client_id', userId);
   }, [workoutId, dayId, userId]);
 
+  // Telling the coach is not part of saving. A failed push must not put a
+  // client back on the finish screen with their work already stored.
+  const notifyCoach = React.useCallback(async (wasAmend) => {
+    try {
+      const tId = await trainerOf(userId);
+      if (tId) await notify({
+        recipientId: tId, actorId: userId, kind: 'done',
+        title: wasAmend ? 'Results updated' : 'Workout completed',
+        body: dayTitleRef.current ? `${dayTitleRef.current} - review their logged sets.` : 'Review their logged sets.',
+        // Straight to their results rather than the hub.
+        link: { screen: 'coach', clientId: userId, tab: 'training', dayId },
+      });
+    } catch (e) { console.error('notify after save', e); }
+  }, [userId, dayId]);
+
   // Returns { ok } or { ok: false, error }. The caller shows the celebration
   // only on ok, because until this file was fixed it showed it either way:
   // every write here ignored the error Supabase handed back, the whole body sat
@@ -463,9 +478,41 @@ export function ActiveLog({ go, dayId, workoutId, userId, resume, edit, onExitCl
         ? new Date(startedMs + sessionTime * 1000).toISOString()
         : new Date().toISOString();
 
+      const amendId = editSessionRef.current || savedSessionRef.current;
+
+      // One call, one transaction. The sequence below - create or update the
+      // session, replace its sets, mark the occurrence done - is three or four
+      // separate requests from a browser, and nothing joins them. A connection
+      // that dies between the sets landing and the day being marked complete
+      // leaves a stored session against a workout the calendar still thinks is
+      // outstanding. Inside the function it either all happens or none of it
+      // does, and a failure leaves the previous results exactly as they were.
+      const { data: rpcId, error: rpcErr } = await supabase.rpc('save_workout_session', {
+        p_client_id: userId,
+        p_day_id: dayId,
+        p_client_workout_id: workoutId || null,
+        p_started_at: sessionStartRef.current,
+        p_completed_at: completedAt,
+        p_session_id: amendId || null,
+        p_sets: pendingSets,
+      });
+
+      if (!rpcErr && rpcId) {
+        savedSessionRef.current = rpcId;
+        editSessionRef.current = rpcId;
+        editModeRef.current = false;
+        await notifyCoach(amendId);
+        return { ok: true };
+      }
+      // A database still behind migration 074 has no such function; anything
+      // else is a real failure and must not be retried as separate writes,
+      // which is the very thing being replaced.
+      const missingFn = /save_workout_session|schema cache|does not exist/i.test(rpcErr?.message || '');
+      if (!missingFn) return { ok: false, error: rpcErr?.message || 'Could not save the session.' };
+
+      // ── Fallback: the pre-074 path, one request at a time ─────────────────
       let ws = null;
       let oldSetIds = [];
-      const amendId = editSessionRef.current || savedSessionRef.current;
       if (amendId) {
         // Note what is already logged - do not remove it yet. This used to
         // delete first and insert after, so a failed insert left the session
@@ -527,19 +574,7 @@ export function ActiveLog({ go, dayId, workoutId, userId, resume, edit, onExitCl
       const { error: cwErr } = await markOccurrenceDone();
       if (cwErr) return { ok: false, error: cwErr.message };
 
-      // Telling the coach is not part of saving. A failed push must not put a
-      // client back on the finish screen with their work already stored.
-      try {
-        const tId = await trainerOf(userId);
-        if (tId) await notify({
-          recipientId: tId, actorId: userId, kind: 'done',
-          title: amendId ? 'Results updated' : 'Workout completed',
-          body: dayTitleRef.current ? `${dayTitleRef.current} - review their logged sets.` : 'Review their logged sets.',
-          // Straight to their results rather than the hub.
-          link: { screen: 'coach', clientId: userId, tab: 'training', dayId },
-        });
-      } catch (e) { console.error('notify after save', e); }
-
+      await notifyCoach(amendId);
       return { ok: true };
     } catch (e) {
       console.error('saveSession', e);

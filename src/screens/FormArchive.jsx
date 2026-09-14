@@ -146,7 +146,10 @@ function TrendTable({ trend }) {
 const cellSt = { padding: '8px 10px', textAlign: 'center', verticalAlign: 'middle' };
 
 function Entry({ entry, form, open, onToggle }) {
-  const fields = form.fields || [];
+  // The questions this answer was actually given to, where it has them. Reading
+  // them off the live form instead means a later edit silently relabels every
+  // historical answer - and for a scale question, relabels the numbers too.
+  const fields = entry.fields || form.fields || [];
   const answered = fields
     .map(f => ({ field: f, text: answerText(f, entry.answers?.[f.id]) }))
     .filter(a => a.text != null);

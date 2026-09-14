@@ -462,6 +462,128 @@ select public.t('073 a session logged without an occurrence is still findable by
   (select count(*) from public.workout_sessions
     where day_id='bbbb0000-0000-0000-0000-0000000000c1' and client_workout_id is null) = 1);
 
+-- ════════════════════════════════════════════════════════════════════════════
+--  074 — saving a workout is all-or-nothing
+-- ════════════════════════════════════════════════════════════════════════════
+select public.be(null);
+insert into public.workout_sections (id, day_id, kind, title, sort_order)
+  values ('7777aaaa-0000-0000-0000-0000000000d1','bbbb0000-0000-0000-0000-0000000000c1','MAIN','Workout',0);
+insert into public.section_exercises (id, section_id, name, sort_order)
+  values ('7777aaaa-0000-0000-0000-0000000000e1','7777aaaa-0000-0000-0000-0000000000d1','Bench Press',0);
+
+-- A first save, by the client, through the function.
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+select public.save_workout_session(
+  '33333333-3333-3333-3333-333333333333','bbbb0000-0000-0000-0000-0000000000c1',
+  'bbbb0000-0000-0000-0000-0000000000f2', now() - interval '1 hour', now(), null,
+  '[{"exercise_id":"7777aaaa-0000-0000-0000-0000000000e1","exercise_name":"Bench Press","set_index":0,"actual_reps":8,"actual_weight_kg":60},
+    {"exercise_id":"7777aaaa-0000-0000-0000-0000000000e1","exercise_name":"Bench Press","set_index":1,"actual_reps":8,"actual_weight_kg":60}]'::jsonb
+) as sid \gset
+reset role;
+
+select public.t('074 a client can save their own session through the function',
+  (select count(*) from public.logged_sets where session_id = :'sid') = 2);
+select public.t('074 it marks that occurrence complete',
+  (select status from public.client_workouts where id='bbbb0000-0000-0000-0000-0000000000f2') = 'completed');
+select public.t('074 and leaves the other occurrence alone',
+  (select status from public.client_workouts where id='bbbb0000-0000-0000-0000-0000000000f1') = 'completed');
+
+-- Amending: two better sets replace the two that were there.
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+select public.save_workout_session(
+  '33333333-3333-3333-3333-333333333333','bbbb0000-0000-0000-0000-0000000000c1',
+  'bbbb0000-0000-0000-0000-0000000000f2', now() - interval '1 hour', now(), :'sid',
+  '[{"exercise_id":"7777aaaa-0000-0000-0000-0000000000e1","exercise_name":"Bench Press","set_index":0,"actual_reps":8,"actual_weight_kg":75}]'::jsonb
+);
+reset role;
+select public.t('074 an amend replaces rather than accumulates',
+  (select count(*) from public.logged_sets where session_id = :'sid') = 1
+  and (select actual_weight_kg from public.logged_sets where session_id = :'sid') = 75);
+
+-- The point of the whole thing: a set that cannot be stored rolls the rest back.
+-- A non-existent exercise_id violates the foreign key part-way through.
+select public.be('33333333-3333-3333-3333-333333333333');
+set role authenticated;
+do $$ begin
+  perform public.save_workout_session(
+    '33333333-3333-3333-3333-333333333333','bbbb0000-0000-0000-0000-0000000000c1',
+    'bbbb0000-0000-0000-0000-0000000000f2', now() - interval '1 hour', now(),
+    (select id from public.workout_sessions where client_workout_id='bbbb0000-0000-0000-0000-0000000000f2' limit 1),
+    '[{"exercise_id":"7777aaaa-0000-0000-0000-0000000000e1","exercise_name":"Bench","set_index":0,"actual_reps":5,"actual_weight_kg":100},
+      {"exercise_id":"00000000-0000-0000-0000-0000000000ff","exercise_name":"Ghost","set_index":1,"actual_reps":5,"actual_weight_kg":100}]'::jsonb);
+  perform public.t('074 a failed save changes nothing at all', false, 'it reported success');
+exception when others then
+  perform public.t('074 a failed save changes nothing at all', true, sqlerrm);
+end $$;
+reset role;
+
+select public.t('074 the previous results survived that failure untouched',
+  (select count(*) from public.logged_sets where session_id = :'sid') = 1
+  and (select actual_weight_kg from public.logged_sets where session_id = :'sid') = 75,
+  (select count(*)::text from public.logged_sets where session_id = :'sid') || ' rows');
+
+-- And it grants nothing: one client still cannot write another's session.
+select public.be('88888888-8888-8888-8888-888888888888');
+set role authenticated;
+do $$ begin
+  perform public.save_workout_session(
+    '33333333-3333-3333-3333-333333333333','bbbb0000-0000-0000-0000-0000000000c1',
+    null, now(), now(), null, '[]'::jsonb);
+  perform public.t('074 it grants nobody rights over someone else''s session', false, 'it succeeded');
+exception when others then
+  perform public.t('074 it grants nobody rights over someone else''s session', true, sqlerrm);
+end $$;
+reset role;
+select public.be(null);
+
+-- ════════════════════════════════════════════════════════════════════════════
+--  075 — a check-in still means what it meant when it was answered
+-- ════════════════════════════════════════════════════════════════════════════
+select public.be(null);
+insert into public.forms (id, trainer_id, title, fields) values
+  ('5555aaaa-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','Weekly check-in',
+   '[{"id":"q1","type":"scale","label":"How is your sleep?"}]'::jsonb);
+
+-- A client answers it, carrying the question with the answer.
+insert into public.form_responses (id, form_id, client_id, trainer_id, answers, fields, form_title) values
+  ('5555aaaa-0000-0000-0000-000000000002','5555aaaa-0000-0000-0000-000000000001',
+   '33333333-3333-3333-3333-333333333333','11111111-1111-1111-1111-111111111111',
+   '{"q1":"2"}'::jsonb, '[{"id":"q1","type":"scale","label":"How is your sleep?"}]'::jsonb, 'Weekly check-in');
+
+-- The coach reworks the question, keeping the field id.
+update public.forms
+   set fields = '[{"id":"q1","type":"scale","label":"How is your energy?"}]'::jsonb
+ where id = '5555aaaa-0000-0000-0000-000000000001';
+
+select public.t('075 an edited question does not rewrite the answer it was given to',
+  (select fields->0->>'label' from public.form_responses where id='5555aaaa-0000-0000-0000-000000000002')
+    = 'How is your sleep?');
+
+-- Retiring the form must not take the answers with it.
+delete from public.forms where id = '5555aaaa-0000-0000-0000-000000000001';
+select public.t('075 deleting a form no longer destroys the answers people gave it',
+  (select count(*) from public.form_responses where id='5555aaaa-0000-0000-0000-000000000002') = 1);
+select public.t('075 an orphaned response still knows what it was and what it asked',
+  (select form_title from public.form_responses where id='5555aaaa-0000-0000-0000-000000000002') = 'Weekly check-in'
+  and (select fields->0->>'label' from public.form_responses where id='5555aaaa-0000-0000-0000-000000000002') = 'How is your sleep?');
+
+-- And the coach can still read it, now the form it joined through is gone.
+select public.be('11111111-1111-1111-1111-111111111111');
+set role authenticated;
+select public.t('075 the coach can still read a response whose form has gone',
+  (select count(*) from public.form_responses where id='5555aaaa-0000-0000-0000-000000000002') = 1);
+reset role;
+
+-- A different coach cannot.
+select public.be('bbbbbbbb-0000-0000-0000-000000000001');
+set role authenticated;
+select public.t('075 another coach still cannot read it',
+  (select count(*) from public.form_responses where id='5555aaaa-0000-0000-0000-000000000002') = 0);
+reset role;
+select public.be(null);
+
 -- ── Summary ─────────────────────────────────────────────────────────────────
 \pset tuples_only on
 \pset format unaligned
@@ -471,9 +593,9 @@ from public._t order by n;
 select '';
 -- A check that never recorded a result is a failure, not an absence: an
 -- assertion silently lost to a permissions error is exactly how a test suite
--- reports success it hasn't earned. 52 is the number of t() calls in this file.
+-- reports success it hasn't earned. 64 is the number of t() calls in this file.
 select case
-  when count(*) <> 52 then 'HARNESS BROKEN - expected 52 checks, recorded ' || count(*)::text
+  when count(*) <> 64 then 'HARNESS BROKEN - expected 64 checks, recorded ' || count(*)::text
   when count(*) filter (where pass is not true) > 0
     then count(*) filter (where pass is not true)::text || ' OF ' || count(*)::text || ' FAILED'
   else 'ALL ' || count(*)::text || ' CHECKS PASSED' end
