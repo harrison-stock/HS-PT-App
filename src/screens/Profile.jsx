@@ -6,6 +6,8 @@ import { InstallPrompt } from './InstallPrompt'
 import { loadConnections, startWearableConnect } from '../lib/health'
 import { enablePush, disablePush, isPushEnabled, pushBlockedReason, sendTestPush } from '../lib/push'
 import { safeUrl, isStripeUrl, loadPortalUrl, billingStatus, renewalDate, formatAmount } from '../lib/billing'
+import { myErasureRequest, requestErasure } from '../lib/privacy'
+import { exportClient } from '../lib/exportClient'
 
 // Half-filled circle = "auto / follow system" appearance.
 const IconAuto = ({ size = 22, sw = 1.6 }) => (
@@ -73,6 +75,9 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
         <SubscriptionTab profile={profile} />
       )}
 
+      {/* Your data - what we hold, and how to get it or have it removed */}
+      {profile?.role !== 'trainer' && <YourDataCard userId={user?.id} trainerId={profile?.trainer_id} name={user?.name} />}
+
       {/* Log out - always visible at the bottom of Settings */}
       <button onClick={onLogout} style={{
         width: '100%', marginTop: 24,
@@ -86,6 +91,94 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
       }}>
         Log Out
       </button>
+    </div>
+  );
+}
+
+
+// What we hold about you, and the two things you can do about it.
+//
+// A privacy notice that says "contact us to exercise your rights" and gives no
+// way to do it is a notice nobody acts on. Both routes are here: take a copy
+// whenever you like, and ask for the rest to be removed.
+//
+// The erasure request goes to the coach rather than deleting anything. Training
+// and health records are kept for seven years after someone leaves, because
+// that is roughly how long a claim about an injury can take to surface, and a
+// self-service delete button would quietly destroy the coach's side of that
+// too. So it is a request, with a date on it, that someone has to answer.
+function YourDataCard({ userId, trainerId, name }) {
+  const [req, setReq] = React.useState(undefined);
+  const [asking, setAsking] = React.useState(false);
+  const [note, setNote] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState('');
+
+  React.useEffect(() => { if (userId) myErasureRequest(userId).then(setReq); }, [userId]);
+
+  const download = async (format) => {
+    setBusy(true); setMsg('');
+    const r = await exportClient(userId, name, format);
+    setBusy(false);
+    setMsg(r?.error || (format === 'csv' ? 'Training log downloaded.' : 'Copy downloaded.'));
+    setTimeout(() => setMsg(''), 6000);
+  };
+
+  const send = async () => {
+    setBusy(true);
+    const { error } = await requestErasure(userId, trainerId, note);
+    setBusy(false);
+    if (error) { setMsg(error.message); return; }
+    setAsking(false); setNote('');
+    myErasureRequest(userId).then(setReq);
+  };
+
+  const pending = req?.status === 'pending';
+
+  return (
+    <div className="card" style={{ padding: '16px 18px', marginTop: 14, display: 'grid', gap: 10 }}>
+      <div className="label">// YOUR DATA</div>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6 }}>
+        Your coach holds your training history, measurements, any injuries you&rsquo;ve told
+        them about and the check-ins you&rsquo;ve sent. You can take a copy at any time.
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <button onClick={() => download('json')} disabled={busy} className="btn-ghost" style={{ fontSize: 10, padding: '9px 0' }}>EVERYTHING</button>
+        <button onClick={() => download('csv')} disabled={busy} className="btn-ghost" style={{ fontSize: 10, padding: '9px 0' }}>TRAINING LOG</button>
+      </div>
+
+      {pending ? (
+        <div className="mono" style={{ fontSize: 10, color: 'var(--c-amber)', lineHeight: 1.6 }}>
+          You asked for your data to be deleted on{' '}
+          {new Date(req.requested_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
+          Your coach has been told and will be in touch.
+        </div>
+      ) : asking ? (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6 }}>
+            This asks your coach to delete everything they hold about you. It can&rsquo;t be
+            undone, and your training history goes with it &mdash; take a copy first if you
+            want one. Records are normally kept for seven years after you stop training,
+            in case a question about an injury comes up later, so your coach may need to
+            explain if they can&rsquo;t action it straight away.
+          </div>
+          <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
+            placeholder="Anything you want to add (optional)"
+            style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-1)', border: '1px solid var(--line-strong)', borderRadius: 8, padding: '9px 11px', color: 'var(--text)', fontFamily: 'JetBrains Mono', fontSize: 11, resize: 'none', outline: 'none' }}/>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <button onClick={() => { setAsking(false); setNote(''); }} className="btn-ghost" style={{ fontSize: 10, padding: '9px 0' }}>CANCEL</button>
+            <button onClick={send} disabled={busy} className="btn-ghost" style={{ fontSize: 10, padding: '9px 0', borderColor: 'var(--c-coral)', color: 'var(--c-coral)' }}>
+              {busy ? 'SENDING…' : 'SEND REQUEST'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAsking(true)} className="btn-ghost"
+          style={{ fontSize: 10, padding: '9px 0', borderColor: 'color-mix(in srgb, var(--c-coral) 40%, var(--line))', color: 'var(--text-3)' }}>
+          ASK FOR MY DATA TO BE DELETED
+        </button>
+      )}
+      {msg && <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>{msg}</div>}
     </div>
   );
 }

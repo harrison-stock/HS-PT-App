@@ -1,7 +1,7 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
 
-export function Login() {
+export function Login({ archivedOut = false }) {
   const invite = React.useMemo(() => {
     const p = new URLSearchParams(window.location.search);
     return { code: p.get('invite'), tid: p.get('tid'), name: p.get('name'), mc: p.get('mc'), email: p.get('email') };
@@ -111,6 +111,18 @@ export function Login() {
       </div>
 
       {/* Form */}
+      {archivedOut && (
+        <div className="mono" style={{
+          maxWidth: 320, margin: '0 auto 18px', padding: '12px 14px', borderRadius: 10,
+          fontSize: 11, lineHeight: 1.6, textAlign: 'left',
+          color: 'var(--text-2)', background: 'var(--bg-2)', border: '1px solid var(--line-strong)',
+        }}>
+          <span style={{ color: 'var(--accent)', fontWeight: 700 }}>This account is closed.</span>{' '}
+          Your coach has archived it, so you can&rsquo;t sign in for now. Nothing has been
+          deleted &mdash; if this is a mistake, or you want a copy of your training
+          history, get in touch with them.
+        </div>
+      )}
       <form onSubmit={submit} style={{ width: '100%', maxWidth: 340, display: 'grid', gap: 14 }}>
         {invite.code && mode === 'signup' && (
           <div style={{

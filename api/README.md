@@ -8,6 +8,10 @@ stores it, and the two routes in this folder do the sending.
   other person's phone as well as their notifications list.
 - `GET /api/reminders` — run daily by Vercel Cron. Pushes clients about check-ins
   and tasks that are due or overdue.
+- `GET /api/retention` — run weekly by Vercel Cron. Erases clients whose seven
+  years since archiving are up, removes their photo and document files, deletes
+  their login, and tells the coach it happened. The seven years live in the
+  `clients_due_erasure` view so the rule is in one place; see `docs/PRIVACY.md`.
 - `GET /api/steps-check` — run weekly by Vercel Cron. Pushes **the coach** when a
   client's step count has fallen off week on week. Deliberately coach-facing: a
   drop is a conversation, and only the coach knows whether the answer is a new

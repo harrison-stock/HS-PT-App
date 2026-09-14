@@ -132,15 +132,18 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
         .select('id, name, email, credits, client_status, subscription_due, timezone, archived, billing_url, billing_status, billing_period_end, billing_amount, billing_currency, daily_step_goal, date_of_birth')
         .eq('trainer_id', trainerId).eq('role', 'client').eq('archived', false),
       supabase.from('managed_clients')
-        .select('id, name, email, credits, client_status, billing_url, daily_step_goal, date_of_birth')
+        .select('id, name, email, credits, client_status, billing_url, daily_step_goal, date_of_birth, archived, archived_at')
         .eq('trainer_id', trainerId).is('linked_profile_id', null),
       supabase.from('profiles')
-        .select('id, name, email, credits, client_status')
+        .select('id, name, email, credits, client_status, archived_at')
         .eq('trainer_id', trainerId).eq('role', 'client').eq('archived', true),
     ]);
     const real    = (profiles || []).map(shapeClient);
-    const pending = (managed  || []).map(shapeManagedClient);
-    setArchivedClients(assignAccents((archived || []).map(shapeClient)));
+    // An archived managed client is archived, not deleted - the same word now
+    // means the same thing whichever kind of client it is said about.
+    const pending = (managed  || []).filter(m => !m.archived).map(shapeManagedClient);
+    const pendingArchived = (managed || []).filter(m => m.archived).map(shapeManagedClient);
+    setArchivedClients(assignAccents([...(archived || []).map(shapeClient), ...pendingArchived]));
 
     // Batch-load session stats for real clients
     if (real.length > 0) {
@@ -231,9 +234,12 @@ export function Coach({ go, trainerId, unread = 0, only, openTarget, onOpenConsu
   };
 
   // Bring an archived client back onto the active roster.
+  // Back onto the roster, and the retention clock stops: they have not left.
   const restoreClient = async (c) => {
     setArchivedClients(prev => prev.filter(x => x.id !== c.id));
-    await supabase.from('profiles').update({ archived: false }).eq('id', c.id);
+    const table = c.managed ? 'managed_clients' : 'profiles';
+    const { error } = await supabase.from(table).update({ archived: false, archived_at: null }).eq('id', c.id);
+    if (error) await supabase.from(table).update({ archived: false }).eq('id', c.id);
     fetchClients();
   };
 
