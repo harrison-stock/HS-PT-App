@@ -9,8 +9,13 @@ export const FIELD_TYPES = [
   { type: 'yesno',    label: 'Yes / No' },
 ];
 
-export async function loadForms() {
-  const { data } = await supabase.from('forms').select('*').order('updated_at', { ascending: false });
+export async function loadForms({ includeArchived = false } = {}) {
+  let q = supabase.from('forms').select('*');
+  // Archived forms are retired, not deleted: they stay out of the picker so a
+  // coach isn't offered something they've stopped using, while every answer
+  // anyone gave them stays readable.
+  if (!includeArchived) q = q.or('archived.is.null,archived.eq.false');
+  const { data } = await q.order('updated_at', { ascending: false });
   return data || [];
 }
 
@@ -35,14 +40,47 @@ export async function saveForm(trainerId, draft) {
   return error ? { error } : { id: data.id };
 }
 
-export async function deleteForm(id) {
-  await supabase.from('forms').delete().eq('id', id);
+/**
+ * Retire a form.
+ *
+ * This used to delete the row, and form_responses cascaded from it - so tidying
+ * up a form a coach had stopped using destroyed every answer anyone had ever
+ * given it. Months of weekly check-ins, gone, as a side effect of housekeeping.
+ * The form is archived instead: out of the picker, still there behind the
+ * answers that reference it.
+ */
+export async function archiveForm(id) {
+  const { error } = await supabase.from('forms').update({ archived: true }).eq('id', id);
+  if (!error) return {};
+  // A database behind migration 075 has no archived column. Deleting is what it
+  // did before and the responses now survive it, so this is safe either way.
+  return supabase.from('forms').delete().eq('id', id);
 }
 
-export async function submitFormResponse({ formId, clientId, taskId, answers }) {
-  const { error } = await supabase.from('form_responses')
-    .insert({ form_id: formId, client_id: clientId, task_id: taskId || null, answers });
-  return { error };
+// Old name, same job.
+export const deleteForm = archiveForm;
+
+/**
+ * Submit a check-in, with the questions it was actually asked.
+ *
+ * The answers are keyed by field id and the questions were read from the live
+ * form, so editing a question rewrote history: change "How is your sleep?
+ * (1-5)" to "How is your energy? (1-5)" and every answer ever given to the
+ * first is displayed against the second. Nothing is corrupted and every number
+ * is wrong. The response now carries its own copy of what it was asked.
+ */
+export async function submitFormResponse({ formId, clientId, taskId, answers, form }) {
+  const row = { form_id: formId, client_id: clientId, task_id: taskId || null, answers };
+  if (form) {
+    row.fields = form.fields || [];
+    row.form_title = form.title || '';
+    row.trainer_id = form.trainer_id || null;
+  }
+  const { error } = await supabase.from('form_responses').insert(row);
+  if (!error) return {};
+  // Pre-075 databases have none of those columns.
+  const { fields, form_title, trainer_id, ...bare } = row;
+  return supabase.from('form_responses').insert(bare);
 }
 
 export async function loadResponses(formId, clientId) {
@@ -59,7 +97,7 @@ export async function loadResponses(formId, clientId) {
 export async function loadClientResponses(clientId) {
   if (!clientId) return [];
   const { data } = await supabase.from('form_responses')
-    .select('id, form_id, task_id, answers, submitted_at, forms ( id, title, description, fields )')
+    .select('id, form_id, task_id, answers, fields, form_title, submitted_at, forms ( id, title, description, fields )')
     .eq('client_id', clientId)
     .order('submitted_at', { ascending: false });
   return data || [];
@@ -71,8 +109,11 @@ export async function loadClientResponses(clientId) {
 export function groupResponses(rows) {
   const byForm = new Map();
   for (const r of rows || []) {
-    const f = r.forms;
-    if (!f) continue; // form deleted since; the response is orphaned
+    // A response whose form has been retired still carries what it was asked,
+    // so it is shown rather than dropped. It used to be skipped outright, which
+    // meant tidying up a form made a client's history vanish from this screen
+    // even where the rows survived.
+    const f = r.forms || { id: `retired:${r.form_id || r.id}`, title: r.form_title || 'Retired form', fields: r.fields || [], retired: true };
     if (!byForm.has(f.id)) byForm.set(f.id, { form: f, entries: [] });
     byForm.get(f.id).entries.push(r);
   }
@@ -83,9 +124,21 @@ export function groupResponses(rows) {
       .filter(fl => fl.type === 'number' || fl.type === 'scale')
       .map(fl => ({
         field: fl,
+        // Only weeks that were asked this question, as it currently reads.
+        //
+        // Answers are keyed by field id, so a question that has been reworded
+        // keeps lining up with older answers given to the version before - and
+        // for a 1-5 scale that silently charts "how is your sleep" and "how is
+        // your energy" as one line. Where a response carries its own snapshot,
+        // its label has to still match; entries from before snapshots existed
+        // are taken at face value, since there is nothing better to go on.
         points: [...g.entries].reverse()
-          .map(e => ({ at: e.submitted_at, v: toNum(e.answers?.[fl.id]) }))
-          .filter(p => p.v != null),
+          .map(e => {
+            const asked = (e.fields || []).find(x => x.id === fl.id);
+            if (asked && (asked.label !== fl.label || asked.type !== fl.type)) return null;
+            return { at: e.submitted_at, v: toNum(e.answers?.[fl.id]) };
+          })
+          .filter(p => p && p.v != null),
       }))
       // One reading isn't a trend - it just puts an empty table above the entry
       // it came from.
