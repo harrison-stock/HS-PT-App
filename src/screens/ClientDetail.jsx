@@ -2786,10 +2786,19 @@ function ProgrammePosition({ clientId, clientName, trainerId, programmes, onClos
     if (movePlan.remove.length) await supabase.from('client_workouts').delete().in('id', movePlan.remove.map(r => r.id));
     if (movePlan.create.length) {
       // Each template day becomes this client's own copy before it's scheduled.
-      const owned = await materialiseDays(movePlan.create.map(r => r.day_id), clientId);
+      // Nothing is scheduled if any of them can't be copied: `|| r.day_id` used
+      // to stand here, which put the shared template on their calendar instead,
+      // and editing that workout for this client would then have edited it for
+      // everyone running the programme.
+      const { map: owned, error } = await materialiseDays(movePlan.create.map(r => r.day_id), clientId);
+      if (error) {
+        setBusy(false); setAction(null);
+        setFlash(`Nothing moved - ${error.message}`);
+        return;
+      }
       await supabase.from('client_workouts').insert(movePlan.create.map(r => ({
         client_id: clientId, trainer_id: trainerId,
-        day_id: owned.get(r.day_id) || r.day_id, scheduled_date: r.scheduled_date,
+        day_id: owned.get(r.day_id), scheduled_date: r.scheduled_date,
       })));
     }
     setBusy(false); setAction(null);
@@ -3003,6 +3012,7 @@ function ProgrammePosition({ clientId, clientName, trainerId, programmes, onClos
 // ── ASSIGN WORKOUT (duplicate from Coach.jsx for self-contained use) ───────
 function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, onAssigned }) {
   const [mode, setMode]         = React.useState('all'); // 'all' = whole programme, 'day' = single day
+  const [assignErr, setAssignErr] = React.useState('');
   const [progId, setProgId]     = React.useState(null);
   const [phaseIdx, setPhaseIdx] = React.useState(0);
   const [week, setWeek]         = React.useState(1);
@@ -3062,9 +3072,11 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
 
   const assign = async () => {
     if (!dayId || !date || saving) return;
-    setSaving(true);
-    const { id: ownDay } = await materialiseDay(dayId, clientId);
-    await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: ownDay, scheduled_date: date });
+    setSaving(true); setAssignErr('');
+    const { id: ownDay, error: copyErr } = await materialiseDay(dayId, clientId);
+    if (copyErr || !ownDay) { setSaving(false); setAssignErr(copyErr?.message || 'Could not assign that workout.'); return; }
+    const { error: insErr } = await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: ownDay, scheduled_date: date });
+    if (insErr) { setSaving(false); setAssignErr(insErr.message); return; }
     setSaving(false); setSavedCount(1); setSaved(true);
     setTimeout(() => onAssigned(), 1400);
   };
@@ -3073,12 +3085,14 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
     if (!allDays.length || !date || saving) return;
     setSaving(true);
     const monday = mondayOf(new Date(`${date}T00:00:00`));
-    const owned = await materialiseDays(allDays.map(r => r.dayId), clientId);
+    const { map: owned, error } = await materialiseDays(allDays.map(r => r.dayId), clientId);
+    if (error) { setSaving(false); setAssignErr(error.message); return; }
     const rows = allDays.map(r => {
       const d = new Date(monday); d.setDate(d.getDate() + r.dayOffset);
-      return { client_id: clientId, trainer_id: trainerId, day_id: owned.get(r.dayId) || r.dayId, scheduled_date: ymd(d) };
+      return { client_id: clientId, trainer_id: trainerId, day_id: owned.get(r.dayId), scheduled_date: ymd(d) };
     });
-    await supabase.from('client_workouts').insert(rows);
+    const { error: insErr } = await supabase.from('client_workouts').insert(rows);
+    if (insErr) { setSaving(false); setAssignErr(insErr.message); return; }
     setSaving(false); setSavedCount(rows.length); setSaved(true);
     setTimeout(() => onAssigned(), 1400);
   };
@@ -3088,6 +3102,18 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
       ✓ {savedCount} WORKOUT{savedCount === 1 ? '' : 'S'} ASSIGNED
     </div>
   );
+
+  // Nothing was scheduled. Said here rather than swallowed, because the old
+  // behaviour on a failed copy was to schedule the template instead - which
+  // looked like success and quietly made one client's edits everyone's.
+  const errNote = assignErr ? (
+    <div className="mono" style={{
+      fontSize: 10.5, lineHeight: 1.5, color: 'var(--c-coral)', margin: '0 18px 10px',
+      padding: '10px 12px', borderRadius: 9,
+      background: 'color-mix(in srgb, var(--c-coral) 12%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--c-coral) 45%, transparent)',
+    }}>Nothing was assigned - {assignErr}</div>
+  ) : null;
 
   return (
     <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
@@ -3134,6 +3160,7 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
 
           {loadingAll && <Mono>CALCULATING SCHEDULE…</Mono>}
 
+          {errNote}
           <button onClick={assignAll} disabled={!allDays.length || !date || saving} className="btn-primary"
             style={{ opacity: allDays.length && date ? 1 : 0.4, pointerEvents: allDays.length && date ? 'auto' : 'none' }}>
             {saving ? 'ASSIGNING…' : allDays.length ? `ASSIGN ${allDays.length} WORKOUT${allDays.length === 1 ? '' : 'S'} →` : 'SELECT AT LEAST ONE PHASE'}
@@ -3187,6 +3214,7 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
             </FieldLabel>
           )}
 
+          {errNote}
           <button onClick={assign} disabled={!dayId || !date || saving} className="btn-primary"
             style={{ opacity: dayId && date ? 1 : 0.4, pointerEvents: dayId && date ? 'auto' : 'none' }}>
             {saving ? 'ASSIGNING…' : 'ASSIGN WORKOUT →'}
@@ -3209,6 +3237,7 @@ function AssignWorkout({ clientId, clientName, trainerId, programmes, onClose, o
 // the programme grows.
 function SyncProgramme({ clientId, clientName, trainerId, programmes, onClose, onSynced }) {
   const [loading, setLoading]     = React.useState(true);
+  const [assignErr, setAssignErr] = React.useState('');
   const [progId, setProgId]       = React.useState(null);
   const [candidates, setCandidates] = React.useState([]); // [{ id, name, assignedDayIds, startedPhaseIds, earliest }]
   const [phaseSel, setPhaseSel]   = React.useState({});
@@ -3373,12 +3402,14 @@ function SyncProgramme({ clientId, clientName, trainerId, programmes, onClose, o
   const sync = async () => {
     if (!preview.length || saving) return;
     setSaving(true);
-    const owned = await materialiseDays(preview.map(r => r.dayId), clientId);
+    const { map: owned, error } = await materialiseDays(preview.map(r => r.dayId), clientId);
+    if (error) { setSaving(false); setAssignErr(error.message); return; }
     const rows = preview.map(r => ({
       client_id: clientId, trainer_id: trainerId,
-      day_id: owned.get(r.dayId) || r.dayId, scheduled_date: r.scheduled_date,
+      day_id: owned.get(r.dayId), scheduled_date: r.scheduled_date,
     }));
-    await supabase.from('client_workouts').insert(rows);
+    const { error: insErr } = await supabase.from('client_workouts').insert(rows);
+    if (insErr) { setSaving(false); setAssignErr(insErr.message); return; }
     setSaving(false); setSavedCount(rows.length); setSaved(true);
     setTimeout(() => onSynced(), 1400);
   };
@@ -3388,6 +3419,15 @@ function SyncProgramme({ clientId, clientName, trainerId, programmes, onClose, o
       ✓ {savedCount} WORKOUT{savedCount === 1 ? '' : 'S'} SYNCED
     </div>
   );
+
+  const errNote = assignErr ? (
+    <div className="mono" style={{
+      fontSize: 10.5, lineHeight: 1.5, color: 'var(--c-coral)', margin: '0 18px 10px',
+      padding: '10px 12px', borderRadius: 9,
+      background: 'color-mix(in srgb, var(--c-coral) 12%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--c-coral) 45%, transparent)',
+    }}>Nothing was synced - {assignErr}</div>
+  ) : null;
 
   return (
     <div className="card" style={{ padding: 14, display: 'grid', gap: 12 }}>
@@ -3490,6 +3530,7 @@ function SyncProgramme({ clientId, clientName, trainerId, programmes, onClose, o
             </FieldLabel>
           )}
 
+          {errNote}
           <button onClick={sync} disabled={!preview.length || !anchor || saving} className="btn-primary"
             style={{ opacity: preview.length && anchor ? 1 : 0.4, pointerEvents: preview.length && anchor ? 'auto' : 'none' }}>
             {saving ? 'SYNCING…' : preview.length ? `SYNC ${preview.length} WORKOUT${preview.length === 1 ? '' : 'S'} →` : 'NOTHING TO ADD'}

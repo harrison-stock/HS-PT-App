@@ -1210,12 +1210,18 @@ function AssignAdhocSheet({ workout, clients, trainerId, onClose }) {
 
   const filtered = (clients || []).filter(c => c.name.toLowerCase().includes(q.toLowerCase()));
   const selected = clients?.find(c => c.id === clientId);
+  const [assignErr, setAssignErr] = React.useState('');
 
   const assign = async () => {
     if (!clientId || !dayId || !date || saving) return;
-    setSaving(true);
-    const { id: ownDay } = await materialiseDay(dayId, clientId);
-    await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: ownDay, scheduled_date: date });
+    setSaving(true); setAssignErr('');
+    // The client's own copy, or nothing. A failed copy used to hand back the
+    // template's id, so the shared workout went on their calendar and the next
+    // edit to "their" Thursday rewrote it for everyone running the programme.
+    const { id: ownDay, error: copyErr } = await materialiseDay(dayId, clientId);
+    if (copyErr || !ownDay) { setSaving(false); setAssignErr(copyErr?.message || 'Could not assign that workout.'); return; }
+    const { error: insErr } = await supabase.from('client_workouts').insert({ client_id: clientId, trainer_id: trainerId, day_id: ownDay, scheduled_date: date });
+    if (insErr) { setSaving(false); setAssignErr(insErr.message); return; }
     if (selected && !selected.managed) {
       notify({ recipientId: clientId, actorId: trainerId, kind: 'task', title: 'New workout assigned', body: workout.name, link: { screen: 'workouts' } });
     }
@@ -1275,6 +1281,14 @@ function AssignAdhocSheet({ workout, clients, trainerId, onClose }) {
 
       {!done && (
         <div style={{ padding: '12px 18px calc(env(safe-area-inset-bottom, 0px) + 28px)', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+          {assignErr && (
+            <div className="mono" style={{
+              fontSize: 10.5, lineHeight: 1.5, color: 'var(--c-coral)', marginBottom: 10,
+              padding: '10px 12px', borderRadius: 9,
+              background: 'color-mix(in srgb, var(--c-coral) 12%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--c-coral) 45%, transparent)',
+            }}>Nothing was assigned - {assignErr}</div>
+          )}
           <button onClick={assign} disabled={!clientId || !dayId || !date || saving} className="btn-primary"
             style={{ width: '100%', opacity: clientId && dayId && date ? 1 : 0.4, pointerEvents: clientId && dayId && date ? 'auto' : 'none' }}>
             {saving ? 'ASSIGNING…' : 'ASSIGN WORKOUT →'}
