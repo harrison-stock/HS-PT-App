@@ -6,6 +6,7 @@ import { loadExerciseMuscleMap } from '../lib/exercises'
 import { loadPhotoHistory, uploadProgressPhoto, deleteProgressPhoto } from '../lib/progressPhotos'
 import { toast } from '../lib/toast'
 import { loadHealthDaily, saveManualSteps, stepSummary } from '../lib/health'
+import { loadConsent, hasConsent } from '../lib/consent'
 import { ZoomPan } from '../components/ZoomPan'
 import { MUSCLE_LABELS } from '../data/index'
 import { MUSCLE_BODY } from '../data/musclePaths'
@@ -314,6 +315,14 @@ function fmtPhotoDate(iso) {
 }
 
 function PhotosTab({ userId }) {
+  // Photographs are the one purpose a client can decline and still be coached,
+  // so declining has to actually stop them being taken. An optional consent
+  // that changes nothing is a tickbox, not a choice.
+  const [photoConsent, setPhotoConsent] = React.useState(true);
+  React.useEffect(() => {
+    if (!userId) return;
+    loadConsent(userId).then(c => setPhotoConsent(hasConsent(c, 'photos'))).catch(() => {});
+  }, [userId]);
   const [shots, setShots] = React.useState({ front: null, side: null, back: null }); // { file, preview }
   const [history, setHistory] = React.useState(null);
   const [uploading, setUploading] = React.useState(false);
@@ -361,7 +370,22 @@ function PhotosTab({ userId }) {
 
   return (
     <>
-      {/* This week's submission */}
+      {!photoConsent && (
+        <div className="card" style={{ padding: 16, marginBottom: 12, display: 'grid', gap: 8 }}>
+          <div className="label">// PROGRESS PHOTOS</div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.65 }}>
+            You said no to progress photographs, so uploading is switched off. Everything else
+            works as normal, and anything you uploaded before is still below &mdash; delete it
+            here if you want it gone. You can change your mind under Settings &rarr; Your Data.
+          </div>
+        </div>
+      )}
+      {/* This week's submission. Hidden, not disabled: an upload box you cannot
+          use is worse than no upload box. Existing photos stay visible below,
+          because withdrawing consent stops new processing and does not by
+          itself delete what is already there - deleting is a separate act, and
+          one they can still take from the history. */}
+      {photoConsent && (<>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '0 2px 8px' }}>
         <div className="label">// THIS WEEK · SUBMIT</div>
       </div>
@@ -409,6 +433,8 @@ function PhotosTab({ userId }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.05em', textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>Tap a pose to attach a photo. Please note that these images will only be shared with Harrison and can be removed at any time from the history below.
         </div>
       </div>
+
+      </>)}
 
       {/* History */}
       <div className="label" style={{ margin: '18px 2px 8px' }}>// HISTORY</div>

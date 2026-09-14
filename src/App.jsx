@@ -9,6 +9,7 @@ import { Dashboard } from './screens/Dashboard'
 import { unreadCount, subscribeNotifications, maybeBrowserNotify, requestNotifyPermission } from './lib/notifications'
 import { loadActiveWorkout, clearActiveWorkout } from './lib/activeWorkout'
 import { releasePush } from './lib/push'
+import { loadConsent, consentOutstanding } from './lib/consent'
 import { InstallPrompt } from './screens/InstallPrompt'
 import { isStandalone } from './lib/installPrompt'
 import { ToastHost } from './lib/toast'
@@ -23,6 +24,7 @@ const lazyScreen = (loader, name) =>
   React.lazy(() => loader().then(m => ({ default: m[name] })));
 
 const Workouts       = lazyScreen(() => import('./screens/Workouts'), 'Workouts');
+const ConsentGate    = lazyScreen(() => import('./screens/ConsentGate'), 'ConsentGate');
 const ActiveLog      = lazyScreen(() => import('./screens/ActiveLog'), 'ActiveLog');
 const SessionResults = lazyScreen(() => import('./screens/ActiveLog'), 'SessionResults');
 const Progress       = lazyScreen(() => import('./screens/Progress'), 'Progress');
@@ -84,6 +86,9 @@ export default function App() {
   }, [screen]);
   const [previewWorkoutId, setPreviewWorkoutId] = React.useState(null);
   const [archivedOut, setArchivedOut] = React.useState(false);
+  const [declinedConsent, setDeclinedConsent] = React.useState(false);
+  // undefined = not checked yet, so the app is never shown before we know.
+  const [needConsent, setNeedConsent] = React.useState(undefined);
   const [logDayId, setLogDayId] = React.useState(null);
   // Which scheduled occurrence, not just which workout - the same day can be on
   // the calendar twice, and finishing one must not finish the other.
@@ -182,6 +187,17 @@ export default function App() {
       }
       setProfile(data);
       setBootError(false);
+
+      // Health data needs explicit consent, and explicit consent has to be
+      // asked for before the data is collected rather than after. Coaches are
+      // not asked: they are the controller, not the subject.
+      if (data?.role === 'trainer') setNeedConsent(false);
+      else {
+        try { setNeedConsent(consentOutstanding(await loadConsent(userId))); }
+        // A database behind migration 078 has no consent table. Blocking every
+        // client out of the app over a missing table would be the worse bug.
+        catch (e) { setNeedConsent(false); }
+      }
       // Coaches land on the Coach hub (no client homepage in their nav) - but
       // only on first load, and never while assuming control of a client, so a
       // token refresh on tab-back doesn't eject them from the client's app.
@@ -374,7 +390,18 @@ export default function App() {
 
   if (authLoading) return <LoadingScreen />;
   if (bootError && !profile) return <BootError onRetry={() => window.location.reload()} />;
-  if (!session) return <Login archivedOut={archivedOut} />;
+  if (!session) return <Login archivedOut={archivedOut} declinedConsent={declinedConsent} />;
+
+  // Nothing about a client is collected or shown until they have answered.
+  if (needConsent === true) return (
+    <React.Suspense fallback={null}>
+      <ConsentGate
+        userId={session.user.id}
+        name={profile?.name}
+        onDone={() => setNeedConsent(false)}
+        onDecline={() => { setDeclinedConsent(true); signOutFully(session.user.id); }} />
+    </React.Suspense>
+  );
   if (needsPassword) return (
     <SetPassword
       onDone={() => {

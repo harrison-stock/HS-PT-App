@@ -59,8 +59,20 @@ Seven years is the window in which a claim about an injury can realistically
 surface. That is the reason to keep health records after someone has left, and
 when the reason expires so does the retention.
 
+### What a client is asked, and when
+
+Before first use, three separate questions with nothing pre-ticked: health notes
+and measurements (needed), progress photographs (optional), wearable data
+(optional). Declining the required one signs them out rather than looping them
+back. Every answer is recorded with the exact wording shown, the version, the
+date, and whether the client or the coach entered it.
+
+Declining an optional purpose switches that feature off in the app.
+
 ### What a client can do, in the app
 
+- **Review or change any consent.** Settings → What You Agreed To. Withdrawal is
+  one tap, the same as giving it.
 - **Take a copy.** Settings → Your Data → Everything (JSON) or Training Log
   (CSV). No request needed, no wait.
 - **Ask to be erased.** Settings → Your Data → Ask for my data to be deleted.
@@ -113,9 +125,26 @@ retention afterwards.
 
 > **Decide:** ▢ Explicit consent ▢ Legal claims ▢ Both, for different purposes
 >
-> **Then:** how is that consent captured and recorded? At the moment the app has
-> no consent step. If you go this route, it needs one — tell me and I'll build
-> it.
+> **Then:** how is that consent captured and recorded? **This is now built.**
+> Before a client can use the app they are asked three separate questions —
+> health notes and measurements (needed to coach them), progress photographs
+> (optional), wearable data (optional). Nothing is pre-ticked, declining works
+> and signs them out, and every answer including the noes is stored with the
+> exact wording shown and the date. Withdrawal is the same three questions in
+> Settings, one tap each.
+>
+> Declining an optional purpose actually switches the feature off: no photo
+> upload, no wearable connect. An optional consent that changes nothing is a
+> tickbox, not a choice.
+>
+> The record is append-only. Withdrawing writes a new row rather than editing
+> the old one, so what someone agreed to and when they changed their mind both
+> survive. Nobody — client or coach — can edit or delete that history.
+>
+> **Still yours to decide:** whether explicit consent is the right basis at all,
+> and whether the wording says what you want it to say. It lives in
+> `src/lib/consent.js` and is versioned: change it in a way that alters what
+> someone agreed to, bump `CONSENT_VERSION`, and everyone is asked again.
 
 ### 3. Retention
 
