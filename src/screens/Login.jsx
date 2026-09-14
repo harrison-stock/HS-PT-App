@@ -1,7 +1,7 @@
 import React from 'react'
 import { supabase } from '../lib/supabase'
 
-export function Login({ archivedOut = false }) {
+export function Login({ archivedOut = false, declinedConsent = false }) {
   const invite = React.useMemo(() => {
     const p = new URLSearchParams(window.location.search);
     return { code: p.get('invite'), tid: p.get('tid'), name: p.get('name'), mc: p.get('mc'), email: p.get('email') };
@@ -111,6 +111,18 @@ export function Login({ archivedOut = false }) {
       </div>
 
       {/* Form */}
+      {declinedConsent && (
+        <div className="mono" style={{
+          maxWidth: 320, margin: '0 auto 18px', padding: '12px 14px', borderRadius: 10,
+          fontSize: 11, lineHeight: 1.6, textAlign: 'left',
+          color: 'var(--text-2)', background: 'var(--bg-2)', border: '1px solid var(--line-strong)',
+        }}>
+          <span style={{ color: 'var(--accent)', fontWeight: 700 }}>That&rsquo;s noted.</span>{' '}
+          Your coach can&rsquo;t write you a safe programme without knowing about your
+          injuries, so the app can&rsquo;t do much for you at the moment. Nothing has been
+          deleted. Speak to them &mdash; and if you change your mind, sign back in.
+        </div>
+      )}
       {archivedOut && (
         <div className="mono" style={{
           maxWidth: 320, margin: '0 auto 18px', padding: '12px 14px', borderRadius: 10,

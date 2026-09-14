@@ -7,6 +7,7 @@ import { loadConnections, startWearableConnect } from '../lib/health'
 import { enablePush, disablePush, isPushEnabled, pushBlockedReason, sendTestPush } from '../lib/push'
 import { safeUrl, isStripeUrl, loadPortalUrl, billingStatus, renewalDate, formatAmount } from '../lib/billing'
 import { myErasureRequest, requestErasure } from '../lib/privacy'
+import { CONSENT_PURPOSES, loadConsent, hasConsent, recordConsent } from '../lib/consent'
 import { exportClient } from '../lib/exportClient'
 
 // Half-filled circle = "auto / follow system" appearance.
@@ -76,6 +77,7 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
       )}
 
       {/* Your data - what we hold, and how to get it or have it removed */}
+      {profile?.role !== 'trainer' && <ConsentCard userId={user?.id} onWithdrawCore={onLogout} />}
       {profile?.role !== 'trainer' && <YourDataCard userId={user?.id} trainerId={profile?.trainer_id} name={user?.name} />}
 
       {/* Log out - always visible at the bottom of Settings */}
@@ -95,6 +97,80 @@ export function Profile({ go, user, profile, onSave, onLogout, theme, onThemeCha
   );
 }
 
+
+
+// What you agreed to, and how to change it.
+//
+// Withdrawal has to be as easy as consent was - that is not a nicety, it is the
+// requirement that makes the original consent valid. So it is the same three
+// questions in the same words, one tap each, on a screen the client already
+// visits, rather than an email to somebody.
+//
+// The required one can be withdrawn too. It signs them out, because there is no
+// honest way to keep coaching someone who has told you not to hold their injury
+// history - and a consent you are not allowed to take back was never consent.
+function ConsentCard({ userId, onWithdrawCore }) {
+  const [state, setState] = React.useState(null);
+  const [busy, setBusy] = React.useState('');
+  const [confirmCore, setConfirmCore] = React.useState(false);
+
+  const reload = React.useCallback(() => {
+    if (userId) loadConsent(userId).then(setState).catch(() => setState({}));
+  }, [userId]);
+  React.useEffect(() => { reload(); }, [reload]);
+
+  const set = async (p, granted) => {
+    if (p.required && !granted && !confirmCore) { setConfirmCore(true); return; }
+    setBusy(p.id);
+    await recordConsent(userId, { [p.id]: granted }, { recordedBy: userId });
+    setBusy('');
+    if (p.required && !granted) { onWithdrawCore?.(); return; }
+    setConfirmCore(false);
+    reload();
+  };
+
+  if (state === null) return null;
+
+  return (
+    <div className="card" style={{ padding: '16px 18px', marginTop: 14, display: 'grid', gap: 12 }}>
+      <div className="label">// WHAT YOU AGREED TO</div>
+      {CONSENT_PURPOSES.map(p => {
+        const on = hasConsent(state, p.id);
+        const rec = state[p.id];
+        return (
+          <div key={p.id} style={{ display: 'grid', gap: 6, paddingBottom: 10, borderBottom: '1px solid var(--line)' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{p.title}</span>
+              <span className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: on ? 'var(--accent)' : 'var(--text-3)' }}>
+                {on ? 'YES' : 'NO'}
+              </span>
+            </div>
+            {rec && (
+              <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>
+                {on ? 'Agreed' : 'Declined'}{' '}
+                {new Date(rec.recorded_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </div>
+            )}
+            <button onClick={() => set(p, !on)} disabled={busy === p.id} className="btn-ghost"
+              style={{
+                fontSize: 10, padding: '8px 0',
+                borderColor: on ? 'color-mix(in srgb, var(--c-coral) 40%, var(--line))' : 'var(--accent)',
+                color: on ? 'var(--text-3)' : 'var(--accent)',
+              }}>
+              {busy === p.id ? '…'
+                : p.required && on && confirmCore ? 'THIS WILL SIGN YOU OUT - TAP AGAIN'
+                : on ? 'WITHDRAW' : 'AGREE TO THIS'}
+            </button>
+          </div>
+        );
+      })}
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', lineHeight: 1.6 }}>
+        Every change is recorded with the date, so there is always a record of what you
+        agreed to and when.
+      </div>
+    </div>
+  );
+}
 
 // What we hold about you, and the two things you can do about it.
 //
@@ -523,6 +599,13 @@ function BillingSetup({ userId }) {
 
 // Wearable connections (steps / heart rate / weight from Garmin, Fitbit, etc.)
 function ConnectedDevices({ userId }) {
+  // Saying no to wearable data has to mean the connect button is gone, not
+  // that it works and the coach looks away.
+  const [allowed, setAllowed] = React.useState(true);
+  React.useEffect(() => {
+    if (!userId) return;
+    loadConsent(userId).then(c => setAllowed(hasConsent(c, 'wearables'))).catch(() => {});
+  }, [userId]);
   const [conns, setConns] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState(null);
@@ -557,9 +640,16 @@ function ConnectedDevices({ userId }) {
         </div>
       )}
 
-      <button onClick={connect} disabled={busy} className="btn-ghost" style={{ width: '100%', borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-        {busy ? 'OPENING…' : (conns && conns.length ? '+ CONNECT ANOTHER DEVICE' : '+ CONNECT A DEVICE')}
-      </button>
+      {allowed ? (
+        <button onClick={connect} disabled={busy} className="btn-ghost" style={{ width: '100%', borderColor: 'var(--accent)', color: 'var(--accent)' }}>
+          {busy ? 'OPENING…' : (conns && conns.length ? '+ CONNECT ANOTHER DEVICE' : '+ CONNECT A DEVICE')}
+        </button>
+      ) : (
+        <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6 }}>
+          You said no to sharing data from a watch or tracker, so connecting one is switched
+          off. Change it under Your Data below if you want to.
+        </div>
+      )}
       {err && (
         <div className="mono" style={{ fontSize: 10, color: 'var(--c-coral)', marginTop: 8, lineHeight: 1.5 }}>{err}</div>
       )}

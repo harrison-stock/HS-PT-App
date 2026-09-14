@@ -668,6 +668,8 @@ insert into public.client_custom_metrics (id, client_id, name) values ('7777bbbb
 insert into public.custom_metric_entries (metric_id, recorded_at, value) values ('7777bbbb-0000-0000-0000-000000000010', current_date, 50);
 insert into public.exercise_comments (client_id, author_id, exercise_id, body)
   values ('7777bbbb-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','7777bbbb-0000-0000-0000-00000000000c','Good work');
+insert into public.consent_records (client_id, purpose, granted, version, wording, recorded_by)
+  values ('7777bbbb-0000-0000-0000-000000000001','health_core',true,'2026-09-1','...','7777bbbb-0000-0000-0000-000000000001');
 
 -- Archiving keeps everything, and starts the clock.
 select public.be('11111111-1111-1111-1111-111111111111');
@@ -761,6 +763,81 @@ select public.t('077 the profile row itself is gone',
 select public.t('077 another client''s records are untouched',
   (select count(*) from public.profiles where id='33333333-3333-3333-3333-333333333333') = 1);
 
+-- ════════════════════════════════════════════════════════════════════════════
+--  078 — explicit consent, recorded and withdrawable
+-- ════════════════════════════════════════════════════════════════════════════
+select public.be(null);
+insert into auth.users (id, email, raw_user_meta_data)
+  values ('8888cccc-0000-0000-0000-000000000001','consent@example.com','{"name":"Connie"}');
+update public.profiles set trainer_id = '11111111-1111-1111-1111-111111111111'
+  where id = '8888cccc-0000-0000-0000-000000000001';
+
+-- The client answers, in the app, as themselves.
+select public.be('8888cccc-0000-0000-0000-000000000001');
+set role authenticated;
+insert into public.consent_records (client_id, purpose, granted, version, wording, method, recorded_by) values
+  ('8888cccc-0000-0000-0000-000000000001','health_core', true,  '2026-09-1','...','app','8888cccc-0000-0000-0000-000000000001'),
+  ('8888cccc-0000-0000-0000-000000000001','photos',      false, '2026-09-1','...','app','8888cccc-0000-0000-0000-000000000001');
+reset role;
+
+select public.t('078 a client can record their own decisions',
+  (select count(*) from public.consent_records where client_id='8888cccc-0000-0000-0000-000000000001') = 2);
+select public.t('078 a no is recorded, not just an absence',
+  (select granted from public.current_consent where client_id='8888cccc-0000-0000-0000-000000000001' and purpose='photos') = false);
+
+-- Withdrawing writes a new row; the old one stays.
+select public.be('8888cccc-0000-0000-0000-000000000001');
+set role authenticated;
+insert into public.consent_records (client_id, purpose, granted, version, wording, method, recorded_by)
+  values ('8888cccc-0000-0000-0000-000000000001','health_core', false, '2026-09-1','...','app','8888cccc-0000-0000-0000-000000000001');
+reset role;
+select public.t('078 withdrawing changes the current position',
+  (select granted from public.current_consent where client_id='8888cccc-0000-0000-0000-000000000001' and purpose='health_core') = false);
+select public.t('078 and the original agreement is still on the record',
+  (select count(*) from public.consent_records
+    where client_id='8888cccc-0000-0000-0000-000000000001' and purpose='health_core') = 2);
+
+-- The record is append-only. Nobody edits or erases what was agreed.
+select public.be('8888cccc-0000-0000-0000-000000000001');
+set role authenticated;
+update public.consent_records set granted = true where client_id='8888cccc-0000-0000-0000-000000000001';
+delete from public.consent_records where client_id='8888cccc-0000-0000-0000-000000000001';
+reset role;
+select public.t('078 a client cannot rewrite their consent history',
+  (select count(*) from public.consent_records where client_id='8888cccc-0000-0000-0000-000000000001') = 3
+  and (select granted from public.current_consent where client_id='8888cccc-0000-0000-0000-000000000001' and purpose='health_core') = false);
+
+-- The coach may record consent taken on paper, marked as theirs...
+select public.be('11111111-1111-1111-1111-111111111111');
+set role authenticated;
+insert into public.consent_records (client_id, purpose, granted, version, wording, method, recorded_by)
+  values ('8888cccc-0000-0000-0000-000000000001','wearables', true, '2026-09-1','...','coach_recorded','11111111-1111-1111-1111-111111111111');
+reset role;
+select public.t('078 a coach can record consent given on paper',
+  (select method from public.current_consent where client_id='8888cccc-0000-0000-0000-000000000001' and purpose='wearables') = 'coach_recorded');
+
+-- ...but never as though the client did it themselves.
+select public.be('11111111-1111-1111-1111-111111111111');
+set role authenticated;
+insert into public.consent_records (client_id, purpose, granted, version, wording, method, recorded_by)
+  values ('8888cccc-0000-0000-0000-000000000001','health_core', true, '2026-09-1','...','app','8888cccc-0000-0000-0000-000000000001');
+reset role;
+select public.t('078 a coach cannot consent in the client''s name',
+  (select granted from public.current_consent where client_id='8888cccc-0000-0000-0000-000000000001' and purpose='health_core') = false);
+
+-- And nobody else can see or touch it.
+select public.be('bbbbbbbb-0000-0000-0000-000000000001');
+set role authenticated;
+select public.t('078 another coach cannot read it',
+  (select count(*) from public.consent_records where client_id='8888cccc-0000-0000-0000-000000000001') = 0);
+reset role;
+select public.be(null);
+
+-- Erasure takes the consent record with it, like everything else.
+select public.t('078 the wording they saw is stored, not just a version number',
+  (select length(wording) from public.consent_records
+    where client_id='8888cccc-0000-0000-0000-000000000001' limit 1) > 0);
+
 -- ── Summary ─────────────────────────────────────────────────────────────────
 \pset tuples_only on
 \pset format unaligned
@@ -777,7 +854,7 @@ select '';
 -- one of them fires. Grepping gives 91. Raise this by hand when adding checks -
 -- being made to state the number is the point.
 select case
-  when count(*) <> 83 then 'HARNESS BROKEN - expected 83 checks, recorded ' || count(*)::text
+  when count(*) <> 92 then 'HARNESS BROKEN - expected 92 checks, recorded ' || count(*)::text
   when count(*) filter (where pass is not true) > 0
     then count(*) filter (where pass is not true)::text || ' OF ' || count(*)::text || ' FAILED'
   else 'ALL ' || count(*)::text || ' CHECKS PASSED' end
