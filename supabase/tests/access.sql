@@ -630,6 +630,137 @@ select public.t('076 deleting a managed client takes their owned days with them'
 select public.t('076 without taking the template',
   (select count(*) from public.programme_days where id='6666aaaa-0000-0000-0000-000000000002') = 1);
 
+-- ════════════════════════════════════════════════════════════════════════════
+--  077 — archive, retain, erase
+-- ════════════════════════════════════════════════════════════════════════════
+select public.be(null);
+insert into auth.users (id, email, raw_user_meta_data)
+  values ('7777bbbb-0000-0000-0000-000000000001','leaving@example.com','{"name":"Leaving Len"}');
+update public.profiles set trainer_id = '11111111-1111-1111-1111-111111111111'
+  where id = '7777bbbb-0000-0000-0000-000000000001';
+
+-- Give them something in every corner of the schema.
+insert into public.programme_days (id, phase_id, owner_client_id, week_index, day_of_week, title)
+  values ('7777bbbb-0000-0000-0000-00000000000a', null, '7777bbbb-0000-0000-0000-000000000001', 0, 1, 'Their Push');
+insert into public.workout_sections (id, day_id, kind, title, sort_order)
+  values ('7777bbbb-0000-0000-0000-00000000000b','7777bbbb-0000-0000-0000-00000000000a','MAIN','W',0);
+insert into public.section_exercises (id, section_id, name, sort_order)
+  values ('7777bbbb-0000-0000-0000-00000000000c','7777bbbb-0000-0000-0000-00000000000b','Bench',0);
+insert into public.exercise_sets (exercise_id, set_index, kind, reps, reps_text, weight_kg)
+  values ('7777bbbb-0000-0000-0000-00000000000c',0,'WORK',8,'8',60);
+insert into public.client_workouts (id, client_id, trainer_id, day_id, scheduled_date)
+  values ('7777bbbb-0000-0000-0000-00000000000d','7777bbbb-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','7777bbbb-0000-0000-0000-00000000000a', current_date);
+insert into public.workout_sessions (id, client_id, day_id, started_at, completed_at)
+  values ('7777bbbb-0000-0000-0000-00000000000e','7777bbbb-0000-0000-0000-000000000001','7777bbbb-0000-0000-0000-00000000000a', now(), now());
+insert into public.logged_sets (session_id, exercise_id, set_index, actual_reps, actual_weight_kg)
+  values ('7777bbbb-0000-0000-0000-00000000000e','7777bbbb-0000-0000-0000-00000000000c',0,8,60);
+insert into public.client_injuries (id, client_id, trainer_id, muscle_group, note)
+  values ('7777bbbb-0000-0000-0000-00000000000f','7777bbbb-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','knee','ACL');
+insert into public.client_injury_notes (injury_id, author_id, body)
+  values ('7777bbbb-0000-0000-0000-00000000000f','11111111-1111-1111-1111-111111111111','Still sore');
+insert into public.body_metrics (client_id, recorded_at, weight_kg) values ('7777bbbb-0000-0000-0000-000000000001', current_date, 82);
+insert into public.client_goals (client_id, title) values ('7777bbbb-0000-0000-0000-000000000001','Bench 100');
+insert into public.client_tasks (client_id, trainer_id, title, kind) values ('7777bbbb-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','Weigh in','check');
+insert into public.progress_photos (client_id, taken_on, pose, path) values ('7777bbbb-0000-0000-0000-000000000001', current_date, 'front', 'len/front.jpg');
+insert into public.client_documents (client_id, trainer_id, name, path) values ('7777bbbb-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','PARQ','len/parq.pdf');
+insert into public.health_daily (client_id, day, source, steps) values ('7777bbbb-0000-0000-0000-000000000001', current_date, 'manual', 9000);
+insert into public.client_custom_metrics (id, client_id, name) values ('7777bbbb-0000-0000-0000-000000000010','7777bbbb-0000-0000-0000-000000000001','Grip');
+insert into public.custom_metric_entries (metric_id, recorded_at, value) values ('7777bbbb-0000-0000-0000-000000000010', current_date, 50);
+insert into public.exercise_comments (client_id, author_id, exercise_id, body)
+  values ('7777bbbb-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','7777bbbb-0000-0000-0000-00000000000c','Good work');
+
+-- Archiving keeps everything, and starts the clock.
+select public.be('11111111-1111-1111-1111-111111111111');
+set role authenticated;
+update public.profiles set archived = true, archived_at = now()
+  where id = '7777bbbb-0000-0000-0000-000000000001';
+reset role;
+select public.t('077 archiving keeps their records',
+  (select count(*) from public.workout_sessions where client_id='7777bbbb-0000-0000-0000-000000000001') = 1
+  and (select count(*) from public.client_injuries where client_id='7777bbbb-0000-0000-0000-000000000001') = 1);
+select public.t('077 and starts the retention clock',
+  (select archived_at from public.profiles where id='7777bbbb-0000-0000-0000-000000000001') is not null);
+select public.t('077 someone archived today is not yet due erasure',
+  (select count(*) from public.clients_due_erasure where client_id='7777bbbb-0000-0000-0000-000000000001') = 0);
+
+-- Seven years on.
+update public.profiles set archived_at = now() - interval '7 years 1 day'
+  where id = '7777bbbb-0000-0000-0000-000000000001';
+select public.t('077 seven years on, they are due',
+  (select count(*) from public.clients_due_erasure where client_id='7777bbbb-0000-0000-0000-000000000001') = 1);
+
+-- Another coach cannot erase them.
+select public.be('bbbbbbbb-0000-0000-0000-000000000001');
+set role authenticated;
+do $$ begin
+  perform public.erase_client('7777bbbb-0000-0000-0000-000000000001');
+  perform public.t('077 another coach cannot erase someone else''s client', false, 'it succeeded');
+exception when others then
+  perform public.t('077 another coach cannot erase someone else''s client', true, sqlerrm);
+end $$;
+reset role;
+
+-- Their own coach can, and it names the files it could not reach.
+select public.be('11111111-1111-1111-1111-111111111111');
+set role authenticated;
+select public.erase_client('7777bbbb-0000-0000-0000-000000000001') as res \gset
+reset role;
+select public.be(null);
+
+select public.t('077 the storage paths come back so the files can go too',
+  (:'res'::jsonb -> 'storage' -> 'photos')::text like '%len/front.jpg%'
+  and (:'res'::jsonb -> 'storage' -> 'documents')::text like '%len/parq.pdf%');
+select public.t('077 it reports that a login still has to be removed',
+  (:'res'::jsonb ->> 'auth_user_remains') = 'true');
+
+-- The check that matters, and it asks the schema rather than a list I wrote.
+-- Hand-listing the tables is precisely how an erasure comes to miss one: the
+-- list is written once and the schema keeps growing. This walks every table
+-- that has a client_id and fails naming any that still holds a row - so a table
+-- added next year is covered without anyone remembering to come back here.
+do $$
+declare
+  t       record;
+  n       int;
+  left_in text := '';
+begin
+  for t in
+    select table_name from information_schema.columns
+     where table_schema = 'public' and column_name = 'client_id'
+  loop
+    execute format('select count(*) from public.%I where client_id = $1', t.table_name)
+      into n using '7777bbbb-0000-0000-0000-000000000001'::uuid;
+    if n > 0 then left_in := left_in || t.table_name || '(' || n || ') '; end if;
+  end loop;
+  perform public.t('077 erasure leaves nothing in any table keyed to that client',
+    left_in = '', coalesce(nullif(left_in, ''), 'all clear'));
+end $$;
+
+-- And the children that are only reachable through a parent, which are the ones
+-- a delete on the parent table alone would orphan rather than remove.
+select public.t('077 their logged sets went with their sessions',
+  (select count(*) from public.logged_sets ls
+     left join public.workout_sessions ws on ws.id = ls.session_id
+    where ws.id is null) = 0);
+select public.t('077 their injury notes went with their injuries',
+  (select count(*) from public.client_injury_notes n
+     left join public.client_injuries i on i.id = n.injury_id
+    where i.id is null) = 0);
+select public.t('077 their custom metric readings went with the metric',
+  (select count(*) from public.custom_metric_entries e
+     left join public.client_custom_metrics m on m.id = e.metric_id
+    where m.id is null) = 0);
+select public.t('077 the workouts they owned are gone, with their sections and sets',
+  (select count(*) from public.programme_days where owner_client_id='7777bbbb-0000-0000-0000-000000000001') = 0
+  and (select count(*) from public.workout_sections where day_id='7777bbbb-0000-0000-0000-00000000000a') = 0
+  and (select count(*) from public.exercise_sets where exercise_id='7777bbbb-0000-0000-0000-00000000000c') = 0);
+select public.t('077 the profile row itself is gone',
+  (select count(*) from public.profiles where id='7777bbbb-0000-0000-0000-000000000001') = 0);
+
+-- Nobody else was touched.
+select public.t('077 another client''s records are untouched',
+  (select count(*) from public.profiles where id='33333333-3333-3333-3333-333333333333') = 1);
+
 -- ── Summary ─────────────────────────────────────────────────────────────────
 \pset tuples_only on
 \pset format unaligned
@@ -639,9 +770,14 @@ from public._t order by n;
 select '';
 -- A check that never recorded a result is a failure, not an absence: an
 -- assertion silently lost to a permissions error is exactly how a test suite
--- reports success it hasn't earned. 69 is the number of t() calls in this file.
+-- reports success it hasn't earned.
+--
+-- 83 is the number that should run, which is not the number of t() calls in the
+-- file: each `do ... exception` block holds two, a pass and a fail, and exactly
+-- one of them fires. Grepping gives 91. Raise this by hand when adding checks -
+-- being made to state the number is the point.
 select case
-  when count(*) <> 69 then 'HARNESS BROKEN - expected 69 checks, recorded ' || count(*)::text
+  when count(*) <> 83 then 'HARNESS BROKEN - expected 83 checks, recorded ' || count(*)::text
   when count(*) filter (where pass is not true) > 0
     then count(*) filter (where pass is not true)::text || ' OF ' || count(*)::text || ' FAILED'
   else 'ALL ' || count(*)::text || ' CHECKS PASSED' end

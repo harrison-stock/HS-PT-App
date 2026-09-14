@@ -21,6 +21,7 @@ import { ProgrammeReport } from './ProgrammeReport'
 import { ProgrammeBuilder } from './ProgrammeBuilder'
 import { materialiseDay, materialiseDays, staleAssignments, refreshCopy, repeatDayOnce } from '../lib/programmeCopy'
 import { exportClient } from '../lib/exportClient'
+import { eraseClient, pendingErasureRequests, declineErasure } from '../lib/privacy'
 import { stepSummary, mergeDaily } from '../lib/health'
 import { ImportHistory } from './ImportHistory'
 import { FormArchive } from './FormArchive'
@@ -2339,13 +2340,21 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
     setResetSent(true); setTimeout(() => setResetSent(false), 4000);
   };
 
+  // Archive means they have stopped training with you: off the roster, signed
+  // out, login stops working. Nothing is deleted and it can be undone.
+  //
+  // For a managed client this used to DELETE the row, so the same button on the
+  // same screen meant "hide this person" for one kind of client and "destroy
+  // their records" for the other. Both are archived now, and both start the
+  // same seven-year retention clock.
   const archiveClient = async () => {
     if (!archiveConfirm) { setArchiveConfirm(true); return; }
-    if (isManaged) {
-      await supabase.from('managed_clients').delete().eq('id', c.id);
-    } else {
-      await supabase.from('profiles').update({ archived: true }).eq('id', c.id);
-    }
+    const at = new Date().toISOString();
+    const table = isManaged ? 'managed_clients' : 'profiles';
+    let { error } = await supabase.from(table).update({ archived: true, archived_at: at }).eq('id', c.id);
+    // Pre-077 databases have neither column on managed_clients.
+    if (error && isManaged) ({ error } = await supabase.from('managed_clients').update({ archived: true }).eq('id', c.id));
+    if (error) { setSaveErr(error.message); setArchiveConfirm(false); return; }
     onArchived?.();
   };
 
@@ -2496,6 +2505,9 @@ function SettingsTab({ c, trainerId, onSaved, onArchived }) {
       {/* Export */}
       <ExportCard c={c} />
 
+      {/* Erase */}
+      <EraseCard c={c} trainerId={trainerId} onErased={() => { onArchived?.(); }} />
+
       {/* Archive */}
       <button onClick={archiveClient} style={{
         all: 'unset', cursor: 'pointer', padding: '13px', borderRadius: 10, textAlign: 'center',
@@ -2553,6 +2565,96 @@ function ExportCard({ c }) {
         {btn('csv', 'TRAINING LOG')}
       </div>
       <Mono>{note || 'FULL RECORD is everything as JSON. TRAINING LOG is one row per set, for a spreadsheet.'}</Mono>
+    </div>
+  );
+}
+
+// Erasure: the end of the road, and deliberately not the same button as
+// archive.
+//
+// Archive means they have stopped training with you - off the roster, locked
+// out, everything kept. Records are held for seven years from that date because
+// that is roughly how long a question about an injury can take to surface, and
+// a sweep erases them when the seven years are up.
+//
+// This is the other case: they have asked, or you have decided, that it should
+// go now. It removes every row keyed to them across fourteen tables, the
+// workouts they owned, and the photo and document files themselves - deleting
+// the row that names a file is not deleting the file. It cannot be undone, so
+// the export button above it is not decoration.
+function EraseCard({ c, trainerId, onErased }) {
+  const [req, setReq] = React.useState(null);
+  const [step, setStep] = React.useState(0);
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState('');
+
+  React.useEffect(() => {
+    let off = false;
+    pendingErasureRequests(trainerId).then(rows => {
+      if (!off) setReq((rows || []).find(r => r.client_id === c.id) || null);
+    });
+    return () => { off = true; };
+  }, [trainerId, c.id]);
+
+  const erase = async () => {
+    if (step < 2) { setStep(step + 1); return; }
+    setBusy(true); setMsg('');
+    const { error, result, storageFailed } = await eraseClient(c.id, req?.id);
+    setBusy(false);
+    if (error) { setMsg(error.message); setStep(0); return; }
+    const rows = Object.values(result?.counts || {}).reduce((n, v) => n + (v || 0), 0);
+    let done = `Erased - ${rows} record${rows === 1 ? '' : 's'} removed.`;
+    if (storageFailed?.length) done += ` Some files could not be deleted (${storageFailed.join('; ')}) - check storage.`;
+    if (result?.auth_user_remains) done += ' Their login still exists and has to be removed in Supabase.';
+    setMsg(done);
+    setTimeout(() => onErased?.(), 2500);
+  };
+
+  const decline = async () => {
+    if (!req) return;
+    setBusy(true);
+    await declineErasure(req.id, 'Declined by coach');
+    setBusy(false); setReq(null);
+  };
+
+  return (
+    <div className="card" style={{ padding: 14, display: 'grid', gap: 10, borderColor: req ? 'color-mix(in srgb, var(--c-coral) 45%, var(--line))' : undefined }}>
+      <div className="label">// ERASE PERMANENTLY</div>
+
+      {req && (
+        <div className="mono" style={{ fontSize: 10.5, lineHeight: 1.6, color: 'var(--c-coral)' }}>
+          {c.name} asked for their data to be deleted on{' '}
+          {new Date(req.requested_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.
+          {req.note ? ` They said: “${req.note}”` : ''}
+        </div>
+      )}
+
+      <Mono>
+        Removes everything: training history, measurements, injuries, check-ins, photos
+        and documents. It cannot be undone, and archiving keeps all of it instead.
+        Export a copy first if there is any chance you will need it.
+      </Mono>
+
+      {msg && <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-2)', lineHeight: 1.6 }}>{msg}</div>}
+
+      <div style={{ display: 'grid', gridTemplateColumns: req ? '1fr 1fr' : '1fr', gap: 8 }}>
+        {req && (
+          <button onClick={decline} disabled={busy} className="btn-ghost" style={{ fontSize: 10, padding: '10px 0' }}>
+            DECLINE REQUEST
+          </button>
+        )}
+        <button onClick={erase} disabled={busy} style={{
+          all: 'unset', cursor: busy ? 'default' : 'pointer', padding: '11px', borderRadius: 10, textAlign: 'center',
+          background: step === 2 ? 'color-mix(in srgb, var(--c-coral) 16%, transparent)' : 'transparent',
+          border: `1px solid color-mix(in srgb, var(--c-coral) ${step ? 70 : 35}%, var(--line))`,
+          color: step ? 'var(--c-coral)' : 'var(--text-3)',
+          fontFamily: 'JetBrains Mono', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+        }}>
+          {busy ? 'ERASING…' : step === 0 ? 'ERASE THIS CLIENT'
+            : step === 1 ? 'THIS CANNOT BE UNDONE - TAP AGAIN'
+            : `ERASE ${(c.name || '').toUpperCase()} FOR GOOD`}
+        </button>
+      </div>
     </div>
   );
 }

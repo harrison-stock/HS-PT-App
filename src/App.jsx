@@ -83,6 +83,7 @@ export default function App() {
     try { if (RESTORABLE.has(screen)) localStorage.setItem('hs_screen', screen); } catch (e) {}
   }, [screen]);
   const [previewWorkoutId, setPreviewWorkoutId] = React.useState(null);
+  const [archivedOut, setArchivedOut] = React.useState(false);
   const [logDayId, setLogDayId] = React.useState(null);
   // Which scheduled occurrence, not just which workout - the same day can be on
   // the calendar twice, and finishing one must not finish the other.
@@ -168,6 +169,17 @@ export default function App() {
         supabase.from('profiles').select('*').eq('id', userId).single(),
         timeout,
       ]);
+      // Archived means they have stopped training with this coach: the account
+      // stays, the data stays, but the app is closed to them. Enforced here
+      // rather than in a policy because it is an access decision, not a
+      // security boundary - their own records are still theirs, and restoring
+      // them has to put everything back exactly as it was.
+      if (data?.archived && data?.role !== 'trainer') {
+        setArchivedOut(true);
+        setAuthLoading(false);
+        await signOutFully(userId);
+        return;
+      }
       setProfile(data);
       setBootError(false);
       // Coaches land on the Coach hub (no client homepage in their nav) - but
@@ -362,7 +374,7 @@ export default function App() {
 
   if (authLoading) return <LoadingScreen />;
   if (bootError && !profile) return <BootError onRetry={() => window.location.reload()} />;
-  if (!session) return <Login />;
+  if (!session) return <Login archivedOut={archivedOut} />;
   if (needsPassword) return (
     <SetPassword
       onDone={() => {
