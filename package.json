@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "eslint . && node scripts/migrate.mjs && vite build",
+    "build": "eslint . && node tests/run.mjs && node scripts/migrate.mjs && vite build",
     "migrate": "node scripts/migrate.mjs",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node tests/run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",

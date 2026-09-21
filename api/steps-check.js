@@ -12,6 +12,10 @@
 // gets an app deleted.
 
 import { admin, pushReady, pushToUser } from './_push.js';
+// The same tie-break the app's charts use, imported rather than restated: a
+// coach told that steps collapsed while the client's own screen disagrees is
+// worse than no alert at all.
+import { stepsByDay } from '../src/lib/healthSource.js';
 
 // What counts as worth interrupting someone for.
 const DROP_PCT = 30;        // this week vs last, as a percentage fall
@@ -21,20 +25,6 @@ const QUIET_DAYS = 7;       // don't tell the same coach about the same client a
 
 const iso = (d) => d.toISOString().slice(0, 10);
 const back = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
-
-// One row per client per day, device readings preferred over typed ones -
-// the same rule the app applies, restated here because this runs server-side
-// with no access to the client bundle.
-function mergeDaily(rows) {
-  const byDay = {};
-  const ordered = [...rows].sort((a, b) =>
-    (a.source === 'manual' ? 0 : 1) - (b.source === 'manual' ? 0 : 1));
-  for (const r of ordered) {
-    if (r.steps == null) continue;
-    byDay[r.day] = r.steps;
-  }
-  return byDay;
-}
 
 const avg = (byDay, from, to) => {
   const vals = [];
@@ -95,7 +85,7 @@ export default async function handler(req, res) {
     const info = who.get(clientId);
     if (!info) continue;
 
-    const byDay = mergeDaily(list);
+    const byDay = stepsByDay(list);
     const week = avg(byDay, 0, 7);
     const before = avg(byDay, 7, 14);
     if (!week || !before) continue;

@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 import { todayISO, ymd as localISO } from './day'
+import { mergeDaily } from './healthSource'
+import { APPLE_SOURCE } from './appleHealth'
 
 // Recent daily health metrics (steps / resting HR / weight) for a client.
 // Collapses multiple sources per day, preferring non-null values.
@@ -16,29 +18,9 @@ export async function loadHealthDaily(userId, days = 30) {
   return mergeDaily(data || []);
 }
 
-/**
- * Collapse several sources for the same day into one row.
- *
- * A day can carry both a typed figure and a synced one, so which wins has to be
- * decided rather than left to row order. The device wins: manual entry is what
- * you do when there is no device, and a watch that counted 6,000 is better
- * evidence than a person remembering 9,000. Applying manual first and letting
- * the rest overwrite it makes that explicit and repeatable.
- */
-export function mergeDaily(rows) {
-  const byDay = {};
-  const ordered = [...(rows || [])].sort((a, b) =>
-    (a.source === 'manual' ? 0 : 1) - (b.source === 'manual' ? 0 : 1));
-  for (const r of ordered) {
-    const d = (byDay[r.day] = byDay[r.day] || { day: r.day, steps: null, resting_hr: null, avg_hr: null, weight_kg: null });
-    for (const k of ['steps', 'resting_hr', 'avg_hr', 'weight_kg']) if (r[k] != null) d[k] = r[k];
-  }
-  return Object.values(byDay).sort((a, b) => (a.day < b.day ? -1 : 1));
-}
-
-// Re-exported so callers that already import it from here keep working. The
-// reason it is not defined here is in lib/day.js.
-export { todayISO };
+// Re-exported so callers that already import these from here keep working. The
+// reasons they are not defined here are in lib/day.js and lib/healthSource.js.
+export { todayISO, mergeDaily };
 
 /**
  * Type in a day's steps.
@@ -132,4 +114,44 @@ export async function startWearableConnect() {
   if (error || data?.error) return { error: data?.error || error?.message || 'Could not start connection' };
   if (data?.url) { window.location.href = data.url; return {}; }
   return { error: 'No connection URL returned' };
+}
+
+/**
+ * Write what we found.
+ *
+ * Its own `source`, so it sits alongside a wearable's rows and the client's own
+ * typed figures on the same day rather than fighting them for one slot - the
+ * table is unique on (client, day, source) and lib/health.js decides which of
+ * them to believe. Re-importing next month replaces these rows and leaves the
+ * others alone.
+ */
+export async function saveAppleHealth(clientId, rows, { onProgress } = {}) {
+  if (!clientId) return { error: { message: 'Not signed in.' } }
+  if (!rows?.length) return { written: 0 }
+
+  const now = new Date().toISOString()
+  const BATCH = 400
+  let written = 0
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const chunk = rows.slice(i, i + BATCH).map(r => ({
+      client_id: clientId, day: r.day, source: APPLE_SOURCE,
+      steps: r.steps, resting_hr: r.resting_hr, weight_kg: r.weight_kg,
+      updated_at: now,
+    }))
+    const { error } = await supabase.from('health_daily')
+      .upsert(chunk, { onConflict: 'client_id,day,source' })
+    if (error) return { error, written }
+    written += chunk.length
+    onProgress?.({ written, of: rows.length })
+  }
+
+  // Recorded as a connection so that both sides can see where these numbers
+  // came from and how old they are. It is listed as an import, not a sync,
+  // because that is the difference that matters: a Garmin keeps arriving, this
+  // stopped the moment the file was made.
+  await supabase.from('wearable_connections').upsert(
+    { client_id: clientId, provider: APPLE_SOURCE, status: 'connected', last_sync: now },
+    { onConflict: 'client_id,provider' })
+
+  return { written }
 }

@@ -46,10 +46,14 @@ supabase functions deploy ingest-health --no-verify-jwt
 
 `--no-verify-jwt` on the second one is deliberate and necessary: Terra is not a
 signed-in user, so it has no JWT to present. Its request is authenticated by the
-signature instead, which is why `HEALTH_WEBHOOK_SECRET` must be set in
-production. **Leave it unset and the function accepts anything that reaches it**
-— that's a deliberate convenience for wiring the thing up, and a hole if it's
-still true a week later.
+signature instead.
+
+**`HEALTH_WEBHOOK_SECRET` is required, not optional.** The function refuses
+every request when it isn't set, and logs why. It used to accept anything
+instead — a convenience for wiring it up that, combined with `--no-verify-jwt`,
+left a public endpoint that would write health records for any client whose id
+you could name. So if data isn't arriving, check that secret first: the symptom
+is a 401 on every delivery in Terra's webhook log.
 
 **In Terra** → Webhooks → set the destination to:
 
@@ -64,6 +68,34 @@ widget session and passes that client's **profile id** as `reference_id`.
 Terra echoes it back on every webhook, and that echo is the only thing tying
 incoming data to a person. Change how it's passed on one side without the other
 and the data arrives correctly and belongs to nobody.
+
+### Apple Health is the exception
+
+Apple is not in that list of providers, and no aggregator can put it there.
+HealthKit has no cloud API — the data lives on the phone, and the only two ways
+out of it are a native iOS app holding a HealthKit entitlement or the Health
+app's own export button. Terra can't reach it either.
+
+So Apple Health is handled separately and needs nothing set up: on their Profile
+screen, a client picks the zip the Health app produced and it is read **in the
+browser, on their phone** (`src/lib/appleHealth.js`). The archive is never
+uploaded — partly because it is routinely hundreds of megabytes, and mostly
+because it contains their whole medical history when all we want is three
+numbers. What gets written is a row per day in `health_daily` with
+`source = 'apple_health'`.
+
+Two things about it worth knowing:
+
+- **It's a snapshot, not a sync.** It stops the moment the file was made. The
+  client re-exports whenever they want it brought up to date, and the app
+  labels the entry IMPORTED rather than SYNCED so nobody mistakes stale data
+  for a broken watch.
+- **The export is not de-duplicated.** An iPhone and an Apple Watch both record
+  the same walk and both sets of samples are in the file. Steps are therefore
+  totalled per device and the day takes the *largest* of those totals, never the
+  sum — otherwise a 9,500-step day reads as 13,500. `src/lib/healthSource.js`
+  then decides between that and anything Terra sent: a worn device beats an
+  export, which beats a number typed in by hand.
 
 ### Cost
 
