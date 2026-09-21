@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase'
 import { HexBackButton, Hex } from '../components/hex'
 import { IconSun, IconMoon, IconCheck } from '../components/icons'
 import { InstallPrompt } from './InstallPrompt'
-import { loadConnections, startWearableConnect } from '../lib/health'
+import { loadConnections, startWearableConnect, saveAppleHealth } from '../lib/health'
+import { parseAppleHealthZip, APPLE_SOURCE, IMPORT_YEARS } from '../lib/appleHealth'
 import { enablePush, disablePush, isPushEnabled, pushBlockedReason, sendTestPush } from '../lib/push'
 import { safeUrl, isStripeUrl, loadPortalUrl, billingStatus, renewalDate, formatAmount } from '../lib/billing'
 import { myErasureRequest, requestErasure } from '../lib/privacy'
@@ -626,6 +627,7 @@ function ConnectedDevices({ userId }) {
       <div className="label" style={{ marginBottom: 10 }}>// CONNECTED DEVICES</div>
       <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 10 }}>
         Sync steps, heart rate and weight from your wearable (Garmin, Fitbit, Withings, Oura…).
+        On an iPhone, Apple Health can't connect this way - import a file from it instead.
       </div>
 
       {conns && conns.length > 0 && (
@@ -633,17 +635,28 @@ function ConnectedDevices({ userId }) {
           {conns.map(c => (
             <div key={c.provider} className="card" style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: c.status === 'connected' ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0 }}/>
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>{c.provider}</span>
-              <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>{c.last_sync ? `SYNCED ${fmt(c.last_sync)}` : 'CONNECTED'}</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, textTransform: c.provider === APPLE_SOURCE ? 'none' : 'capitalize' }}>
+                {c.provider === APPLE_SOURCE ? 'Apple Health' : c.provider}
+              </span>
+              {/* A watch keeps sending; a file stopped the moment it was made.
+                  Calling both "synced" would hide the one thing you need to know
+                  when the numbers look out of date. */}
+              <span className="mono" style={{ fontSize: 9, color: 'var(--text-3)' }}>
+                {!c.last_sync ? 'CONNECTED'
+                  : `${c.provider === APPLE_SOURCE ? 'IMPORTED' : 'SYNCED'} ${fmt(c.last_sync)}`}
+              </span>
             </div>
           ))}
         </div>
       )}
 
       {allowed ? (
-        <button onClick={connect} disabled={busy} className="btn-ghost" style={{ width: '100%', borderColor: 'var(--accent)', color: 'var(--accent)' }}>
-          {busy ? 'OPENING…' : (conns && conns.length ? '+ CONNECT ANOTHER DEVICE' : '+ CONNECT A DEVICE')}
-        </button>
+        <>
+          <button onClick={connect} disabled={busy} className="btn-ghost" style={{ width: '100%', borderColor: 'var(--accent)', color: 'var(--accent)' }}>
+            {busy ? 'OPENING…' : (conns && conns.length ? '+ CONNECT ANOTHER DEVICE' : '+ CONNECT A DEVICE')}
+          </button>
+          <AppleHealthImport userId={userId} onDone={() => loadConnections(userId).then(setConns)} />
+        </>
       ) : (
         <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6 }}>
           You said no to sharing data from a watch or tracker, so connecting one is switched
@@ -656,6 +669,148 @@ function ConnectedDevices({ userId }) {
     </div>
   );
 }
+
+
+/**
+ * Import steps from an Apple Health export.
+ *
+ * Every other provider is reachable from a server, which is why one aggregator
+ * covers Garmin, Fitbit, Withings, Oura and Whoop behind the button above.
+ * Apple is the exception: HealthKit has no cloud API, so the data cannot be
+ * fetched from anywhere - not by us, and not by an aggregator either. The only
+ * routes out of it are a native iPhone app or the Health app's own export, and
+ * this is a web app. So: the export.
+ *
+ * The archive is read here on the phone and never uploaded. That is partly
+ * because it is often hundreds of megabytes, and mostly because it contains
+ * their entire medical history - diagnoses, medications, cycle tracking - and
+ * we want three numbers. Sending the lot to a server to extract steps would be
+ * collecting a great deal of data we have no business holding.
+ */
+function AppleHealthImport({ userId, onDone }) {
+  const [stage, setStage] = React.useState('idle'); // idle | reading | found | saving | done
+  const [pct, setPct] = React.useState(null);
+  const [found, setFound] = React.useState(null);
+  const [err, setErr] = React.useState('');
+  const [how, setHow] = React.useState(false);
+  const input = React.useRef(null);
+
+  const pick = async (e) => {
+    const file = e.target.files?.[0];
+    // Clear the input, or choosing the same file twice does nothing the second
+    // time - which looks exactly like the import being broken.
+    e.target.value = '';
+    if (!file) return;
+    setErr(''); setFound(null); setPct(0); setStage('reading');
+    const r = await parseAppleHealthZip(file, { onProgress: (p) => setPct(p.pct) });
+    if (r.error) { setErr(r.error); setStage('idle'); return; }
+    if (!r.rows.length) {
+      setErr(`No steps, resting heart rate or weight in the last ${IMPORT_YEARS} years of that export.`);
+      setStage('idle'); return;
+    }
+    setFound(r); setStage('found');
+  };
+
+  const save = async () => {
+    setStage('saving'); setErr('');
+    const { error, written } = await saveAppleHealth(userId, found.rows);
+    if (error) { setErr(error.message || 'Could not save those days.'); setStage('found'); return; }
+    setFound({ ...found, written });
+    setStage('done');
+    onDone?.();
+  };
+
+  const steps = found?.rows.filter(r => r.steps != null).length || 0;
+  const label = (n, one, many) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <input ref={input} type="file" accept=".zip,application/zip" onChange={pick} style={{ display: 'none' }} />
+
+      {stage === 'idle' && (
+        <>
+          <button onClick={() => input.current?.click()} className="btn-ghost" style={{ width: '100%' }}>
+            + IMPORT FROM APPLE HEALTH
+          </button>
+          <button onClick={() => setHow(h => !h)} className="mono" style={{
+            all: 'unset', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center',
+            fontSize: 9, letterSpacing: '0.08em', color: 'var(--text-3)', padding: '8px 0',
+          }}>{how ? 'HIDE' : 'HOW DO I GET THAT FILE?'}</button>
+          {how && (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.7, paddingBottom: 4 }}>
+              On your iPhone, open <strong style={{ color: 'var(--text)' }}>Health</strong> → tap your photo
+              at the top right → scroll down → <strong style={{ color: 'var(--text)' }}>Export All Health
+              Data</strong> → <strong style={{ color: 'var(--text)' }}>Export</strong>. It takes a few minutes
+              and makes a zip file - save it to Files, then come back here and choose it.
+              <div style={{ marginTop: 8 }}>
+                Don't unzip it. Nothing in it leaves your phone: it's read here, and only your daily
+                steps, resting heart rate and weight are sent on.
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {stage === 'reading' && (
+        <div className="card" style={{ padding: 12 }}>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 8 }}>
+            READING… {pct == null ? '' : `${pct}%`}
+          </div>
+          <div style={{ height: 5, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct ?? 5}%`, background: 'var(--accent)', transition: 'width .2s' }}/>
+          </div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.6 }}>
+            A few years of data is a big file. Keep this screen open.
+          </div>
+        </div>
+      )}
+
+      {/* Nothing is written until this is confirmed. Showing what was found
+          first also catches the case where they picked an old export, or one
+          from someone else's phone. */}
+      {(stage === 'found' || stage === 'saving') && (
+        <div className="card" style={{ padding: 12 }}>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.7, marginBottom: 10 }}>
+            Found <strong style={{ color: 'var(--accent)' }}>{label(steps, 'day', 'days')}</strong> of steps
+            {found.rows.length > steps && <> and {label(found.rows.length - steps, 'other day', 'other days')}</>},
+            from {fmtDate(found.rows[0].day)} to {fmtDate(found.rows.at(-1).day)}.
+            {found.sources.length > 1 && (
+              <div style={{ color: 'var(--text-3)', marginTop: 6 }}>
+                Your iPhone and your watch both counted these days. We've taken the higher of the two
+                rather than adding them up.
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={save} disabled={stage === 'saving'} className="btn-primary" style={{ flex: 1 }}>
+              {stage === 'saving' ? 'SAVING…' : 'IMPORT'}
+            </button>
+            {stage === 'found' && (
+              <button onClick={() => { setStage('idle'); setFound(null); }} className="btn-ghost">CANCEL</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {stage === 'done' && (
+        <div className="card" style={{ padding: 12 }}>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--text)', lineHeight: 1.7 }}>
+            <strong style={{ color: 'var(--accent)' }}>{label(found.written, 'day', 'days')} imported.</strong>
+            {' '}This is a snapshot, not a connection - export again whenever you want to bring it up to date.
+          </div>
+          <button onClick={() => { setStage('idle'); setFound(null); }} className="btn-ghost" style={{ width: '100%', marginTop: 10 }}>
+            DONE
+          </button>
+        </div>
+      )}
+
+      {err && <div className="mono" style={{ fontSize: 10, color: 'var(--c-coral)', marginTop: 8, lineHeight: 1.6 }}>{err}</div>}
+    </div>
+  );
+}
+
+const fmtDate = (iso) =>
+  new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
 function SubscriptionTab({ profile }) {
   const credits        = profile?.credits ?? 0;
